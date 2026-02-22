@@ -51,7 +51,7 @@ from lightningnbeats.loaders import (
     ColumnarCollectionTimeSeriesDataModule,
     ColumnarCollectionTimeSeriesTestDataModule,
 )
-from lightningnbeats.data import M4Dataset, TourismDataset, MilkDataset
+from lightningnbeats.data import M4Dataset, TourismDataset, MilkDataset, TrafficDataset, WeatherDataset
 
 torch.set_float32_matmul_precision("medium")
 
@@ -93,6 +93,7 @@ LOSS = "SMAPELoss"
 SHARE_WEIGHTS = True
 MAX_EPOCHS = 100
 EARLY_STOPPING_PATIENCE = 10
+PATIENCE = EARLY_STOPPING_PATIENCE  # alias for imports
 
 BASE_SEED = 42
 N_RUNS_DEFAULT = 10
@@ -122,16 +123,30 @@ MILK_PERIODS = {
     "Milk": {"frequency": 12, "horizon": 6},
 }
 
+TRAFFIC_PERIODS = {
+    "Traffic-96":  {"frequency": 24, "horizon": 96},
+    "Traffic-192": {"frequency": 24, "horizon": 192},
+}
+
+WEATHER_PERIODS = {
+    "Weather-96":  {"frequency": 144, "horizon": 96},
+    "Weather-192": {"frequency": 144, "horizon": 192},
+}
+
 DATASET_PERIODS = {
     "m4": M4_PERIODS,
     "tourism": TOURISM_PERIODS,
     "milk": MILK_PERIODS,
+    "traffic": TRAFFIC_PERIODS,
+    "weather": WEATHER_PERIODS,
 }
 
 FORECAST_MULTIPLIERS = {
     "m4": 5,
     "tourism": 2,
     "milk": 4,
+    "traffic": 2,
+    "weather": 2,
 }
 
 # ---------------------------------------------------------------------------
@@ -144,6 +159,10 @@ BATCH_SIZES = {
     ("tourism", "Tourism-Monthly"): 32768,
     ("tourism", "Tourism-Quarterly"): 65536,
     ("milk", "Milk"): 128,
+    ("traffic", "Traffic-96"):  65536,
+    ("traffic", "Traffic-192"): 65536,
+    ("weather", "Weather-96"):  65536,
+    ("weather", "Weather-192"): 65536,
 }
 DEFAULT_BATCH_SIZE = 65536
 
@@ -165,7 +184,7 @@ CSV_COLUMNS = [
     "period", "frequency", "forecast_length", "backcast_length",
     "n_stacks", "n_blocks_per_stack", "share_weights",
     "run", "seed",
-    "smape", "mase", "mae", "mse", "owa",
+    "smape", "mase", "mae", "mse", "owa", "norm_mae", "norm_mse",
     "n_params", "training_time_seconds", "epochs_trained",
     "active_g", "sum_losses", "activation", "stopping_reason",
     "best_val_loss", "final_val_loss", "final_train_loss",
@@ -421,6 +440,54 @@ def compute_mse(y_pred, y_true):
     return float(np.mean((y_true - y_pred) ** 2))
 
 
+def compute_normalized_mae_mse(preds, targets, train_data_df):
+    """Compute Z-score normalized MAE and MSE for comparison with published benchmarks.
+
+    Normalizes per-series using per-column mean and std from the training data,
+    matching the methodology of N-HiTS, PatchTST, and related long-horizon papers.
+
+    Parameters
+    ----------
+    preds : np.ndarray, shape (n_series, forecast_length)
+        Model predictions. Row i corresponds to column i of train_data_df.
+    targets : np.ndarray, shape (n_series, forecast_length)
+        Ground-truth values.
+    train_data_df : pd.DataFrame, shape (n_timesteps, n_series)
+        Columnar training data used to compute per-series normalization statistics.
+
+    Returns
+    -------
+    norm_mae, norm_mse : float
+        Normalized MAE and MSE.
+    """
+    eps = 1e-8
+    cols = train_data_df.columns
+    n_series = preds.shape[0]
+
+    norm_abs_errors = []
+    norm_sq_errors = []
+
+    for i in range(n_series):
+        col = cols[i] if i < len(cols) else cols[-1]
+        series_vals = train_data_df[col].dropna().values
+        if len(series_vals) == 0:
+            continue
+
+        mu = float(np.mean(series_vals))
+        sigma = float(np.std(series_vals))
+        if sigma < eps:
+            sigma = 1.0
+
+        norm_pred = (preds[i] - mu) / sigma
+        norm_true = (targets[i] - mu) / sigma
+        norm_abs_errors.append(np.mean(np.abs(norm_pred - norm_true)))
+        norm_sq_errors.append(np.mean((norm_pred - norm_true) ** 2))
+
+    norm_mae = float(np.mean(norm_abs_errors)) if norm_abs_errors else float("nan")
+    norm_mse = float(np.mean(norm_sq_errors)) if norm_sq_errors else float("nan")
+    return norm_mae, norm_mse
+
+
 def resolve_accelerator(accelerator_override):
     """Resolve accelerator and device from override string."""
     if accelerator_override == "auto":
@@ -469,6 +536,12 @@ def load_dataset(dataset_name, period):
         return TourismDataset(period_name)
     elif dataset_name == "milk":
         return MilkDataset()
+    elif dataset_name == "traffic":
+        horizon = TRAFFIC_PERIODS[period]["horizon"]
+        return TrafficDataset(horizon)
+    elif dataset_name == "weather":
+        horizon = WEATHER_PERIODS[period]["horizon"]
+        return WeatherDataset(horizon)
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")
 
@@ -671,6 +744,11 @@ def run_single_experiment(
     save_predictions=True,
     predictions_dir=None,
     gpu_id=None,
+    basis_dim=BASIS_DIM,
+    basis_offset=0,
+    stack_basis_offsets=None,
+    extra_row=None,
+    csv_columns=None,
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -714,7 +792,9 @@ def run_single_experiment(
         sum_losses=sum_losses,
         activation=activation,
         latent_dim=LATENT_DIM,
-        basis_dim=BASIS_DIM,
+        basis_dim=basis_dim,
+        basis_offset=basis_offset,
+        stack_basis_offsets=stack_basis_offsets,
         learning_rate=LEARNING_RATE,
         no_val=False,
     )
@@ -848,6 +928,11 @@ def run_single_experiment(
     mae = compute_mae(preds, targets)
     mse = compute_mse(preds, targets)
     owa = dataset.compute_owa(smape, mase)
+    # Normalized MAE/MSE: per-series Z-score using training-data statistics,
+    # matching the evaluation protocol in N-HiTS, PatchTST, etc. for
+    # Traffic and Weather datasets.  For M4, sMAPE/OWA remain primary;
+    # norm_mae/norm_mse are still recorded for completeness.
+    norm_mae, norm_mse = compute_normalized_mae_mse(preds, targets, train_data)
 
     # Update diverged flag — only for genuinely non-finite metrics.
     # The smape >= 200 threshold was removed: a high sMAPE from a model that
@@ -855,8 +940,8 @@ def run_single_experiment(
     # caught by DivergenceDetector (NaN val_loss or 3× spike for 3 epochs).
     diverged = diverged or not math.isfinite(smape)
 
-    print(f"  {prefix}       sMAPE={smape:.4f}  MASE={mase:.4f}  MAE={mae:.4f}  "
-          f"MSE={mse:.4f}  OWA={owa:.4f}  "
+    print(f"  {prefix}       sMAPE={smape:.4f}  MASE={mase:.4f}  OWA={owa:.4f}  "
+          f"nMAE={norm_mae:.4f}  nMSE={norm_mse:.4f}  "
           f"time={training_time:.1f}s  epochs={epochs_trained}  [{stopping_reason}]")
 
     # Save predictions
@@ -889,6 +974,8 @@ def run_single_experiment(
         "mae": f"{mae:.6f}",
         "mse": f"{mse:.6f}",
         "owa": f"{owa:.6f}",
+        "norm_mae": f"{norm_mae:.6f}" if math.isfinite(norm_mae) else "nan",
+        "norm_mse": f"{norm_mse:.6f}" if math.isfinite(norm_mse) else "nan",
         "n_params": n_params,
         "training_time_seconds": f"{training_time:.2f}",
         "epochs_trained": epochs_trained,
@@ -904,7 +991,9 @@ def run_single_experiment(
         "diverged": diverged,
         "val_loss_curve": json.dumps([f"{v:.8f}" for v in convergence_tracker.val_losses]),
     }
-    append_result(csv_path, row)
+    if extra_row:
+        row.update(extra_row)
+    append_result(csv_path, row, columns=csv_columns)
     finish_wandb(wandb_enabled)
 
     # Cleanup
@@ -1348,8 +1437,9 @@ def main():
         description="Unified Benchmark for N-BEATS Lightning paper experiments"
     )
     parser.add_argument(
-        "--dataset", required=True, choices=["m4", "tourism", "milk", "all"],
-        help="Dataset to benchmark (use 'all' to run M4, Tourism, and Milk sequentially)"
+        "--dataset", required=True,
+        choices=["m4", "tourism", "milk", "traffic", "weather", "all"],
+        help="Dataset to benchmark (use 'all' to run all datasets sequentially)"
     )
     parser.add_argument(
         "--periods", nargs="+", default=None,

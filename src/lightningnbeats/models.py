@@ -38,7 +38,8 @@ class NBeatsNet(pl.LightningModule):
       latent_dim:int = 5,
       sum_losses:bool = False,
       basis_dim:int = 32,
-      basis_offset:int = 0
+      basis_offset:int = 0,
+      stack_basis_offsets:list = None
     ):
 
     """A PyTorch Lightning module for the N-BEATS network for time series forecasting.
@@ -122,6 +123,11 @@ class NBeatsNet(pl.LightningModule):
         Row offset into the SVD-ordered basis for WaveletV3 blocks, selecting which
         frequency band is used (0 = lowest/smoothest, higher values shift toward
         higher frequencies). Default 0.
+    stack_basis_offsets : list of int, optional
+        Per-stack basis offsets for WaveletV3 blocks. If provided, must be the same
+        length as stack_types. stack_basis_offsets[i] overrides basis_offset for
+        stack i. Non-wavelet stacks receive the offset value but ignore it.
+        Default None (all stacks use basis_offset).
     
     Inputs
     ------
@@ -160,7 +166,8 @@ class NBeatsNet(pl.LightningModule):
     self.latent_dim = latent_dim
     self.basis_dim = basis_dim
     self.basis_offset = basis_offset
-    self.loss_fn = self.configure_loss()    
+    self.stack_basis_offsets = stack_basis_offsets
+    self.loss_fn = self.configure_loss()
     
     
     self.save_hyperparameters()   
@@ -172,15 +179,20 @@ class NBeatsNet(pl.LightningModule):
       raise ValueError("Stack architecture must be specified.")
           
     self.stacks = nn.ModuleList()
-    for stack_type in self.stack_types:
-      self.stacks.append(self.create_stack(stack_type))  
+    for stack_idx, stack_type in enumerate(self.stack_types):
+      self.stacks.append(self.create_stack(stack_type, stack_idx))
                
            
-  def create_stack(self, stack_type):
-    
+  def create_stack(self, stack_type, stack_idx=0):
+
     blocks = nn.ModuleList()
     if (stack_type not in BLOCKS):
-        raise ValueError(f"Unknown stack type: {stack_type}. Please select one of {BLOCKS}")      
+        raise ValueError(f"Unknown stack type: {stack_type}. Please select one of {BLOCKS}")
+
+    if self.stack_basis_offsets and stack_idx < len(self.stack_basis_offsets):
+        effective_offset = self.stack_basis_offsets[stack_idx]
+    else:
+        effective_offset = self.basis_offset      
     
     for block_id in range(self.n_blocks_per_stack):
         if self.share_weights and block_id != 0:
@@ -210,7 +222,7 @@ class NBeatsNet(pl.LightningModule):
             if "V3" in stack_type:
               block = getattr(b, stack_type)(
                   units, self.backcast_length, self.forecast_length, self.basis_dim,
-                  self.basis_offset, self.share_weights, self.activation, self.active_g)
+                  effective_offset, self.share_weights, self.activation, self.active_g)
             else:
               block = getattr(b, stack_type)(
                   units, self.backcast_length, self.forecast_length, self.basis_dim,
