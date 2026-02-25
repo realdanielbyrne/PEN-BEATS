@@ -33,8 +33,10 @@ import math
 import multiprocessing as mp
 import os
 import queue
+import shutil
 import signal
 import sys
+import tempfile
 import time
 
 import numpy as np
@@ -361,9 +363,17 @@ def scale_config_for_milk(cfg):
 # Logger Helpers
 # ---------------------------------------------------------------------------
 
-def build_loggers(log_dir, log_name, wandb_enabled, wandb_project, wandb_group, wandb_config):
-    """Build list of loggers (TensorBoard + optionally W&B)."""
-    loggers = [pl_loggers.TensorBoardLogger(save_dir=log_dir, name=log_name)]
+def build_loggers(log_dir, log_name, wandb_enabled, wandb_project, wandb_group, wandb_config,
+                  tb_enabled=False):
+    """Build list of loggers (optionally TensorBoard + W&B).
+
+    TensorBoard is disabled by default for benchmark runs to avoid
+    accumulating large event files on disk.  Enable with ``tb_enabled=True``
+    or the ``--tensorboard`` CLI flag.
+    """
+    loggers = []
+    if tb_enabled:
+        loggers.append(pl_loggers.TensorBoardLogger(save_dir=log_dir, name=log_name))
     if wandb_enabled:
         loggers.append(pl_loggers.WandbLogger(
             project=wandb_project,
@@ -373,7 +383,7 @@ def build_loggers(log_dir, log_name, wandb_enabled, wandb_project, wandb_group, 
             save_dir=log_dir,
             reinit=True,
         ))
-    return loggers
+    return loggers if loggers else False
 
 
 def finish_wandb(wandb_enabled):
@@ -749,6 +759,7 @@ def run_single_experiment(
     stack_basis_offsets=None,
     extra_row=None,
     csv_columns=None,
+    tb_enabled=False,
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -830,7 +841,11 @@ def run_single_experiment(
     log_dir = os.path.join(RESULTS_DIR, "lightning_logs")
     log_name = f"unified/{experiment_name}/{config_name}/{period}/run{run_idx}"
 
+    # Use a temp directory for checkpoints — they are only needed to reload
+    # the best-epoch weights for evaluation, then deleted immediately.
+    ckpt_tmp_dir = tempfile.mkdtemp(prefix="nbeats_ckpt_")
     chk_callback = ModelCheckpoint(
+        dirpath=ckpt_tmp_dir,
         filename="best-checkpoint",
         save_top_k=1,
         monitor="val_loss",
@@ -861,6 +876,7 @@ def run_single_experiment(
             "sum_losses": sum_losses, "activation": activation,
             "n_params": n_params,
         },
+        tb_enabled=tb_enabled,
     )
 
     divergence_detector = DivergenceDetector(relative_threshold=3.0, consecutive_epochs=3)
@@ -889,10 +905,11 @@ def run_single_experiment(
     trainer.fit(model, datamodule=dm)
     training_time = time.time() - t0
 
-    # Load best checkpoint
+    # Load best checkpoint, then delete temp checkpoint directory
     best_path = trainer.checkpoint_callback.best_model_path
     if best_path:
         model = NBeatsNet.load_from_checkpoint(best_path, weights_only=False)
+    shutil.rmtree(ckpt_tmp_dir, ignore_errors=True)
     epochs_trained = trainer.current_epoch
 
     # Classify stopping reason
@@ -1112,6 +1129,7 @@ def _gpu_worker(gpu_id, job_queue, shutdown_event, worker_args):
             save_predictions=worker_args["save_predictions"],
             predictions_dir=worker_args["predictions_dir"],
             gpu_id=gpu_id,
+            tb_enabled=worker_args.get("tb_enabled", False),
         )
 
     print(f"{prefix} Worker finished.")
@@ -1260,6 +1278,7 @@ def _run_sequential(args, params):
                         wandb_project=args.wandb_project,
                         save_predictions=args.save_predictions,
                         predictions_dir=predictions_dir,
+                        tb_enabled=getattr(args, "tensorboard", False),
                     )
 
 
@@ -1313,6 +1332,7 @@ def _run_parallel(args, params, n_gpus):
         "wandb_project": args.wandb_project,
         "save_predictions": args.save_predictions,
         "predictions_dir": params["predictions_dir"],
+        "tb_enabled": getattr(args, "tensorboard", False),
     }
 
     # Spawn workers
@@ -1484,6 +1504,10 @@ def main():
     parser.add_argument(
         "--no-save-predictions", action="store_false", dest="save_predictions",
         help="Disable NPZ prediction saving"
+    )
+    parser.add_argument(
+        "--tensorboard", action="store_true",
+        help="Enable TensorBoard logging (disabled by default to save disk space)"
     )
 
     args = parser.parse_args()
