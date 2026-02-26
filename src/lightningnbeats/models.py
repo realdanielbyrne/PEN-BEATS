@@ -40,7 +40,8 @@ class NBeatsNet(pl.LightningModule):
       basis_dim:int = 32,
       basis_offset:int = 0,
       stack_basis_offsets:list = None,
-      forecast_basis_dim:int = None
+      forecast_basis_dim:int = None,
+      trend_thetas_dim:int = 5
     ):
 
     """A PyTorch Lightning module for the N-BEATS network for time series forecasting.
@@ -135,6 +136,11 @@ class NBeatsNet(pl.LightningModule):
         forecast_length) while the backcast path continues to use basis_dim.
         Allows asymmetric regularization when backcast and forecast lengths differ.
         Default None (both paths use basis_dim).
+    trend_thetas_dim : int, optional
+        The polynomial degree for Trend and TrendAE blocks, independent of the
+        global ``thetas_dim`` used by other block types.  Any positive integer
+        is accepted (e.g. 2 = linear, 3 = cubic, 5 = degree-4 polynomial).
+        Default 5.
 
     Inputs
     ------
@@ -175,6 +181,9 @@ class NBeatsNet(pl.LightningModule):
     self.basis_offset = basis_offset
     self.stack_basis_offsets = stack_basis_offsets
     self.forecast_basis_dim = forecast_basis_dim
+    if not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1:
+      raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
+    self.trend_thetas_dim = trend_thetas_dim
     self.loss_fn = self.configure_loss()
     
     
@@ -218,13 +227,19 @@ class NBeatsNet(pl.LightningModule):
           else:
             units = self.g_width
 
+          # Use trend_thetas_dim for Trend/TrendAE when set, else global thetas_dim
+          if stack_type in ("Trend", "TrendAE"):
+            effective_td = self.trend_thetas_dim
+          else:
+            effective_td = self.thetas_dim
+
           if (stack_type == "GenericAE" or
               stack_type == "BottleneckGenericAE" or
               stack_type == "SeasonalityAE" or
               stack_type == "AutoEncoderAE" or
               stack_type == "TrendAE"):
             block = getattr(b,stack_type)(
-                units, self.backcast_length, self.forecast_length, self.thetas_dim, 
+                units, self.backcast_length, self.forecast_length, effective_td,
                 self.share_weights, self.activation, self.active_g, self.latent_dim)
           elif "Wavelet" in stack_type:
             if "V3" in stack_type:
@@ -238,8 +253,8 @@ class NBeatsNet(pl.LightningModule):
                   self.share_weights, self.activation, self.active_g)
           else:
             block = getattr(b,stack_type)(
-                units, self.backcast_length, self.forecast_length, self.thetas_dim, 
-                self.share_weights, self.activation, self.active_g) 
+                units, self.backcast_length, self.forecast_length, effective_td,
+                self.share_weights, self.activation, self.active_g)
                             
         blocks.append(block)   
 

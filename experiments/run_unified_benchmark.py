@@ -789,6 +789,7 @@ def run_single_experiment(
     tb_enabled=False,
     thetas_dim_override=None,
     latent_dim_override=None,
+    trend_thetas_dim=None,
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -838,6 +839,7 @@ def run_single_experiment(
         basis_offset=basis_offset,
         stack_basis_offsets=stack_basis_offsets,
         forecast_basis_dim=forecast_basis_dim,
+        trend_thetas_dim=trend_thetas_dim,
         learning_rate=LEARNING_RATE,
         no_val=False,
     )

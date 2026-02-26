@@ -310,3 +310,70 @@ class TestForecastBasisDim:
         block = model.stacks[0][0]
         assert block.forecast_linear.out_features == min(16, 6)
         assert block.backcast_linear.out_features == min(16, 30)
+
+
+
+# --- trend_thetas_dim tests ---
+
+class TestTrendThetasDim:
+    """Verify trend_thetas_dim routes only to Trend/TrendAE blocks."""
+
+    def test_trend_thetas_dim_overrides_trend_block(self):
+        """Trend block should use trend_thetas_dim instead of global thetas_dim."""
+        model = _make_model(["Trend"], t_width=32, thetas_dim=8, trend_thetas_dim=3)
+        block = model.stacks[0][0]
+        # Trend projects to thetas_dim coefficients
+        assert block.backcast_linear.out_features == 3
+        assert block.forecast_linear.out_features == 3
+
+    def test_trend_thetas_dim_overrides_trend_ae_block(self):
+        """TrendAE block should use trend_thetas_dim instead of global thetas_dim."""
+        model = _make_model(["TrendAE"], t_width=32, thetas_dim=8, trend_thetas_dim=2, latent_dim=4)
+        block = model.stacks[0][0]
+        assert block.backcast_linear.out_features == 2
+        assert block.forecast_linear.out_features == 2
+
+    def test_trend_thetas_dim_does_not_affect_bottleneck_generic(self):
+        """BottleneckGeneric block should still use global thetas_dim."""
+        model = _make_model(["BottleneckGeneric"], g_width=32, thetas_dim=8, trend_thetas_dim=3)
+        block = model.stacks[0][0]
+        # BottleneckGeneric uses thetas_dim as its bottleneck
+        assert block.backcast_linear.out_features == 8
+        assert block.forecast_linear.out_features == 8
+
+    def test_trend_thetas_dim_defaults_to_5(self):
+        """When trend_thetas_dim is not specified, Trend uses default of 5."""
+        model = _make_model(["Trend"], t_width=32, thetas_dim=8)
+        block = model.stacks[0][0]
+        assert block.backcast_linear.out_features == 5
+
+    def test_trend_thetas_dim_invalid_raises(self):
+        """trend_thetas_dim must be a positive integer."""
+        with pytest.raises(ValueError, match="trend_thetas_dim must be a positive integer"):
+            _make_model(["Trend"], t_width=32, trend_thetas_dim=0)
+        with pytest.raises(ValueError, match="trend_thetas_dim must be a positive integer"):
+            _make_model(["Trend"], t_width=32, trend_thetas_dim=-1)
+
+    def test_trend_thetas_dim_accepts_any_positive_int(self):
+        """trend_thetas_dim=5 (original default) should work."""
+        model = _make_model(["Trend"], t_width=32, trend_thetas_dim=5)
+        block = model.stacks[0][0]
+        assert block.backcast_linear.out_features == 5
+
+    def test_mixed_stack_routing(self):
+        """In a Trend+BottleneckGeneric stack, each gets the correct thetas_dim."""
+        model = _make_model(["Trend", "BottleneckGeneric"], t_width=32, g_width=32,
+                            thetas_dim=7, trend_thetas_dim=3)
+        trend_block = model.stacks[0][0]
+        bg_block = model.stacks[1][0]
+        assert trend_block.backcast_linear.out_features == 3
+        assert bg_block.backcast_linear.out_features == 7
+
+    def test_trend_thetas_dim_forward_shape(self):
+        """Forward pass works correctly with trend_thetas_dim set."""
+        model = _make_model(["Trend", "Generic"], t_width=32, g_width=32,
+                            thetas_dim=7, trend_thetas_dim=3)
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)

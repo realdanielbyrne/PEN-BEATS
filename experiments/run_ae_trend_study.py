@@ -98,27 +98,39 @@ RESULTS_DIR = os.path.join(_EXPERIMENTS_DIR, "results")
 # Extended CSV schema for AE+Trend search
 AE_TREND_CSV_COLUMNS = CSV_COLUMNS + [
     "search_round", "arch_pattern", "ae_variant",
-    "latent_dim_cfg", "thetas_dim_cfg",
+    "latent_dim_cfg", "thetas_dim_cfg", "trend_thetas_dim_cfg",
     "meta_predicted_best", "meta_convergence_score",
 ]
 
 # AE variants to search
-AE_VARIANTS = ["AutoEncoder", "GenericAE", "BottleneckGenericAE"]
+AE_VARIANTS = [
+    "AutoEncoder", "GenericAE", "BottleneckGenericAE",
+    "GenericAEBackcast", "AutoEncoderAE", "GenericAEBackcastAE",
+]
+
+# RootBlock-based variants (no latent_dim param; search latent_dim maps to thetas_dim)
+_ROOTBLOCK_AE_VARIANTS = {"AutoEncoder", "GenericAEBackcast"}
+
+# Variants that use thetas_dim as an internal bottleneck (search over SEARCH_THETAS_DIMS)
+_BOTTLENECK_AE_VARIANTS = {"BottleneckGenericAE", "GenericAEBackcastAE", "AutoEncoderAE"}
+
+# Generic-type variants where active_g can help convergence
+_ACTIVE_G_AE_VARIANTS = {"GenericAE", "BottleneckGenericAE", "GenericAEBackcast", "GenericAEBackcastAE"}
 
 # Hyperparameter search space
 SEARCH_LATENT_DIMS = [2, 8, 16]
-SEARCH_THETAS_DIMS = [5, 10]  # Only for BottleneckGenericAE
-SEARCH_ACTIVE_G = [False, "forecast"]  # Only for GenericAE, BottleneckGenericAE
+SEARCH_THETAS_DIMS = [5, 10]  # For bottleneck variants
+SEARCH_ACTIVE_G = [False, "forecast"]  # For Generic-type variants
 
 # Fixed architecture
 N_STACKS = 10  # ["Trend", AE_variant] * 5
-TREND_THETAS_DIM = 3  # Cubic polynomial for Trend blocks
+SEARCH_TREND_THETAS_DIMS = [3, 5]  # Trend polynomial degree: 3=cubic, 5=degree-4
 
-# Successive halving schedule (3 rounds, keep top 33%)
+# Successive halving schedule (3 rounds, 3 runs each, keep top 33% / top 2 final)
 ROUND_SCHEDULE = {
-    1: {"max_epochs": 6,  "n_runs": 1, "keep_fraction": 0.33},
-    2: {"max_epochs": 15, "n_runs": 1, "keep_fraction": 0.33},
-    3: {"max_epochs": 30, "n_runs": 1, "keep_fraction": 0.33},
+    1: {"max_epochs": 7,  "n_runs": 3, "keep_fraction": 0.33},
+    2: {"max_epochs": 15, "n_runs": 3, "keep_fraction": 0.33},
+    3: {"max_epochs": 30, "n_runs": 3, "keep_fraction": 0.33, "top_k": 2},
 }
 
 # Known existing CSVs for meta-forecaster training
@@ -172,58 +184,60 @@ def generate_ae_trend_configs(round_num=1, promoted_configs=None):
     for ae_variant in AE_VARIANTS:
         for latent_dim in SEARCH_LATENT_DIMS:
             # Determine thetas_dim search space
-            if ae_variant == "BottleneckGenericAE":
+            if ae_variant in _BOTTLENECK_AE_VARIANTS:
                 thetas_dims = SEARCH_THETAS_DIMS
             else:
-                # AutoEncoder uses thetas_dim as its encoder bottleneck
                 # GenericAE ignores thetas_dim (direct projection)
-                # Use TREND_THETAS_DIM for the shared model param
+                # RootBlock AE variants: search latent_dim maps to thetas_dim
                 thetas_dims = [TREND_THETAS_DIM]
 
             # Determine active_g search space
-            if ae_variant in ("GenericAE", "BottleneckGenericAE"):
+            if ae_variant in _ACTIVE_G_AE_VARIANTS:
                 active_g_values = SEARCH_ACTIVE_G
             else:
-                # AutoEncoder: only test active_g=False
+                # AutoEncoder / AutoEncoderAE: only test active_g=False
                 active_g_values = [False]
 
             for thetas_dim in thetas_dims:
-                for active_g in active_g_values:
-                    # Build config name
-                    ag_str = "agF" if active_g == "forecast" else "ag0"
-                    config_name = (
-                        f"{ae_variant}_ld{latent_dim}_td{thetas_dim}_{ag_str}"
-                    )
+                for trend_td in SEARCH_TREND_THETAS_DIMS:
+                    for active_g in active_g_values:
+                        # Build config name
+                        ag_str = "agF" if active_g == "forecast" else "ag0"
+                        config_name = (
+                            f"{ae_variant}_ld{latent_dim}_td{thetas_dim}_ttd{trend_td}_{ag_str}"
+                        )
 
-                    # For rounds 2+, only include promoted configs
-                    if promoted_configs is not None and config_name not in promoted_configs:
-                        continue
+                        # For rounds 2+, only include promoted configs
+                        if promoted_configs is not None and config_name not in promoted_configs:
+                            continue
 
-                    stack_types = _build_stack_types(ae_variant)
+                        stack_types = _build_stack_types(ae_variant)
 
-                    # For AutoEncoder (RootBlock-based), latent_dim maps to
-                    # thetas_dim since that's its encoder bottleneck. The model's
-                    # latent_dim param only affects AERootBlock-based blocks.
-                    if ae_variant == "AutoEncoder":
-                        effective_thetas_dim = latent_dim  # AE bottleneck = thetas_dim
-                        effective_latent_dim = LATENT_DIM  # unused by AutoEncoder
-                    else:
-                        effective_thetas_dim = thetas_dim
-                        effective_latent_dim = latent_dim
+                        # RootBlock-based variants (AutoEncoder, GenericAEBackcast)
+                        # have no latent_dim param; the search latent_dim maps to
+                        # thetas_dim since that's their internal bottleneck.
+                        if ae_variant in _ROOTBLOCK_AE_VARIANTS:
+                            effective_thetas_dim = latent_dim  # bottleneck = thetas_dim
+                            effective_latent_dim = LATENT_DIM  # unused by RootBlock
+                        else:
+                            effective_thetas_dim = thetas_dim
+                            effective_latent_dim = latent_dim
 
-                    configs[config_name] = {
-                        "category": f"ae_search_round{round_num}",
-                        "stack_types": stack_types,
-                        "n_blocks_per_stack": 1,
-                        "share_weights": True,
-                        "ae_variant": ae_variant,
-                        "latent_dim": effective_latent_dim,
-                        "thetas_dim": effective_thetas_dim,
-                        "active_g": active_g,
-                        "arch_pattern": "trend_ae_alternating",
-                        "latent_dim_cfg": latent_dim,    # original search value
-                        "thetas_dim_cfg": thetas_dim,    # original search value
-                    }
+                        configs[config_name] = {
+                            "category": f"ae_search_round{round_num}",
+                            "stack_types": stack_types,
+                            "n_blocks_per_stack": 1,
+                            "share_weights": True,
+                            "ae_variant": ae_variant,
+                            "latent_dim": effective_latent_dim,
+                            "thetas_dim": effective_thetas_dim,
+                            "trend_thetas_dim": trend_td,
+                            "active_g": active_g,
+                            "arch_pattern": "trend_ae_alternating",
+                            "latent_dim_cfg": latent_dim,    # original search value
+                            "thetas_dim_cfg": thetas_dim,    # original search value
+                            "trend_thetas_dim_cfg": trend_td,
+                        }
 
     return configs
 
@@ -262,6 +276,7 @@ def run_ae_trend_experiment(
     active_g = cfg.get("active_g", False)
     thetas_dim = cfg.get("thetas_dim", THETAS_DIM)
     latent_dim = cfg.get("latent_dim", LATENT_DIM)
+    trend_td = cfg.get("trend_thetas_dim", 5)
 
     extra_row = {
         "search_round": round_num,
@@ -269,6 +284,7 @@ def run_ae_trend_experiment(
         "ae_variant": cfg.get("ae_variant", ""),
         "latent_dim_cfg": cfg.get("latent_dim_cfg", ""),
         "thetas_dim_cfg": cfg.get("thetas_dim_cfg", ""),
+        "trend_thetas_dim_cfg": cfg.get("trend_thetas_dim_cfg", ""),
         "meta_predicted_best": "",
         "meta_convergence_score": "",
     }
@@ -301,6 +317,7 @@ def run_ae_trend_experiment(
         csv_columns=AE_TREND_CSV_COLUMNS,
         thetas_dim_override=thetas_dim,
         latent_dim_override=latent_dim,
+        trend_thetas_dim=trend_td,
     )
 
 
@@ -591,11 +608,12 @@ def run_ae_trend_search(args):
         # Analyze-only mode
         if args.analyze:
             schedule = ROUND_SCHEDULE[round_num]
+            effective_top_k = args.top_k or schedule.get("top_k")
             promoted = rank_and_promote(
                 csv_path, round_num,
                 schedule["keep_fraction"],
                 meta_forecaster=meta_forecaster if round_num == 1 else None,
-                top_k_override=args.top_k,
+                top_k_override=effective_top_k,
             )
             continue
 
@@ -607,11 +625,12 @@ def run_ae_trend_search(args):
             if promoted is None:
                 prior_round = round_num - 1
                 prior_schedule = ROUND_SCHEDULE[prior_round]
+                effective_top_k = args.top_k or prior_schedule.get("top_k")
                 promoted = rank_and_promote(
                     csv_path, prior_round,
                     prior_schedule["keep_fraction"],
                     meta_forecaster=meta_forecaster if prior_round == 1 else None,
-                    top_k_override=args.top_k,
+                    top_k_override=effective_top_k,
                 )
                 if not promoted:
                     print(f"  [ERROR] No configs promoted from round {prior_round}. "
@@ -629,11 +648,12 @@ def run_ae_trend_search(args):
 
         # After running, rank and promote for the next round
         schedule = ROUND_SCHEDULE[round_num]
+        effective_top_k = args.top_k or schedule.get("top_k")
         promoted = rank_and_promote(
             csv_path, round_num,
             schedule["keep_fraction"],
             meta_forecaster=meta_forecaster if round_num == 1 else None,
-            top_k_override=args.top_k,
+            top_k_override=effective_top_k,
         )
 
         # Update meta-forecaster predictions in CSV for round 1
