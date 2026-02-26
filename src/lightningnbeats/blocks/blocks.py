@@ -172,7 +172,6 @@ class Generic(RootBlock):
 
     return backcast, forecast
 
-
 class BottleneckGeneric(RootBlock):
   def __init__(self,
                units:int,
@@ -238,7 +237,6 @@ class BottleneckGeneric(RootBlock):
         forecast = self.activation(forecast)
 
     return backcast, forecast
-
 
 class GenericAEBackcast(RootBlock):
   def __init__(self,
@@ -408,6 +406,10 @@ class Trend(RootBlock):
 
     return backcast, forecast
 
+
+# ---------------------------------------------------------------------------
+# AutoEncoderRoot Blocks
+# ---------------------------------------------------------------------------
 class AERootBlock(nn.Module):
   def __init__(self, backcast_length, units, activation='ReLU', latent_dim=5):
     """The AERootBlock class is the basic building block of the N-BEATS network.
@@ -454,49 +456,6 @@ class AERootBlock(nn.Module):
     x = self.activation(self.fc3(x))
     x = self.activation(self.fc4(x))
     return x
-
-class SeasonalityAE(AERootBlock):
-  def __init__(self, units, backcast_length, forecast_length,  thetas_dim=5,
-               share_weights = False, activation='ReLU', active_g:bool = False, latent_dim = 5):
-    """The SeasonalityAEBlock is the basic building block of the N-BEATS network.
-    It consists of a stack of fully connected layers defined the parent class Block,
-    followed by a linear layer, which generates the parameters of a Fourier expansion.
-
-    The SeasonalityAEBlock is an AutoEncoder version of the SeasonalityBlock where the presplit
-    section of the network is an AutoEncoder.
-
-    Args:
-        units (int):
-          The width of the fully connected layers in the blocks comprising the parent
-          class Block.
-        backcast_length (int):
-          The length of the historical data.  It is customary to use a multiple of
-          the forecast_length (H)orizon (2H,3H,4H,5H,...).
-        forecast_length (int):
-          The length of the forecast_length horizon.
-        activation (str, optional):
-          The activation function passed to the parent class Block. Defaults to 'LeakyReLU'.
-    """
-    super(SeasonalityAE, self).__init__(backcast_length, units, activation, latent_dim = latent_dim)
-
-    self.backcast_linear = nn.Linear(units, 2 * int(backcast_length / 2 - 1) + 1, bias = False)
-    self.forecast_linear = nn.Linear(units, 2 * int(forecast_length / 2 - 1) + 1, bias = False)
-
-    self.backcast_g = _SeasonalityGenerator(backcast_length)
-    self.forecast_g = _SeasonalityGenerator(forecast_length)
-
-  def forward(self, x):
-    x = super(SeasonalityAE, self).forward(x)
-    # linear compression
-    backcast_thetas = self.backcast_linear(x)
-    forecast_thetas = self.forecast_linear(x)
-
-    # fourier expansion
-    backcast = self.backcast_g(backcast_thetas)
-    forecast = self.forecast_g(forecast_thetas)
-
-    return backcast, forecast
-
 
 class GenericAEBackcastAE(AERootBlock):
   def __init__(self,
@@ -677,7 +636,6 @@ class GenericAE(AERootBlock):
 
     return backcast, forecast
 
-
 class BottleneckGenericAE(AERootBlock):
   def __init__(self,
                units:int,
@@ -731,7 +689,6 @@ class BottleneckGenericAE(AERootBlock):
 
     return backcast, forecast
 
-
 class TrendAE(AERootBlock):
   def __init__(self, units, backcast_length, forecast_length, thetas_dim,
                share_weights = False, activation='ReLU', active_g:bool = False, latent_dim = 5):
@@ -776,6 +733,47 @@ class TrendAE(AERootBlock):
 
     return backcast, forecast
 
+class SeasonalityAE(AERootBlock):
+  def __init__(self, units, backcast_length, forecast_length,  thetas_dim=5,
+               share_weights = False, activation='ReLU', active_g:bool = False, latent_dim = 5):
+    """The SeasonalityAEBlock is the basic building block of the N-BEATS network.
+    It consists of a stack of fully connected layers defined the parent class Block,
+    followed by a linear layer, which generates the parameters of a Fourier expansion.
+
+    The SeasonalityAEBlock is an AutoEncoder version of the SeasonalityBlock where the presplit
+    section of the network is an AutoEncoder.
+
+    Args:
+        units (int):
+          The width of the fully connected layers in the blocks comprising the parent
+          class Block.
+        backcast_length (int):
+          The length of the historical data.  It is customary to use a multiple of
+          the forecast_length (H)orizon (2H,3H,4H,5H,...).
+        forecast_length (int):
+          The length of the forecast_length horizon.
+        activation (str, optional):
+          The activation function passed to the parent class Block. Defaults to 'LeakyReLU'.
+    """
+    super(SeasonalityAE, self).__init__(backcast_length, units, activation, latent_dim = latent_dim)
+
+    self.backcast_linear = nn.Linear(units, 2 * int(backcast_length / 2 - 1) + 1, bias = False)
+    self.forecast_linear = nn.Linear(units, 2 * int(forecast_length / 2 - 1) + 1, bias = False)
+
+    self.backcast_g = _SeasonalityGenerator(backcast_length)
+    self.forecast_g = _SeasonalityGenerator(forecast_length)
+
+  def forward(self, x):
+    x = super(SeasonalityAE, self).forward(x)
+    # linear compression
+    backcast_thetas = self.backcast_linear(x)
+    forecast_thetas = self.forecast_linear(x)
+
+    # fourier expansion
+    backcast = self.backcast_g(backcast_thetas)
+    forecast = self.forecast_g(forecast_thetas)
+
+    return backcast, forecast
 
 # ---------------------------------------------------------------------------
 # V3 Wavelet Blocks — Orthonormal DWT basis via impulse-response synthesis

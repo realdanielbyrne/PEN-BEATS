@@ -197,7 +197,7 @@ def run_basis_dim_experiment(
         basis_offset=basis_offset,
         extra_row=extra_row,
         csv_columns=STUDY_CSV_COLUMNS,
-        thetas_dim=thetas_dim,
+        trend_thetas_dim=thetas_dim,
     )
 
 
