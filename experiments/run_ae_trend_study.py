@@ -189,7 +189,7 @@ def generate_ae_trend_configs(round_num=1, promoted_configs=None):
             else:
                 # GenericAE ignores thetas_dim (direct projection)
                 # RootBlock AE variants: search latent_dim maps to thetas_dim
-                thetas_dims = [TREND_THETAS_DIM]
+                thetas_dims = [THETAS_DIM]
 
             # Determine active_g search space
             if ae_variant in _ACTIVE_G_AE_VARIANTS:
