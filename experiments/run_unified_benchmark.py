@@ -787,6 +787,7 @@ def run_single_experiment(
     extra_row=None,
     csv_columns=None,
     tb_enabled=False,
+    thetas_dim=THETAS_DIM,
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -824,7 +825,7 @@ def run_single_experiment(
         stack_types=stack_types,
         n_blocks_per_stack=n_blocks_per_stack,
         share_weights=share_weights,
-        thetas_dim=THETAS_DIM,
+        thetas_dim=thetas_dim,
         loss=LOSS,
         active_g=active_g,
         sum_losses=sum_losses,

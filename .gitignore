@@ -1,5 +1,6 @@
 # project
 .DS_Store
+*.lock
 run_configs/
 model_weights/
 pip-wheel-metadata/
