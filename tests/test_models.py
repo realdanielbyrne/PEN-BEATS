@@ -286,3 +286,27 @@ class TestActiveGSplitModesModel:
         backcast, forecast = model(x)
         assert backcast.shape == (4, 20)
         assert forecast.shape == (4, 5)
+
+
+# --- forecast_basis_dim passthrough tests ---
+
+class TestForecastBasisDim:
+    """Verify forecast_basis_dim is passed through to V3 wavelet blocks."""
+
+    def test_forecast_basis_dim_passed_to_v3_blocks(self):
+        model = _make_model(["HaarWaveletV3"] * 2, basis_dim=16, forecast_basis_dim=4,
+                            backcast_length=30, forecast_length=6)
+        for stack in model.stacks:
+            for block in stack:
+                assert block.forecast_linear.out_features == min(4, 6)
+                assert block.backcast_linear.out_features == min(16, 30)
+        x = torch.randn(4, 30)
+        _, forecast = model(x)
+        assert forecast.shape == (4, 6)
+
+    def test_forecast_basis_dim_none_uses_basis_dim(self):
+        model = _make_model(["HaarWaveletV3"], basis_dim=16, forecast_basis_dim=None,
+                            backcast_length=30, forecast_length=6)
+        block = model.stacks[0][0]
+        assert block.forecast_linear.out_features == min(16, 6)
+        assert block.backcast_linear.out_features == min(16, 30)

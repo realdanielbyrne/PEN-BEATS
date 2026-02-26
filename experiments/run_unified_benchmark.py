@@ -26,7 +26,6 @@ Usage:
 
 import argparse
 import csv
-import fcntl
 import gc
 import json
 import math
@@ -38,6 +37,36 @@ import signal
 import sys
 import tempfile
 import time
+from contextlib import contextmanager
+
+# fcntl is Unix-only; use msvcrt on Windows for cross-platform file locking
+if sys.platform == "win32":
+    import msvcrt
+
+    @contextmanager
+    def _exclusive_lock(file_obj):
+        file_obj.seek(0)
+        while True:
+            try:
+                msvcrt.locking(file_obj.fileno(), msvcrt.LK_NBLCK, 1)
+                break
+            except OSError:
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            file_obj.seek(0)
+            msvcrt.locking(file_obj.fileno(), msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl
+
+    @contextmanager
+    def _exclusive_lock(file_obj):
+        fcntl.flock(file_obj, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(file_obj, fcntl.LOCK_UN)
 
 import numpy as np
 import torch
@@ -700,13 +729,10 @@ def append_result(path, row_dict, columns=None):
     columns = columns or CSV_COLUMNS
     lock_path = path + ".lock"
     with open(lock_path, "w") as lock_f:
-        fcntl.flock(lock_f, fcntl.LOCK_EX)
-        try:
+        with _exclusive_lock(lock_f):
             with open(path, "a", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=columns)
                 writer.writerow(row_dict)
-        finally:
-            fcntl.flock(lock_f, fcntl.LOCK_UN)
 
 
 def result_exists(path, experiment, config_name, period, run):
@@ -757,6 +783,7 @@ def run_single_experiment(
     basis_dim=BASIS_DIM,
     basis_offset=0,
     stack_basis_offsets=None,
+    forecast_basis_dim=None,
     extra_row=None,
     csv_columns=None,
     tb_enabled=False,
@@ -806,6 +833,7 @@ def run_single_experiment(
         basis_dim=basis_dim,
         basis_offset=basis_offset,
         stack_basis_offsets=stack_basis_offsets,
+        forecast_basis_dim=forecast_basis_dim,
         learning_rate=LEARNING_RATE,
         no_val=False,
     )

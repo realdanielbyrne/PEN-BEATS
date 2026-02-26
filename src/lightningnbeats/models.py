@@ -39,7 +39,8 @@ class NBeatsNet(pl.LightningModule):
       sum_losses:bool = False,
       basis_dim:int = 32,
       basis_offset:int = 0,
-      stack_basis_offsets:list = None
+      stack_basis_offsets:list = None,
+      forecast_basis_dim:int = None
     ):
 
     """A PyTorch Lightning module for the N-BEATS network for time series forecasting.
@@ -128,7 +129,13 @@ class NBeatsNet(pl.LightningModule):
         length as stack_types. stack_basis_offsets[i] overrides basis_offset for
         stack i. Non-wavelet stacks receive the offset value but ignore it.
         Default None (all stacks use basis_offset).
-    
+    forecast_basis_dim : int, optional
+        Override basis dimensionality for the forecast path of WaveletV3 blocks.
+        When set, the forecast linear projection uses this value (clamped to
+        forecast_length) while the backcast path continues to use basis_dim.
+        Allows asymmetric regularization when backcast and forecast lengths differ.
+        Default None (both paths use basis_dim).
+
     Inputs
     ------
     stack_input of shape `(batch_size, input_chunk_length)`
@@ -167,6 +174,7 @@ class NBeatsNet(pl.LightningModule):
     self.basis_dim = basis_dim
     self.basis_offset = basis_offset
     self.stack_basis_offsets = stack_basis_offsets
+    self.forecast_basis_dim = forecast_basis_dim
     self.loss_fn = self.configure_loss()
     
     
@@ -222,7 +230,8 @@ class NBeatsNet(pl.LightningModule):
             if "V3" in stack_type:
               block = getattr(b, stack_type)(
                   units, self.backcast_length, self.forecast_length, self.basis_dim,
-                  effective_offset, self.share_weights, self.activation, self.active_g)
+                  effective_offset, self.share_weights, self.activation, self.active_g,
+                  forecast_basis_dim=self.forecast_basis_dim)
             else:
               block = getattr(b, stack_type)(
                   units, self.backcast_length, self.forecast_length, self.basis_dim,

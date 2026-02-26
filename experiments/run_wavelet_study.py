@@ -89,7 +89,7 @@ WAVELET_BASIS_DIM = 16    # narrow window — study basis_offset sensitivity
 RESULTS_DIR = os.path.join(_EXPERIMENTS_DIR, "results")
 
 # Extended CSV schema — adds basis_dim and basis_offset columns
-WAVELET_CSV_COLUMNS = CSV_COLUMNS + ["basis_dim", "basis_offset"]
+WAVELET_CSV_COLUMNS = CSV_COLUMNS + ["basis_dim", "basis_offset", "forecast_basis_dim"]
 
 # Datasets covered by this study (subset of DATASET_PERIODS)
 WAVELET_DATASETS = {
@@ -348,10 +348,12 @@ def run_wavelet_experiment(
     basis_dim = cfg.get("basis_dim", WAVELET_BASIS_DIM)
     basis_offset = cfg.get("basis_offset", 0)
     stack_offsets = cfg.get("stack_basis_offsets", None)
+    forecast_basis_dim = cfg.get("forecast_basis_dim", None)
 
     extra_row = {
         "basis_dim": basis_dim,
         "basis_offset": basis_offset,
+        "forecast_basis_dim": forecast_basis_dim if forecast_basis_dim is not None else "",
     }
 
     run_single_experiment(
@@ -381,6 +383,7 @@ def run_wavelet_experiment(
         basis_dim=basis_dim,
         basis_offset=basis_offset,
         stack_basis_offsets=stack_offsets,
+        forecast_basis_dim=forecast_basis_dim,
         extra_row=extra_row,
         csv_columns=WAVELET_CSV_COLUMNS,
     )
@@ -854,10 +857,12 @@ def run_search_experiment(
     basis_dim = cfg.get("basis_dim", WAVELET_BASIS_DIM)
     basis_offset = cfg.get("basis_offset", 0)
     stack_offsets = cfg.get("stack_basis_offsets", None)
+    forecast_basis_dim = cfg.get("forecast_basis_dim", None)
 
     extra_row = {
         "basis_dim": basis_dim,
         "basis_offset": basis_offset,
+        "forecast_basis_dim": forecast_basis_dim if forecast_basis_dim is not None else "",
         "search_round": round_num,
         "arch_pattern": cfg.get("arch_pattern", ""),
         "wavelet_family": cfg.get("wavelet_family", ""),
@@ -893,6 +898,7 @@ def run_search_experiment(
         basis_dim=basis_dim,
         basis_offset=basis_offset,
         stack_basis_offsets=stack_offsets,
+        forecast_basis_dim=forecast_basis_dim,
         extra_row=extra_row,
         csv_columns=SEARCH_CSV_COLUMNS,
     )

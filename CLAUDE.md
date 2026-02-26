@@ -93,6 +93,7 @@ Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loade
 - **Weight sharing**: When `share_weights=True`, blocks within a stack reuse the first block's parameters.
 - **`sum_losses`**: Adds weighted backcast reconstruction loss (0.25 × loss vs zeros) to forecast loss, pushing backcasts to fully reconstruct the input.
 - **Generic vs BottleneckGeneric**: `Generic` matches the paper (single linear projection to target length). `BottleneckGeneric` projects through `thetas_dim` bottleneck first (rank-d factorized basis expansion).
+- **`forecast_basis_dim`**: Optional override for WaveletV3 forecast path basis dimensionality. When set, the forecast linear projection uses `forecast_basis_dim` (clamped to `forecast_length`) while the backcast path continues to use `basis_dim`. Allows asymmetric regularization when backcast and forecast lengths differ significantly. Default `None` (both paths use `basis_dim`).
 
 ### Width Parameter Mapping
 

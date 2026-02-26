@@ -546,6 +546,21 @@ class TestWaveletV3Properties:
         assert block.backcast_linear.out_features == min(BASIS_DIM, 30)
         assert block.forecast_linear.out_features == min(BASIS_DIM, 6)
 
+    @pytest.mark.parametrize("block_name", V3_WAVELET_BLOCKS)
+    def test_asymmetric_basis_dims(self, block_name):
+        """Verify forecast_basis_dim overrides basis_dim for forecast path only."""
+        block_class = getattr(b, block_name)
+        block = block_class(
+            units=UNITS, backcast_length=30, forecast_length=6,
+            basis_dim=16, forecast_basis_dim=4,
+        )
+        x = torch.randn(4, 30)
+        backcast, forecast = block(x)
+        assert backcast.shape == (4, 30)
+        assert forecast.shape == (4, 6)
+        assert block.backcast_linear.out_features == min(16, 30)  # uses basis_dim
+        assert block.forecast_linear.out_features == min(4, 6)    # uses forecast_basis_dim
+
 
 # --- active_g split mode tests ---
 

@@ -61,6 +61,43 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
+### GPU / CUDA Installation
+
+`pip install` and `pyproject.toml` always resolve `torch` from PyPI, which only hosts the CPU-only build. PyTorch's CUDA-enabled wheels are hosted on a separate index and must be installed explicitly **after** the base install.
+
+**Step 1 — install the package as normal:**
+
+```bash
+pip install -e .          # from source
+# or
+pip install lightningnbeats  # from PyPI
+```
+
+**Step 2 — upgrade torch to the CUDA build:**
+
+```bash
+# CUDA 12.8 (recommended — compatible with drivers 525+ including CUDA 13.x drivers)
+pip install -r requirements-cuda.txt
+
+# Or install torch directly for a specific CUDA version:
+# CUDA 12.8
+pip install torch --index-url https://download.pytorch.org/whl/cu128 --upgrade
+# CUDA 12.1
+pip install torch --index-url https://download.pytorch.org/whl/cu121 --upgrade
+# CUDA 11.8
+pip install torch --index-url https://download.pytorch.org/whl/cu118 --upgrade
+```
+
+Check available builds and match your driver at [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/).
+
+**Verify CUDA is detected:**
+
+```python
+import torch
+print(torch.cuda.is_available())      # True
+print(torch.cuda.get_device_name(0))  # e.g. NVIDIA GeForce RTX 4070
+```
+
 ### Simple Example
 
 The following is a simple example of how to use this model.

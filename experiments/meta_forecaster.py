@@ -2,7 +2,7 @@
 
 Trains a small N-BEATS model on historical val_loss curves from prior experiments.
 After training, it takes a short (6-epoch) val_loss snippet and forecasts the next
-25 epochs, enabling early pruning of unpromising hyperparameter configurations.
+6 epochs, enabling early pruning of unpromising hyperparameter configurations.
 
 Usage:
     from meta_forecaster import MetaForecaster
@@ -43,12 +43,12 @@ class MetaForecaster:
     """N-BEATS model that predicts val_loss curves from early training epochs.
 
     Uses existing experiment results as training data. After training, takes
-    a 6-epoch val_loss snippet and forecasts the next 25 epochs, enabling
+    a 6-epoch val_loss snippet and forecasts the next 6 epochs, enabling
     early pruning of unpromising hyperparameter configs.
     """
 
     BACKCAST_LENGTH = 6
-    FORECAST_LENGTH = 25
+    FORECAST_LENGTH = 6
     META_STACK_TYPES = ["Generic"] * 3
     META_WIDTH = 64
     META_BLOCKS_PER_STACK = 1
@@ -117,7 +117,7 @@ class MetaForecaster:
         """Create sliding-window samples from val_loss curves.
 
         Each curve is normalized by dividing by curve[0] so all curves start
-        at 1.0. Then sliding windows of (backcast=6, forecast=25) are extracted.
+        at 1.0. Then sliding windows of (backcast=6, forecast=6) are extracted.
 
         Parameters
         ----------
@@ -128,7 +128,7 @@ class MetaForecaster:
         -------
         numpy.ndarray
             1D array of all normalized curve segments concatenated, suitable
-            for TimeSeriesDataModule with backcast=6, forecast=25.
+            for TimeSeriesDataModule with backcast=6, forecast=6.
         """
         window_size = MetaForecaster.BACKCAST_LENGTH + MetaForecaster.FORECAST_LENGTH
         segments = []
@@ -243,7 +243,7 @@ class MetaForecaster:
         # Build a combined array for TimeSeriesDataModule-compatible format.
         # We'll use a RowCollectionTimeSeriesDataModule-style approach but
         # simpler: just create a custom DataModule.
-        combined = np.concatenate([X, Y], axis=1)  # (n_samples, 31)
+        combined = np.concatenate([X, Y], axis=1)  # (n_samples, 13)
 
         dm = _MetaDataModule(
             combined,
