@@ -787,6 +787,8 @@ def run_single_experiment(
     extra_row=None,
     csv_columns=None,
     tb_enabled=False,
+    thetas_dim_override=None,
+    latent_dim_override=None,
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -818,18 +820,20 @@ def run_single_experiment(
         precision = "32-true"
 
     # Create model
+    effective_thetas_dim = thetas_dim_override if thetas_dim_override is not None else THETAS_DIM
+    effective_latent_dim = latent_dim_override if latent_dim_override is not None else LATENT_DIM
     model = NBeatsNet(
         backcast_length=backcast_length,
         forecast_length=forecast_length,
         stack_types=stack_types,
         n_blocks_per_stack=n_blocks_per_stack,
         share_weights=share_weights,
-        thetas_dim=THETAS_DIM,
+        thetas_dim=effective_thetas_dim,
         loss=LOSS,
         active_g=active_g,
         sum_losses=sum_losses,
         activation=activation,
-        latent_dim=LATENT_DIM,
+        latent_dim=effective_latent_dim,
         basis_dim=basis_dim,
         basis_offset=basis_offset,
         stack_basis_offsets=stack_basis_offsets,
