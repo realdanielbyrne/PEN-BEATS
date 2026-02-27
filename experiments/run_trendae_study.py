@@ -45,7 +45,10 @@ import csv
 import gc
 import json
 import math
+import multiprocessing as mp
 import os
+import queue
+import signal
 import sys
 import time
 
@@ -494,12 +497,12 @@ def _update_meta_predictions(csv_path, round_num, meta_forecaster):
 
 
 # ---------------------------------------------------------------------------
-# Round Runner
+# Round Runner (sequential)
 # ---------------------------------------------------------------------------
 
-def _run_search_round(dataset_name, periods, round_num, configs, args,
-                      forecast_multiplier, csv_path):
-    """Run a single search round."""
+def _run_search_round_sequential(dataset_name, periods, round_num, configs,
+                                 args, forecast_multiplier, csv_path):
+    """Run a single search round sequentially on one device."""
     schedule = ROUND_SCHEDULE[round_num]
     max_epochs = args.search_max_epochs or schedule["max_epochs"]
     n_runs = schedule["n_runs"]
@@ -514,7 +517,7 @@ def _run_search_round(dataset_name, periods, round_num, configs, args,
 
     print(f"\n  {'─'*60}")
     print(f"  ROUND {round_num}: {n_configs} configs × {n_runs} runs × "
-          f"{max_epochs} epochs")
+          f"{max_epochs} epochs  (sequential)")
     print(f"  {'─'*60}")
 
     if n_configs == 0:
@@ -559,6 +562,182 @@ def _run_search_round(dataset_name, periods, round_num, configs, args,
 
 
 # ---------------------------------------------------------------------------
+# Multi-GPU Parallel Round Runner
+# ---------------------------------------------------------------------------
+
+def _build_search_jobs(periods, round_num, configs, dataset_name,
+                       batch_size_override):
+    """Build a flat list of job dicts for all (period, config, run_idx) combos."""
+    schedule = ROUND_SCHEDULE[round_num]
+    n_runs = schedule["n_runs"]
+    jobs = []
+    for period in periods:
+        batch_size = _get_batch_size(dataset_name, period, batch_size_override)
+        for config_name, cfg in configs.items():
+            for run_idx in range(n_runs):
+                jobs.append({
+                    "period": period,
+                    "config_name": config_name,
+                    "cfg": cfg,
+                    "run_idx": run_idx,
+                    "batch_size": batch_size,
+                })
+    return jobs
+
+
+def _gpu_worker(gpu_id, job_queue, shutdown_event, worker_args):
+    """Worker process: pins to GPU gpu_id, pulls jobs from shared queue."""
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+
+    torch.set_float32_matmul_precision("medium")
+
+    prefix = f"[GPU {gpu_id}]"
+    print(f"{prefix} TrendAE study worker started "
+          f"(CUDA_VISIBLE_DEVICES={gpu_id}).")
+
+    dataset_name = worker_args["dataset_name"]
+    round_num = worker_args["round_num"]
+
+    # Cache datasets per period to avoid redundant loading
+    dataset_cache = {}
+    series_cache = {}
+
+    while not shutdown_event.is_set():
+        try:
+            job = job_queue.get_nowait()
+        except queue.Empty:
+            break
+
+        period = job["period"]
+        if period not in dataset_cache:
+            dataset_cache[period] = load_dataset(dataset_name, period)
+            series_cache[period] = dataset_cache[period].get_training_series()
+
+        run_trendae_experiment(
+            config_name=job["config_name"],
+            cfg=job["cfg"],
+            period=period,
+            run_idx=job["run_idx"],
+            dataset=dataset_cache[period],
+            train_series_list=series_cache[period],
+            csv_path=worker_args["csv_path"],
+            round_num=round_num,
+            max_epochs=worker_args["max_epochs"],
+            patience=worker_args["patience"],
+            batch_size=job["batch_size"],
+            accelerator_override="cuda",
+            forecast_multiplier=worker_args["forecast_multiplier"],
+            num_workers=worker_args["num_workers"],
+            gpu_id=gpu_id,
+        )
+
+    print(f"{prefix} TrendAE study worker finished.")
+
+
+def _run_search_round_parallel(dataset_name, periods, round_num, configs,
+                                args, forecast_multiplier, csv_path, n_gpus):
+    """Run a single search round in parallel across multiple GPUs."""
+    schedule = ROUND_SCHEDULE[round_num]
+    max_epochs = args.search_max_epochs or schedule["max_epochs"]
+
+    # Early stopping only in rounds 2+
+    if round_num >= 2:
+        patience = min(max_epochs, EARLY_STOPPING_PATIENCE)
+    else:
+        patience = max_epochs
+
+    n_configs = len(configs)
+
+    print(f"\n  {'─'*60}")
+    print(f"  ROUND {round_num}: {n_configs} configs × {schedule['n_runs']} runs × "
+          f"{max_epochs} epochs  ({n_gpus} GPUs)")
+    print(f"  {'─'*60}")
+
+    if n_configs == 0:
+        print("  No configs to run!")
+        return
+
+    # Build flat job list and filter completed
+    jobs = _build_search_jobs(periods, round_num, configs, dataset_name,
+                              args.batch_size)
+    pending_jobs = [
+        job for job in jobs
+        if not result_exists(csv_path, f"trendae_search_r{round_num}",
+                             job["config_name"], job["period"], job["run_idx"])
+    ]
+
+    n_complete = len(jobs) - len(pending_jobs)
+    print(f"  Jobs: {len(jobs)} total, {len(pending_jobs)} pending, "
+          f"{n_complete} already complete")
+
+    if not pending_jobs:
+        print("  All jobs already complete!")
+        return
+
+    # Set up multiprocessing with spawn context (clean CUDA state per worker)
+    ctx = mp.get_context("spawn")
+    job_queue = ctx.Queue()
+    for job in pending_jobs:
+        job_queue.put(job)
+
+    shutdown_event = ctx.Event()
+
+    worker_args = {
+        "dataset_name": dataset_name,
+        "round_num": round_num,
+        "csv_path": csv_path,
+        "max_epochs": max_epochs,
+        "patience": patience,
+        "forecast_multiplier": forecast_multiplier,
+        "num_workers": args.num_workers,
+    }
+
+    # Spawn one worker per GPU
+    workers = []
+    for gid in range(n_gpus):
+        p = ctx.Process(
+            target=_gpu_worker,
+            args=(gid, job_queue, shutdown_event, worker_args),
+        )
+        p.start()
+        workers.append(p)
+
+    print(f"  Spawned {n_gpus} GPU worker processes.")
+
+    for p in workers:
+        p.join()
+
+    # Clean up any workers still alive
+    for p in workers:
+        if p.is_alive():
+            print(f"  [WARN] Terminating worker PID {p.pid}")
+            p.terminate()
+            p.join(timeout=10)
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+def _run_search_round(dataset_name, periods, round_num, configs, args,
+                       forecast_multiplier, csv_path, n_gpus=0):
+    """Dispatch a search round to sequential or parallel execution."""
+    if n_gpus >= 2:
+        _run_search_round_parallel(
+            dataset_name, periods, round_num, configs, args,
+            forecast_multiplier, csv_path, n_gpus,
+        )
+    else:
+        _run_search_round_sequential(
+            dataset_name, periods, round_num, configs, args,
+            forecast_multiplier, csv_path,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main Search Pipeline
 # ---------------------------------------------------------------------------
 
@@ -577,6 +756,9 @@ def run_trendae_search(args):
     csv_path = _search_csv_path(dataset_name)
     init_csv(csv_path, columns=TRENDAE_CSV_COLUMNS)
 
+    # Resolve GPU count for parallel execution
+    n_gpus = resolve_n_gpus(args)
+
     # Determine which rounds to run
     round_spec = args.round if hasattr(args, "round") and args.round else "all"
     if round_spec == "all":
@@ -590,6 +772,10 @@ def run_trendae_search(args):
     print(f"  Periods: {periods}")
     print(f"  Rounds:  {rounds_to_run}")
     print(f"  Config space: {len(generate_trendae_configs())} total configs")
+    if n_gpus >= 2:
+        print(f"  GPUs: {n_gpus} (parallel execution)")
+    else:
+        print(f"  Mode: sequential")
     print(f"{'='*70}")
 
     # Step 0: Train / load meta-forecaster
@@ -649,7 +835,7 @@ def run_trendae_search(args):
 
         _run_search_round(
             dataset_name, periods, round_num, configs, args,
-            forecast_multiplier, csv_path,
+            forecast_multiplier, csv_path, n_gpus=n_gpus,
         )
 
         # After running, rank and promote for the next round
@@ -708,6 +894,10 @@ def main():
     parser.add_argument(
         "--accelerator", default="auto",
         help="Accelerator override: auto, cuda, mps, cpu."
+    )
+    parser.add_argument(
+        "--n-gpus", type=int, default=None,
+        help="Number of GPUs for parallel execution (default: auto-detect)."
     )
     parser.add_argument(
         "--num-workers", type=int, default=0,
