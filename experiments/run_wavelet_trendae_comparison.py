@@ -16,6 +16,7 @@ New search dimension:
   - latent_dim: [2, 5, 8]  (AERootBlock bottleneck width)
 
 Training: 50 epochs with early stopping (matches round 3 budget).
+LR schedule: constant for first 15 epochs, then CosineAnnealingLR decay.
 Seeds: 3 runs per config (seeds 42, 43, 44).
 
 Results → experiments/results/m4/wavelet_trendae_comparison_results.csv
@@ -131,6 +132,13 @@ def run_comparison(args):
     max_epochs = args.max_epochs
     patience = min(max_epochs, EARLY_STOPPING_PATIENCE)
 
+    warmup_epochs = 15
+    scheduler_cfg = {
+        "warmup_epochs": warmup_epochs,
+        "T_max": max(max_epochs - warmup_epochs, 1),
+        "eta_min": 1e-6,
+    }
+
     csv_path = _csv_path()
     init_csv(csv_path, columns=COMPARISON_CSV_COLUMNS)
 
@@ -203,6 +211,7 @@ def run_comparison(args):
                 csv_columns=COMPARISON_CSV_COLUMNS,
                 trend_thetas_dim=cfg["trend_thetas_dim"],
                 latent_dim_override=cfg["latent_dim"],
+                lr_scheduler_config=scheduler_cfg,
             )
 
             completed += 1

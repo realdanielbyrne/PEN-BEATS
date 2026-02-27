@@ -790,6 +790,7 @@ def run_single_experiment(
     thetas_dim_override=None,
     latent_dim_override=None,
     trend_thetas_dim=None,
+    lr_scheduler_config=None,
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -842,6 +843,7 @@ def run_single_experiment(
         trend_thetas_dim=trend_thetas_dim,
         learning_rate=LEARNING_RATE,
         no_val=False,
+        lr_scheduler_config=lr_scheduler_config,
     )
 
     n_params = count_parameters(model)

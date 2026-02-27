@@ -2,6 +2,7 @@ from time import time
 import numpy as np
 import torch
 from torch import nn, optim
+from torch.optim.lr_scheduler import ConstantLR, CosineAnnealingLR, SequentialLR
 from torch.nn import functional as F
 import lightning.pytorch as pl
 
@@ -41,7 +42,8 @@ class NBeatsNet(pl.LightningModule):
       basis_offset:int = 0,
       stack_basis_offsets:list = None,
       forecast_basis_dim:int = None,
-      trend_thetas_dim:int = 5
+      trend_thetas_dim:int = 5,
+      lr_scheduler_config:dict = None
     ):
 
     """A PyTorch Lightning module for the N-BEATS network for time series forecasting.
@@ -141,6 +143,11 @@ class NBeatsNet(pl.LightningModule):
         global ``thetas_dim`` used by other block types.  Any positive integer
         is accepted (e.g. 2 = linear, 3 = cubic, 5 = degree-4 polynomial).
         Default 5.
+    lr_scheduler_config : dict, optional
+        Configuration for a SequentialLR scheduler that holds the learning rate
+        constant for a warmup phase then applies cosine annealing decay.
+        Keys: ``warmup_epochs`` (int), ``T_max`` (int), ``eta_min`` (float).
+        Default None (no scheduler, constant LR).
 
     Inputs
     ------
@@ -184,9 +191,10 @@ class NBeatsNet(pl.LightningModule):
     if not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1:
       raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
     self.trend_thetas_dim = trend_thetas_dim
+    self.lr_scheduler_config = lr_scheduler_config
     self.loss_fn = self.configure_loss()
-    
-    
+
+
     self.save_hyperparameters()   
       
     if stack_types is not None:
@@ -351,14 +359,27 @@ class NBeatsNet(pl.LightningModule):
   def configure_optimizers(self):
     if self.optimizer_name not in OPTIMIZERS:
         raise ValueError(f"Unknown optimizer name: {self.optimizer_name}. Please select one of {OPTIMIZERS}")
-    
+
     optimizer = getattr(optim, self.optimizer_name)(self.parameters(), lr=self.learning_rate)
+
+    if self.lr_scheduler_config is not None:
+        cfg = self.lr_scheduler_config
+        warmup_epochs = cfg.get("warmup_epochs", 15)
+        t_max = cfg.get("T_max", 35)
+        eta_min = cfg.get("eta_min", 1e-6)
+
+        warmup_scheduler = ConstantLR(optimizer, factor=1.0, total_iters=warmup_epochs)
+        cosine_scheduler = CosineAnnealingLR(optimizer, T_max=t_max, eta_min=eta_min)
+        scheduler = SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_epochs],
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"},
+        }
+
     return optimizer
-    # scheduler = {
-    #   'scheduler': StepLR(optimizer, step_size=10, gamma=0.1),
-    #   'interval': 'epoch',  # could be 'step' if you want to update the learning rate at every optimization step
-    #   'monitor': 'val_loss',  # Metric to monitor for performance improvement. Only necessary if `reduce_on_plateau` scheduler is used
-    # }
-    # return {'optimizer': optimizer, 'lr_scheduler': scheduler}
 
 
