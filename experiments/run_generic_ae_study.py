@@ -21,7 +21,7 @@ Config count:
   - Total: 40 configs
 
 Successive halving (3 rounds):
-  Round 1: 7 epochs, 3 runs/config, keep 50%   → 20 configs
+  Round 1: 8 epochs, 3 runs/config, keep 50%   → 20 configs
   Round 2: 15 epochs, 3 runs/config, keep 50%  → 10 configs
   Round 3: 50 epochs, 3 runs/config, top 5 + NBEATS-I+G 10-stack baseline
 
@@ -42,6 +42,7 @@ Usage:
 import argparse
 import csv
 import gc
+import json
 import math
 import os
 import sys
@@ -68,6 +69,7 @@ from run_unified_benchmark import (
     EARLY_STOPPING_PATIENCE,
     _shutdown_requested,
 )
+from meta_forecaster import MetaForecaster
 
 torch.set_float32_matmul_precision("medium")
 
@@ -82,6 +84,17 @@ EXPERIMENT_NAME = "generic_ae_pure_stack"
 STUDY_CSV_COLUMNS = CSV_COLUMNS + [
     "search_round", "block_type", "latent_dim_cfg", "thetas_dim_cfg",
 ]
+
+# Known existing CSVs for meta-forecaster training
+_META_TRAINING_CSVS = [
+    os.path.join(RESULTS_DIR, "m4", "unified_benchmark_results.csv"),
+    os.path.join(RESULTS_DIR, "m4", "block_benchmark_results.csv"),
+    os.path.join(RESULTS_DIR, "traffic", "block_benchmark_results.csv"),
+    os.path.join(RESULTS_DIR, "m4", "convergence_study_results_v1.csv"),
+    os.path.join(RESULTS_DIR, "weather", "convergence_study_results_v1.csv"),
+    os.path.join(RESULTS_DIR, "traffic", "convergence_study_results_v1.csv"),
+]
+META_CACHE_DIR = os.path.join(RESULTS_DIR, ".meta_cache")
 
 # Block types under study
 BLOCK_TYPES = ["GenericAE", "BottleneckGenericAE"]
@@ -112,7 +125,7 @@ BASELINE_CONFIG = {
 
 # Successive halving schedule
 ROUND_SCHEDULE = {
-    1: {"max_epochs": 7,  "n_runs": 3, "keep_fraction": 0.50},
+    1: {"max_epochs": 8,  "n_runs": 3, "keep_fraction": 0.50},
     2: {"max_epochs": 15, "n_runs": 3, "keep_fraction": 0.50},
     3: {"max_epochs": 50, "n_runs": 3, "top_k": 5},
 }
@@ -204,7 +217,7 @@ def _load_round_results(csv_path, round_num):
     return rows
 
 
-def rank_and_promote(csv_path, round_num, keep_fraction, top_k_override=None):
+def rank_and_promote(csv_path, round_num, keep_fraction, meta_forecaster=None, top_k_override=None):
     """Rank configs from a search round and select top configs for promotion.
 
     Returns list of promoted config_name strings.
@@ -223,6 +236,8 @@ def rank_and_promote(csv_path, round_num, keep_fraction, top_k_override=None):
     for name, result_rows in config_results.items():
         val_losses = []
         n_diverged = 0
+        meta_best = float("inf")
+        meta_score = float("inf")
 
         for r in result_rows:
             bvl = r.get("best_val_loss", "")
@@ -236,24 +251,44 @@ def rank_and_promote(csv_path, round_num, keep_fraction, top_k_override=None):
             if r.get("diverged", "").lower() in ("true", "1"):
                 n_diverged += 1
 
+            if meta_forecaster is not None and round_num == 1:
+                raw_curve = r.get("val_loss_curve", "")
+                try:
+                    parsed = json.loads(raw_curve)
+                    curve = [float(v) for v in parsed]
+                    if len(curve) >= MetaForecaster.BACKCAST_LENGTH:
+                        pred = meta_forecaster.predict(curve)
+                        pred_best = float(pred.get("predicted_best", float("inf")))
+                        pred_score = float(pred.get("convergence_score", float("inf")))
+                        if math.isfinite(pred_best):
+                            meta_best = min(meta_best, pred_best)
+                        if math.isfinite(pred_score):
+                            meta_score = min(meta_score, pred_score)
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    pass
+
         if not val_losses:
             median_bvl = float("inf")
         else:
             median_bvl = float(np.median(val_losses))
 
         divergence_rate = n_diverged / len(result_rows) if result_rows else 0.0
+        rank_metric = meta_best if (round_num == 1 and math.isfinite(meta_best)) else median_bvl
 
         rankings.append({
             "config_name": name,
             "median_best_val_loss": median_bvl,
             "n_runs": len(val_losses),
             "divergence_rate": divergence_rate,
+            "meta_predicted_best": meta_best,
+            "meta_convergence_score": meta_score,
+            "rank_metric": rank_metric,
         })
 
-    # Sort: penalize >50% divergence, then by median val_loss
+    # Sort: penalize >50% divergence, then by meta metric (round 1) or median val_loss
     rankings.sort(key=lambda r: (
         r["divergence_rate"] > 0.5,
-        r["median_best_val_loss"] if math.isfinite(r["median_best_val_loss"]) else 1e9,
+        r["rank_metric"] if math.isfinite(r["rank_metric"]) else 1e9,
     ))
 
     total_configs = len(rankings)
@@ -269,15 +304,17 @@ def rank_and_promote(csv_path, round_num, keep_fraction, top_k_override=None):
     print(f"  Round {round_num} Ranking - {total_configs} configs, "
           f"promoting top {keep_n}")
     print(f"  {'='*65}")
-    print(f"  {'Rank':<5} {'Config':<42} {'ValLoss':>9} "
+    print(f"  {'Rank':<5} {'Config':<42} {'ValLoss':>9} {'Meta':>9} "
           f"{'Div%':>5} {'Runs':>4}")
     print(f"  {'-'*65}")
 
     for i, r in enumerate(rankings[:min(40, total_configs)]):
         marker = " *" if r["config_name"] in promoted else "  "
         div_str = f"{r['divergence_rate']*100:.0f}%"
+        meta_str = (f"{r['meta_predicted_best']:.4f}"
+                    if math.isfinite(r["meta_predicted_best"]) else "   --")
         print(f"  {i+1:<5}{marker} {r['config_name']:<40} "
-              f"{r['median_best_val_loss']:>9.4f} {div_str:>5} {r['n_runs']:>4}")
+              f"{r['median_best_val_loss']:>9.4f} {meta_str:>9} {div_str:>5} {r['n_runs']:>4}")
 
     return promoted
 
@@ -408,6 +445,22 @@ def run_study(args):
     print(f"  Rounds to run:      {rounds_to_run}")
     print(f"{'='*70}")
 
+    # Step 0: Train / load meta-forecaster for round 1 ranking.
+    existing_csvs = [p for p in _META_TRAINING_CSVS if os.path.exists(p)]
+    meta_forecaster = None
+    if existing_csvs:
+        print(f"\n  Step 0: Training meta-forecaster on {len(existing_csvs)} existing CSVs...")
+        meta_forecaster = MetaForecaster(META_CACHE_DIR)
+        try:
+            meta_forecaster.train(existing_csvs)
+        except ValueError as e:
+            print(f"  [WARN] Meta-forecaster training failed: {e}")
+            print(f"  [WARN] Falling back to val_loss ranking only.")
+            meta_forecaster = None
+    else:
+        print(f"\n  [INFO] No existing CSVs found for meta-forecaster training.")
+        print(f"  [INFO] Will use val_loss ranking only.")
+
     promoted = None
     for round_num in rounds_to_run:
         if _shutdown_requested:
@@ -424,6 +477,7 @@ def run_study(args):
                 promoted = rank_and_promote(
                     csv_path, prior_round,
                     prior_schedule["keep_fraction"],
+                    meta_forecaster=meta_forecaster if prior_round == 1 else None,
                     top_k_override=prior_schedule.get("top_k"),
                 )
                 if not promoted:
@@ -446,6 +500,7 @@ def run_study(args):
         promoted = rank_and_promote(
             csv_path, round_num,
             schedule["keep_fraction"],
+            meta_forecaster=meta_forecaster if round_num == 1 else None,
             top_k_override=schedule.get("top_k"),
         )
 
