@@ -1,7 +1,7 @@
 """
-Wavelet Study 3 — Successive Halving Search
+Wavelet Study 3 TrendAE — Successive Halving Search
 
-Applies successive halving to find the best Trend+WaveletV3 configurations
+Applies successive halving to find the best TrendAE+WaveletV3 configurations
 across all 14 wavelet families, 4 basis_dim levels, and 2 trend_thetas_dim
 values (3 vs 5), with a two-pass design (baseline + active_g='forecast').
 
@@ -15,7 +15,7 @@ Two-pass design (runs both passes through successive halving independently):
   Pass 1 ("baseline"):      active_g=False,      sum_losses=False
   Pass 2 ("activeG_fcast"):  active_g="forecast", sum_losses=False
 
-Architecture: [Trend, <WaveletV3>] * 5  (10 stacks total)
+Architecture: [TrendAE, <WaveletV3>] * 5  (10 stacks total)
 
 Successive halving (3 rounds, 3 runs each, keep top 33%):
   Round 1: 7 epochs,  3 runs/config → meta-forecaster ranking → top 33%
@@ -24,26 +24,26 @@ Successive halving (3 rounds, 3 runs each, keep top 33%):
 
 Datasets: M4-Yearly (primary), Weather-96 (cross-dataset validation)
 
-Results → experiments/results/<dataset>/wavelet_study_3_successive_results.csv
+Results → experiments/results/<dataset>/wavelet_study_3_successive_trendae_results.csv
 
 Usage:
     # Full pipeline (all 3 rounds, M4-Yearly)
-    python experiments/run_wavelet_study_3_successive.py --dataset m4
+    python experiments/run_wavelet_study_3_successive_trendae.py --dataset m4
 
     # Weather-96 cross-dataset validation
-    python experiments/run_wavelet_study_3_successive.py --dataset weather
+    python experiments/run_wavelet_study_3_successive_trendae.py --dataset weather
 
     # Single round
-    python experiments/run_wavelet_study_3_successive.py --dataset m4 --round 1
+    python experiments/run_wavelet_study_3_successive_trendae.py --dataset m4 --round 1
 
     # Single pass only (skip active_g pass)
-    python experiments/run_wavelet_study_3_successive.py --dataset m4 --pass baseline
+    python experiments/run_wavelet_study_3_successive_trendae.py --dataset m4 --pass baseline
 
     # Analyze results
-    python experiments/run_wavelet_study_3_successive.py --dataset m4 --round 1 --analyze
+    python experiments/run_wavelet_study_3_successive_trendae.py --dataset m4 --round 1 --analyze
 
     # Smoke test
-    python experiments/run_wavelet_study_3_successive.py --dataset m4 --round 1 --search-max-epochs 2
+    python experiments/run_wavelet_study_3_successive_trendae.py --dataset m4 --round 1 --search-max-epochs 2
 """
 
 import argparse
@@ -206,7 +206,7 @@ def _compute_basis_dims(dataset_name, period):
 
 def generate_wavelet_study3_configs(dataset_name, period, round_num=1,
                                      promoted_configs=None):
-    """Generate Trend+WaveletV3 search configs.
+    """Generate TrendAE+WaveletV3 search configs.
 
     Parameters
     ----------
@@ -240,10 +240,10 @@ def generate_wavelet_study3_configs(dataset_name, period, round_num=1,
                 if promoted_configs is not None and config_name not in promoted_configs:
                     continue
 
-                stack_types = ["Trend", wavelet] * 5  # 10 stacks
+                stack_types = ["TrendAE", wavelet] * 5  # 10 stacks
 
                 configs[config_name] = {
-                    "category": f"wavelet_search_round{round_num}",
+                    "category": f"wavelet_trendae_search_round{round_num}",
                     "stack_types": stack_types,
                     "n_blocks_per_stack": 1,
                     "share_weights": True,
@@ -264,7 +264,7 @@ def generate_wavelet_study3_configs(dataset_name, period, round_num=1,
 def _search_csv_path(dataset_name):
     """Return path to the wavelet study 3 search results CSV."""
     return os.path.join(
-        RESULTS_DIR, dataset_name, "wavelet_study_3_successive_results.csv"
+        RESULTS_DIR, dataset_name, "wavelet_study_3_successive_trendae_results.csv"
     )
 
 
@@ -295,7 +295,7 @@ def run_wavelet_study3_experiment(
         "meta_convergence_score": "",
     }
 
-    experiment_name = f"wavelet_search_r{round_num}_{pass_name}"
+    experiment_name = f"wavelet_trendae_search_r{round_num}_{pass_name}"
 
     # Cosine annealing LR scheduler: hold constant for 15 epochs, then decay
     cosine_warmup_epochs = 15
@@ -311,7 +311,7 @@ def run_wavelet_study3_experiment(
     run_single_experiment(
         experiment_name=experiment_name,
         config_name=config_name,
-        category=cfg.get("category", f"wavelet_search_round{round_num}"),
+        category=cfg.get("category", f"wavelet_trendae_search_round{round_num}"),
         stack_types=cfg["stack_types"],
         period=period,
         run_idx=run_idx,
@@ -358,7 +358,7 @@ def _load_search_results(csv_path, round_num, pass_name=None):
             if pass_name is not None:
                 # Filter by experiment name which includes pass
                 exp = row.get("experiment", "")
-                expected_tag = f"wavelet_search_r{round_num}_{pass_name}"
+                expected_tag = f"wavelet_trendae_search_r{round_num}_{pass_name}"
                 if exp != expected_tag:
                     continue
             rows.append(row)
@@ -643,7 +643,7 @@ def _run_search_round_sequential(dataset_name, periods, round_num, configs, args
                     print("[SHUTDOWN] Exiting search round.")
                     return
 
-                experiment_tag = f"wavelet_search_r{round_num}_{pass_name}"
+                experiment_tag = f"wavelet_trendae_search_r{round_num}_{pass_name}"
                 for run_idx in range(n_runs):
                     if result_exists(csv_path, experiment_tag,
                                      config_name, period, run_idx):
@@ -710,7 +710,7 @@ def _gpu_worker(gpu_id, job_queue, shutdown_event, worker_args):
     torch.set_float32_matmul_precision("medium")
 
     prefix = f"[GPU {gpu_id}]"
-    print(f"{prefix} Wavelet Study 3 worker started "
+    print(f"{prefix} Wavelet Study 3 TrendAE worker started "
           f"(CUDA_VISIBLE_DEVICES={gpu_id}).")
 
     dataset_name = worker_args["dataset_name"]
@@ -751,7 +751,7 @@ def _gpu_worker(gpu_id, job_queue, shutdown_event, worker_args):
             pass_name=job["pass_name"],
         )
 
-    print(f"{prefix} Wavelet Study 3 worker finished.")
+    print(f"{prefix} Wavelet Study 3 TrendAE worker finished.")
 
 
 def _run_search_round_parallel(dataset_name, periods, round_num, configs, args,
@@ -788,7 +788,7 @@ def _run_search_round_parallel(dataset_name, periods, round_num, configs, args,
         job for job in all_jobs
         if not result_exists(
             csv_path,
-            f"wavelet_search_r{round_num}_{job['pass_name']}",
+            f"wavelet_trendae_search_r{round_num}_{job['pass_name']}",
             job["config_name"], job["period"], job["run_idx"],
         )
     ]
@@ -933,7 +933,7 @@ def run_wavelet_study3_search(args):
 
     # Print header
     print(f"\n{'='*70}")
-    print(f"Wavelet Study 3 — Successive Halving Search — {dataset_name.upper()}")
+    print(f"Wavelet Study 3 TrendAE — Successive Halving Search — {dataset_name.upper()}")
     print(f"  Periods: {periods}")
     print(f"  Rounds:  {rounds_to_run}")
     print(f"  Passes:  {[p[0] for p in passes]}")
@@ -1022,7 +1022,7 @@ def run_wavelet_study3_search(args):
             _update_meta_predictions(csv_path, round_num, meta_forecaster)
 
     print(f"\n{'='*70}")
-    print(f"Wavelet Study 3 COMPLETE — {dataset_name.upper()}")
+    print(f"Wavelet Study 3 TrendAE COMPLETE — {dataset_name.upper()}")
     print(f"Results: {csv_path}")
     print(f"{'='*70}")
 
@@ -1033,7 +1033,7 @@ def run_wavelet_study3_search(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Wavelet Study 3 — Successive Halving Search"
+        description="Wavelet Study 3 TrendAE — Successive Halving Search"
     )
     parser.add_argument(
         "--dataset", required=True,
