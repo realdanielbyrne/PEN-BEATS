@@ -476,7 +476,7 @@ def run_study(args):
                 prior_schedule = ROUND_SCHEDULE[prior_round]
                 promoted = rank_and_promote(
                     csv_path, prior_round,
-                    prior_schedule["keep_fraction"],
+                    prior_schedule.get("keep_fraction"),
                     meta_forecaster=meta_forecaster if prior_round == 1 else None,
                     top_k_override=prior_schedule.get("top_k"),
                 )
@@ -499,7 +499,7 @@ def run_study(args):
         schedule = ROUND_SCHEDULE[round_num]
         promoted = rank_and_promote(
             csv_path, round_num,
-            schedule["keep_fraction"],
+            schedule.get("keep_fraction"),
             meta_forecaster=meta_forecaster if round_num == 1 else None,
             top_k_override=schedule.get("top_k"),
         )
