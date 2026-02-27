@@ -143,6 +143,9 @@ def run_comparison(args):
     init_csv(csv_path, columns=COMPARISON_CSV_COLUMNS)
 
     configs = generate_configs()
+    config_items = list(configs.items())
+    if args.reverse:
+        config_items.reverse()
 
     print(f"\n{'='*70}")
     print(f"Wavelet TrendAE Comparison — M4-Yearly")
@@ -151,6 +154,8 @@ def run_comparison(args):
     print(f"  Max epochs:  {max_epochs}")
     print(f"  Latent dims: {LATENT_DIMS}")
     print(f"  Total runs:  {len(configs) * N_RUNS}")
+    if args.reverse:
+        print(f"  Order:       REVERSE")
     print(f"{'='*70}")
 
     dataset = load_dataset(dataset_name, period)
@@ -160,7 +165,7 @@ def run_comparison(args):
     completed = 0
     total = len(configs) * N_RUNS
 
-    for config_name, cfg in configs.items():
+    for config_name, cfg in config_items:
         if _shutdown_requested:
             print("[SHUTDOWN] Exiting.")
             break
@@ -415,6 +420,10 @@ def main():
     parser.add_argument(
         "--num-workers", type=int, default=0,
         help="DataLoader num_workers."
+    )
+    parser.add_argument(
+        "--reverse", action="store_true", default=False,
+        help="Iterate configs in reverse order (for parallel execution with a second process)."
     )
 
     args = parser.parse_args()
