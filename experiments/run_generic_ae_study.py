@@ -6,7 +6,7 @@ stacks (no Trend anchors) to find optimal latent_dim, thetas_dim, and active_g
 configurations.
 
 Architecture: [GenericAE] * 10  or  [BottleneckGenericAE] * 10
-Dataset: M4-Yearly (forecast_length=6, backcast_length=30)
+Dataset: M4-Yearly or Weather-96
 
 Hyperparameter search space:
   - latent_dim: [2, 4, 8, 16]     (AERootBlock bottleneck)
@@ -28,6 +28,7 @@ Successive halving (3 rounds):
 Usage:
     # Full pipeline (all 3 rounds)
     python experiments/run_generic_ae_study.py --round all
+    python experiments/run_generic_ae_study.py --dataset weather --round all
 
     # Single round
     python experiments/run_generic_ae_study.py --round 1
@@ -98,6 +99,11 @@ META_CACHE_DIR = os.path.join(RESULTS_DIR, ".meta_cache")
 
 # Block types under study
 BLOCK_TYPES = ["GenericAE", "BottleneckGenericAE"]
+
+STUDY_DATASETS = {
+    "m4": "Yearly",
+    "weather": "Weather-96",
+}
 
 # Hyperparameter search space
 SEARCH_LATENT_DIMS = [2, 4, 8, 16]
@@ -195,9 +201,9 @@ def generate_configs(round_num=1, promoted_configs=None):
 # CSV Helpers
 # ---------------------------------------------------------------------------
 
-def _csv_path():
+def _csv_path(dataset_name):
     """Return path to the study results CSV."""
-    return os.path.join(RESULTS_DIR, "m4", "generic_ae_pure_stack_results.csv")
+    return os.path.join(RESULTS_DIR, dataset_name, "generic_ae_pure_stack_results.csv")
 
 
 # ---------------------------------------------------------------------------
@@ -323,14 +329,12 @@ def rank_and_promote(csv_path, round_num, keep_fraction, meta_forecaster=None, t
 # Round Runner
 # ---------------------------------------------------------------------------
 
-def _run_search_round(round_num, configs, args, csv_path):
+def _run_search_round(round_num, configs, args, csv_path, dataset_name, period):
     """Run a single search round."""
     schedule = ROUND_SCHEDULE[round_num]
     max_epochs = args.max_epochs if args.max_epochs is not None else schedule["max_epochs"]
     n_runs = schedule["n_runs"]
 
-    dataset_name = "m4"
-    period = "Yearly"
     forecast_multiplier = FORECAST_MULTIPLIERS[dataset_name]
 
     # Early stopping only in rounds 2+
@@ -348,9 +352,15 @@ def _run_search_round(round_num, configs, args, csv_path):
     }
 
     n_configs = len(configs)
+    config_items = list(configs.items())
+    if args.reverse:
+        config_items.reverse()
+
     print(f"\n  {'='*60}")
     print(f"  ROUND {round_num}: {n_configs} configs x {n_runs} runs x "
           f"{max_epochs} epochs")
+    if args.reverse:
+        print("  Order: REVERSE")
     print(f"  {'='*60}")
 
     if n_configs == 0:
@@ -364,7 +374,7 @@ def _run_search_round(round_num, configs, args, csv_path):
     completed = 0
     total = n_configs * n_runs
 
-    for config_name, cfg in configs.items():
+    for config_name, cfg in config_items:
         if _shutdown_requested:
             print("[SHUTDOWN] Exiting search round.")
             return
@@ -428,7 +438,9 @@ def _run_search_round(round_num, configs, args, csv_path):
 
 def run_study(args):
     """Run the full successive halving search."""
-    csv_path = _csv_path()
+    dataset_name = args.dataset
+    period = STUDY_DATASETS[dataset_name]
+    csv_path = _csv_path(dataset_name)
     init_csv(csv_path, columns=STUDY_CSV_COLUMNS)
 
     # Determine which rounds to run
@@ -440,9 +452,11 @@ def run_study(args):
 
     all_configs = generate_configs()
     print(f"\n{'='*70}")
-    print(f"GenericAE & BottleneckGenericAE Pure-Stack Study - M4-Yearly")
+    print(f"GenericAE & BottleneckGenericAE Pure-Stack Study - {dataset_name}/{period}")
     print(f"  Total config space: {len(all_configs)} configs")
     print(f"  Rounds to run:      {rounds_to_run}")
+    if args.reverse:
+        print("  Order:             REVERSE")
     print(f"{'='*70}")
 
     # Step 0: Train / load meta-forecaster for round 1 ranking.
@@ -493,7 +507,7 @@ def run_study(args):
         if round_num == 3:
             configs[BASELINE_CONFIG_NAME] = BASELINE_CONFIG
 
-        _run_search_round(round_num, configs, args, csv_path)
+        _run_search_round(round_num, configs, args, csv_path, dataset_name, period)
 
         # Rank and promote for the next round
         schedule = ROUND_SCHEDULE[round_num]
@@ -514,9 +528,10 @@ def run_study(args):
 # Analysis
 # ---------------------------------------------------------------------------
 
-def analyze_results():
+def analyze_results(dataset_name="m4"):
     """Comprehensive analysis of study results."""
-    csv_path = _csv_path()
+    period = STUDY_DATASETS[dataset_name]
+    csv_path = _csv_path(dataset_name)
     if not os.path.exists(csv_path):
         print(f"[ERROR] No results file found: {csv_path}")
         return
@@ -551,10 +566,22 @@ def analyze_results():
         if rnd == final_round:
             config_results[row["config_name"]].append(row)
 
+    owa_values = []
+    for row in config_results.values():
+        for r in row:
+            try:
+                val = float(r.get("owa", "nan"))
+                if math.isfinite(val):
+                    owa_values.append(val)
+            except (ValueError, TypeError):
+                pass
+    has_owa = len(owa_values) > 0
+    metric_name = "OWA" if has_owa else "best_val_loss"
+
     # Compute summary stats
     summaries = []
     for name, result_rows in config_results.items():
-        owa_vals, smape_vals, mase_vals = [], [], []
+        owa_vals, smape_vals, mase_vals, bvl_vals = [], [], [], []
         n_diverged = 0
         n_params = None
 
@@ -567,6 +594,13 @@ def analyze_results():
                 except (ValueError, TypeError):
                     pass
 
+            try:
+                bvl = float(r.get("best_val_loss", "nan"))
+                if math.isfinite(bvl):
+                    bvl_vals.append(bvl)
+            except (ValueError, TypeError):
+                pass
+
             if r.get("diverged", "").lower() in ("true", "1"):
                 n_diverged += 1
 
@@ -576,7 +610,8 @@ def analyze_results():
                 except (ValueError, TypeError):
                     pass
 
-        if not owa_vals:
+        metric_vals = owa_vals if has_owa else bvl_vals
+        if not metric_vals:
             continue
 
         convergence_rate = (len(result_rows) - n_diverged) / len(result_rows) if result_rows else 0
@@ -593,192 +628,197 @@ def analyze_results():
             "latent_dim": latent_dim,
             "thetas_dim": thetas_dim,
             "active_g": active_g_str,
+            "mean_metric": float(np.mean(metric_vals)),
+            "std_metric": float(np.std(metric_vals)),
             "mean_owa": float(np.mean(owa_vals)),
             "std_owa": float(np.std(owa_vals)),
             "mean_smape": float(np.mean(smape_vals)) if smape_vals else float("nan"),
             "mean_mase": float(np.mean(mase_vals)) if mase_vals else float("nan"),
-            "n_runs": len(owa_vals),
+            "mean_best_val_loss": float(np.mean(bvl_vals)) if bvl_vals else float("nan"),
+            "n_runs": len(metric_vals),
             "n_params": n_params or 0,
             "convergence_rate": convergence_rate,
         })
 
-    summaries.sort(key=lambda s: s["mean_owa"])
+    summaries.sort(key=lambda s: s["mean_metric"])
 
-    # --- Overall ranking ---
     print(f"\n{'='*90}")
-    print(f"GenericAE & BottleneckGenericAE Pure-Stack Study - M4-Yearly Results")
+    print(f"GenericAE & BottleneckGenericAE Pure-Stack Study - {dataset_name}/{period} Results")
     print(f"  Final round: {final_round}  |  Configs with results: {len(summaries)}")
+    print(f"  Primary metric: {metric_name}")
     print(f"{'='*90}")
 
-    print(f"\n  {'Rank':<5} {'Config':<42} {'OWA':>7} {'+/-':>6} "
+    print(f"\n  {'Rank':<5} {'Config':<42} {metric_name:>14} {'+/-':>6} "
           f"{'SMAPE':>7} {'MASE':>7} {'Params':>8} {'Conv%':>5} {'n':>3}")
     print(f"  {'-'*90}")
 
     for i, s in enumerate(summaries):
         conv_str = f"{s['convergence_rate']*100:.0f}%"
         params_str = f"{s['n_params']:,}" if s['n_params'] else "?"
-        print(f"  {i+1:<5} {s['config_name']:<42} "
-              f"{s['mean_owa']:>7.4f} {s['std_owa']:>6.4f} "
-              f"{s['mean_smape']:>7.2f} {s['mean_mase']:>7.4f} "
-              f"{params_str:>8} {conv_str:>5} {s['n_runs']:>3}")
+        print(
+            f"  {i+1:<5} {s['config_name']:<42} {s['mean_metric']:>14.4f} "
+            f"{s['std_metric']:>6.4f} {s['mean_smape']:>7.2f} {s['mean_mase']:>7.4f} "
+            f"{params_str:>8} {conv_str:>5} {s['n_runs']:>3}"
+        )
 
-    # --- Best config per block type ---
     print(f"\n  {'='*60}")
-    print(f"  Best config per block type:")
+    print("  Best config per block type:")
     print(f"  {'='*60}")
 
     block_best = {}
     for s in summaries:
         bt = s["block_type"]
-        if bt not in block_best or s["mean_owa"] < block_best[bt]["mean_owa"]:
+        if bt not in block_best or s["mean_metric"] < block_best[bt]["mean_metric"]:
             block_best[bt] = s
 
     for bt in BLOCK_TYPES + ["I+G"]:
-        if bt in block_best:
-            s = block_best[bt]
-            if bt == "I+G":
-                print(f"    {bt:<25} {s['config_name']:<35} OWA={s['mean_owa']:.4f} "
-                      f"(10-stack baseline)")
-            else:
-                print(f"    {bt:<25} {s['config_name']:<35} OWA={s['mean_owa']:.4f} "
-                      f"(ld={s['latent_dim']}, td={s['thetas_dim']}, ag={s['active_g']})")
-        else:
+        if bt not in block_best:
             print(f"    {bt:<25} (no results)")
+            continue
+        s = block_best[bt]
+        if bt == "I+G":
+            print(
+                f"    {bt:<25} {s['config_name']:<35} {metric_name}={s['mean_metric']:.4f} "
+                f"(10-stack baseline)"
+            )
+        else:
+            print(
+                f"    {bt:<25} {s['config_name']:<35} {metric_name}={s['mean_metric']:.4f} "
+                f"(ld={s['latent_dim']}, td={s['thetas_dim']}, ag={s['active_g']})"
+            )
 
-    # --- Marginal analysis: latent_dim (exclude baseline) ---
     print(f"\n  {'='*60}")
-    print(f"  Marginal analysis by latent_dim:")
+    print("  Marginal analysis by latent_dim:")
     print(f"  {'='*60}")
-
     ld_groups = defaultdict(list)
     for s in summaries:
         if s["block_type"] != "I+G":
-            ld_groups[s["latent_dim"]].append(s["mean_owa"])
-
+            ld_groups[s["latent_dim"]].append(s["mean_metric"])
     for ld in sorted(ld_groups.keys(), key=lambda x: int(x) if str(x).isdigit() else 0):
         vals = ld_groups[ld]
-        print(f"    ld={str(ld):<4}  mean_OWA={np.mean(vals):.4f}  "
-              f"median={np.median(vals):.4f}  n_configs={len(vals)}")
+        print(
+            f"    ld={str(ld):<4}  mean_{metric_name}={np.mean(vals):.4f}  "
+            f"median={np.median(vals):.4f}  n_configs={len(vals)}"
+        )
 
-    # --- Marginal analysis: thetas_dim (BottleneckGenericAE only) ---
     print(f"\n  {'='*60}")
-    print(f"  Marginal analysis by thetas_dim (BottleneckGenericAE only):")
+    print("  Marginal analysis by thetas_dim (BottleneckGenericAE only):")
     print(f"  {'='*60}")
-
     td_groups = defaultdict(list)
     for s in summaries:
         if s["block_type"] == "BottleneckGenericAE":
-            td_groups[s["thetas_dim"]].append(s["mean_owa"])
-
+            td_groups[s["thetas_dim"]].append(s["mean_metric"])
     if td_groups:
         for td in sorted(td_groups.keys(), key=lambda x: int(x) if str(x).isdigit() else 0):
             vals = td_groups[td]
-            print(f"    td={str(td):<4}  mean_OWA={np.mean(vals):.4f}  "
-                  f"median={np.median(vals):.4f}  n_configs={len(vals)}")
+            print(
+                f"    td={str(td):<4}  mean_{metric_name}={np.mean(vals):.4f}  "
+                f"median={np.median(vals):.4f}  n_configs={len(vals)}"
+            )
     else:
-        print(f"    (no BottleneckGenericAE results)")
+        print("    (no BottleneckGenericAE results)")
 
-    # --- Marginal analysis: active_g ---
     print(f"\n  {'='*60}")
-    print(f"  Marginal analysis by active_g:")
+    print("  Marginal analysis by active_g:")
     print(f"  {'='*60}")
-
     ag_groups = defaultdict(list)
     for s in summaries:
         if s["block_type"] != "I+G":
-            ag_groups[s["active_g"]].append(s["mean_owa"])
-
+            ag_groups[s["active_g"]].append(s["mean_metric"])
     for ag in sorted(ag_groups.keys()):
         vals = ag_groups[ag]
-        print(f"    active_g={ag:<10}  mean_OWA={np.mean(vals):.4f}  "
-              f"median={np.median(vals):.4f}  n_configs={len(vals)}")
+        print(
+            f"    active_g={ag:<10}  mean_{metric_name}={np.mean(vals):.4f}  "
+            f"median={np.median(vals):.4f}  n_configs={len(vals)}"
+        )
 
-    # --- Comparison vs Part 1 benchmark baselines ---
-    unified_csv = os.path.join(RESULTS_DIR, "m4", "unified_benchmark_results.csv")
-    if os.path.exists(unified_csv):
-        print(f"\n  {'='*60}")
-        print(f"  Comparison vs Part 1 benchmark (30-stack, fixed params):")
-        print(f"  {'='*60}")
+    if has_owa and dataset_name == "m4":
+        unified_csv = os.path.join(RESULTS_DIR, dataset_name, "unified_benchmark_results.csv")
+        if os.path.exists(unified_csv):
+            print(f"\n  {'='*60}")
+            print("  Comparison vs Part 1 benchmark (30-stack, fixed params):")
+            print(f"  {'='*60}")
 
-        # Load Part 1 results for GenericAE, BottleneckGenericAE, Generic baselines
-        p1_results = defaultdict(list)
-        with open(unified_csv, "r") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row.get("period") != "Yearly":
-                    continue
-                cname = row.get("config_name", "")
-                if cname in ("GenericAE", "BottleneckGenericAE", "NBEATS-G", "NBEATS-I", "NBEATS-I+G"):
-                    p1_results[cname].append(row)
+            p1_results = defaultdict(list)
+            with open(unified_csv, "r") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row.get("period") != period:
+                        continue
+                    cname = row.get("config_name", "")
+                    if cname in ("GenericAE", "BottleneckGenericAE", "NBEATS-G", "NBEATS-I", "NBEATS-I+G"):
+                        p1_results[cname].append(row)
 
-        print(f"\n  {'Config':<30} {'Arch':>12} {'OWA':>7} {'Params':>10} {'Note'}")
-        print(f"  {'-'*75}")
+            print(f"\n  {'Config':<30} {'Arch':>12} {'OWA':>7} {'Params':>10} {'Note'}")
+            print(f"  {'-'*75}")
 
-        # Part 1 baselines
-        for cname in ["NBEATS-G", "NBEATS-I", "NBEATS-I+G", "GenericAE", "BottleneckGenericAE"]:
-            if cname in p1_results:
-                owas = []
-                for r in p1_results[cname]:
+            for cname in ["NBEATS-G", "NBEATS-I", "NBEATS-I+G", "GenericAE", "BottleneckGenericAE"]:
+                if cname in p1_results:
+                    owas = []
+                    for r in p1_results[cname]:
+                        try:
+                            o = float(r.get("owa", "nan"))
+                            if math.isfinite(o):
+                                owas.append(o)
+                        except (ValueError, TypeError):
+                            pass
+                    if owas:
+                        params = p1_results[cname][0].get("n_params", "?")
+                        print(
+                            f"  {cname:<30} {'30-stack':>12} {np.mean(owas):>7.4f} "
+                            f"{params:>10} Part 1 baseline"
+                        )
+
+            for bt in BLOCK_TYPES:
+                if bt in block_best:
+                    s = block_best[bt]
+                    print(
+                        f"  {s['config_name']:<30} {'10-stack':>12} {s['mean_metric']:>7.4f} "
+                        f"{s['n_params']:>10,} This study best"
+                    )
+
+        ae_trend_csv = os.path.join(RESULTS_DIR, dataset_name, "ae_trend_search_results.csv")
+        if os.path.exists(ae_trend_csv):
+            print(f"\n  {'='*60}")
+            print("  Comparison vs ae_trend_study ([Trend, X] x 5):")
+            print(f"  {'='*60}")
+
+            at_results = defaultdict(list)
+            with open(ae_trend_csv, "r") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    ae_var = row.get("ae_variant", "")
+                    if ae_var in ("GenericAE", "BottleneckGenericAE"):
+                        at_results[ae_var].append(row)
+
+            for bt in BLOCK_TYPES:
+                at_owas = []
+                for r in at_results.get(bt, []):
                     try:
                         o = float(r.get("owa", "nan"))
                         if math.isfinite(o):
-                            owas.append(o)
+                            at_owas.append(o)
                     except (ValueError, TypeError):
                         pass
-                if owas:
-                    params = p1_results[cname][0].get("n_params", "?")
-                    print(f"  {cname:<30} {'30-stack':>12} {np.mean(owas):>7.4f} "
-                          f"{params:>10} Part 1 baseline")
 
-        # This study's best per block type
-        for bt in BLOCK_TYPES:
-            if bt in block_best:
-                s = block_best[bt]
-                print(f"  {s['config_name']:<30} {'10-stack':>12} {s['mean_owa']:>7.4f} "
-                      f"{s['n_params']:>10,} This study best")
-
-    # --- Comparison vs ae_trend_study ---
-    ae_trend_csv = os.path.join(RESULTS_DIR, "m4", "ae_trend_search_results.csv")
-    if os.path.exists(ae_trend_csv):
-        print(f"\n  {'='*60}")
-        print(f"  Comparison vs ae_trend_study ([Trend, X] x 5):")
-        print(f"  {'='*60}")
-
-        # Load ae_trend_study results for GenericAE and BottleneckGenericAE variants
-        at_results = defaultdict(list)
-        with open(ae_trend_csv, "r") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                ae_var = row.get("ae_variant", "")
-                if ae_var in ("GenericAE", "BottleneckGenericAE"):
-                    at_results[ae_var].append(row)
-
-        for bt in BLOCK_TYPES:
-            if bt in at_results:
-                owas = []
-                for r in at_results[bt]:
-                    try:
-                        o = float(r.get("owa", "nan"))
-                        if math.isfinite(o):
-                            owas.append(o)
-                    except (ValueError, TypeError):
-                        pass
-                if owas:
-                    at_best = min(owas)
-                    at_mean = float(np.mean(owas))
-                    print(f"    {bt:<25} ae_trend best_OWA={at_best:.4f}  "
-                          f"mean_OWA={at_mean:.4f}  (n={len(owas)})")
-
-            if bt in block_best:
-                s = block_best[bt]
-                at_owas = [float(r.get("owa", "nan")) for r in at_results.get(bt, [])
-                           if math.isfinite(float(r.get("owa", "nan")))] if bt in at_results else []
                 if at_owas:
                     at_best_owa = min(at_owas)
-                    delta = s["mean_owa"] - at_best_owa
-                    label = "pure-stack better" if delta < 0 else "Trend-anchored better"
-                    print(f"    {'':<25} pure-stack best_OWA={s['mean_owa']:.4f}  "
-                          f"delta={delta:+.4f}  ({label})")
+                    at_mean = float(np.mean(at_owas))
+                    print(
+                        f"    {bt:<25} ae_trend best_OWA={at_best_owa:.4f} "
+                        f"mean_OWA={at_mean:.4f}  (n={len(at_owas)})"
+                    )
+                    if bt in block_best:
+                        delta = block_best[bt]["mean_metric"] - at_best_owa
+                        label = "pure-stack better" if delta < 0 else "Trend-anchored better"
+                        print(
+                            f"    {'':<25} pure-stack best_OWA={block_best[bt]['mean_metric']:.4f} "
+                            f"delta={delta:+.4f}  ({label})"
+                        )
+
+    if not has_owa:
+        print(f"\n  [INFO] OWA is unavailable for dataset '{dataset_name}'.")
+        print("  [INFO] Rankings and marginals above use best_val_loss instead.")
 
     print(f"\n{'='*70}")
     print(f"Analysis complete. Results: {csv_path}")
@@ -792,6 +832,10 @@ def analyze_results():
 def main():
     parser = argparse.ArgumentParser(
         description="GenericAE & BottleneckGenericAE Pure-Stack Successive Halving Study"
+    )
+    parser.add_argument(
+        "--dataset", default="m4", choices=sorted(STUDY_DATASETS.keys()),
+        help="Dataset to run/analyze."
     )
     parser.add_argument(
         "--round", default="all",
@@ -817,14 +861,18 @@ def main():
         "--num-workers", type=int, default=0,
         help="DataLoader num_workers."
     )
+    parser.add_argument(
+        "--reverse", action="store_true", default=False,
+        help="Iterate configs in reverse order (for parallel execution with a second process)."
+    )
 
     args = parser.parse_args()
 
     if args.analyze:
-        analyze_results()
+        analyze_results(args.dataset)
     else:
         run_study(args)
-        analyze_results()
+        analyze_results(args.dataset)
 
 
 if __name__ == "__main__":
