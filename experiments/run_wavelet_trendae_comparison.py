@@ -15,7 +15,7 @@ Fixed from wavelet_study_3 round 3 winners:
 New search dimension:
   - latent_dim: [2, 5, 8]  (AERootBlock bottleneck width)
 
-Training: 30 epochs with early stopping (matches round 3 budget).
+Training: 50 epochs with early stopping (matches round 3 budget).
 Seeds: 3 runs per config (seeds 42, 43, 44).
 
 Results → experiments/results/m4/wavelet_trendae_comparison_results.csv
@@ -68,7 +68,7 @@ torch.set_float32_matmul_precision("medium")
 RESULTS_DIR = os.path.join(_EXPERIMENTS_DIR, "results")
 EXPERIMENT_NAME = "wavelet_trendae_comparison"
 N_RUNS = 3
-MAX_EPOCHS = 30
+MAX_EPOCHS = 50
 LATENT_DIMS = [2, 5, 8]
 
 # Extended CSV schema
@@ -87,7 +87,7 @@ TOP10_CONFIGS = [
     {"name": "Coif3_bd4_lt_fcast_ttd3",       "wavelet": "Coif3WaveletV3",   "basis_dim": 4,  "bd_label": "lt_fcast", "ttd": 3},
     {"name": "Haar_bd4_lt_fcast_ttd3",        "wavelet": "HaarWaveletV3",    "basis_dim": 4,  "bd_label": "lt_fcast", "ttd": 3},
     {"name": "Coif3_bd6_eq_fcast_ttd3",       "wavelet": "Coif3WaveletV3",   "basis_dim": 6,  "bd_label": "eq_fcast", "ttd": 3},
-    {"name": "Symlet10_bd6_eq_fcast_ttd5",    "wavelet": "Symlet10WaveletV3","basis_dim": 6,  "bd_label": "eq_fcast", "ttd": 5},
+    {"name": "Symlet10_bd6_eq_fcast_ttd3",    "wavelet": "Symlet10WaveletV3","basis_dim": 6,  "bd_label": "eq_fcast", "ttd": 3},
     {"name": "DB10_bd15_lt_bcast_ttd3",       "wavelet": "DB10WaveletV3",    "basis_dim": 15, "bd_label": "lt_bcast", "ttd": 3},
     {"name": "Coif2_bd30_eq_bcast_ttd3",      "wavelet": "Coif2WaveletV3",   "basis_dim": 30, "bd_label": "eq_bcast", "ttd": 3},
     {"name": "Symlet3_bd4_lt_fcast_ttd3",     "wavelet": "Symlet3WaveletV3", "basis_dim": 4,  "bd_label": "lt_fcast", "ttd": 3},
