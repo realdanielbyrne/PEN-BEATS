@@ -28,6 +28,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+try:
+    from llm_commentary import generate_commentary
+    _LLM = True
+except ImportError:
+    _LLM = False
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 pd.set_option("display.width", 140)
 pd.set_option("display.float_format", "{:.4f}".format)
@@ -163,7 +169,42 @@ def pairwise_significance(df):
                       "p-value": f"{p:.4f}", "Sig": sig_stars(p)})
     print(pd.DataFrame(rows).to_markdown(index=False))
     sig_pairs = sum(1 for r in rows if r["Sig"] != "ns")
-    print(f"\n{sig_pairs} of {len(rows)} pairs show statistically significant differences (p < 0.05).\n")
+    print(f"\n{sig_pairs} of {len(rows)} pairs show statistically significant differences (p < 0.05).")
+
+    # LLM interpretation of active_g modes
+    val_stats = {
+        cfg: {
+            "label": ACTIVE_G_LABELS.get(cfg, cfg),
+            "med_loss": float(np.median(samples[cfg])) if cfg in samples else None,
+        }
+        for cfg in CONFIG_ORDER if cfg in samples
+    }
+    best_cfg = min(val_stats, key=lambda c: val_stats[c]["med_loss"] or float("inf"))
+    llm_ctx = {
+        "parameter_name": "active_g",
+        "architecture_name": "Generic 6-stack",
+        "backcast_length": 36,
+        "forecast_length": 6,
+        "best_value": ACTIVE_G_LABELS.get(best_cfg, best_cfg),
+        "best_owa": val_stats[best_cfg]["med_loss"] or 0.0,
+        "worst_value": ACTIVE_G_LABELS.get(
+            max(val_stats, key=lambda c: val_stats[c]["med_loss"] or 0.0), ""
+        ),
+        "worst_owa": max(v["med_loss"] or 0.0 for v in val_stats.values()),
+        "delta": float(
+            max(v["med_loss"] or 0.0 for v in val_stats.values()) -
+            min(v["med_loss"] or 0.0 for v in val_stats.values())
+        ),
+        "all_values": [
+            {"value": v["label"], "med_owa": v["med_loss"]}
+            for v in val_stats.values()
+            if v["med_loss"] is not None
+        ],
+    }
+    llm_text = generate_commentary("hyperparameter_discussion", llm_ctx) if _LLM else None
+    if llm_text:
+        print(f"\n{llm_text}")
+    print()
 
 
 def stability(df):

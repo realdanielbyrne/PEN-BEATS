@@ -1,13 +1,15 @@
-"""Comprehensive analysis of AE+Trend architecture search results.
+"""Comprehensive analysis of the TrendAE architecture search results.
 
-Reads experiments/results/m4/ae_trend_search_results.csv and produces:
-  1. Per-round leaderboards (median OWA across runs)
-  2. Successive-halving funnel summary
-  3. Hyperparameter marginals (ae_variant, latent_dim, thetas_dim, active_g)
-  4. Parameter-efficiency frontier (OWA vs n_params)
-  5. Stability analysis (OWA spread across seeds)
-  6. Round-over-round improvement for promoted configs
-  7. Final verdict against target criteria
+Reads experiments/results/m4/trendae_study_results.csv and produces:
+  1. Successive-halving funnel summary
+  2. Per-round leaderboards (median OWA across runs)
+  3. Hyperparameter marginals (ae_variant, latent_dim, thetas_dim, trend_thetas_dim, active_g)
+  4. Latent dimension discussion
+  5. Variant head-to-head
+  6. Stability analysis (OWA spread across seeds)
+  7. Round-over-round progression for promoted configs
+  8. Parameter efficiency frontier
+  9. Final verdict
 """
 
 import sys, io, os
@@ -24,12 +26,9 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 pd.set_option("display.width", 140)
 pd.set_option("display.max_colwidth", 55)
 
-# Track section numbering for Markdown heading levels
-_section_counter = 0
-
 # ── Constants ────────────────────────────────────────────────────────────────
 CSV_PATH = os.path.join(
-    os.path.dirname(__file__), "results", "m4", "ae_trend_search_results.csv"
+    os.path.dirname(__file__), "results", "m4", "trendae_study_results.csv"
 )
 TARGET_OWA = 0.85
 TARGET_PARAMS = 5_000_000
@@ -48,15 +47,12 @@ def load():
     for c in NUM_COLS:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
-    # Ensure search_round is int
     df["search_round"] = pd.to_numeric(df["search_round"], errors="coerce").astype(int)
     return df
 
 
-def section(title, char="="):
+def section(title):
     """Emit a Markdown section heading (## level)."""
-    global _section_counter
-    _section_counter += 1
     print()
     print(f"## {title}")
     print()
@@ -85,33 +81,33 @@ def round_leaderboard(df, round_num):
             ae_variant=("ae_variant", "first"),
             latent_dim=("latent_dim_cfg", "first"),
             thetas_dim=("thetas_dim_cfg", "first"),
+            trend_thetas_dim=("trend_thetas_dim_cfg", "first"),
             active_g=("active_g", "first"),
             med_time=("training_time_seconds", "median"),
         )
         .sort_values("med_owa")
     )
 
-    print(f"{n_cfg} configs × {n_runs} runs, {max_ep} epochs each\n")
+    print(f"{n_cfg} configs × {n_runs} runs, up to {max_ep} epochs each\n")
 
     rows = []
     for rank, (name, r) in enumerate(agg.iterrows(), 1):
         spread = r.max_owa - r.min_owa
         hit = "✓" if r.med_owa < TARGET_OWA and r.n_params < TARGET_PARAMS else ""
         rows.append({
-            "Rank": rank, "Config": name, "OWA": f"{r.med_owa:.3f}",
-            "±": f"{spread:.3f}", "sMAPE": f"{r.med_smape:.2f}",
+            "Rank": rank, "Config": name, "OWA": f"{r.med_owa:.4f}",
+            "±": f"{spread:.4f}", "sMAPE": f"{r.med_smape:.2f}",
             "MASE": f"{r.med_mase:.2f}", "Params": f"{r.n_params:,.0f}",
             "Time": f"{r.med_time:.1f}s", "Target": hit,
         })
     print(pd.DataFrame(rows).to_markdown(index=False))
     print()
 
-    # Commentary
     best = agg.iloc[0]
     worst = agg.iloc[-1]
-    print(f"The top-ranked configuration achieves a median OWA of {best.med_owa:.3f} "
-          f"with {best.n_params:,.0f} parameters, while the worst scores {worst.med_owa:.3f}. "
-          f"The spread between best and worst is {worst.med_owa - best.med_owa:.3f}.")
+    print(f"The top-ranked configuration achieves a median OWA of {best.med_owa:.4f} "
+          f"with {best.n_params:,.0f} parameters, while the worst scores {worst.med_owa:.4f}. "
+          f"The spread between best and worst is {worst.med_owa - best.med_owa:.4f}.")
     winners = agg[(agg.med_owa < TARGET_OWA) & (agg.n_params < TARGET_PARAMS)]
     if len(winners) > 0:
         print(f"**{len(winners)} configuration(s) meet both the OWA < {TARGET_OWA} and "
@@ -131,7 +127,7 @@ def funnel_summary(df):
         max_ep = rdf["epochs_trained"].max()
         best = rdf.groupby("config_name")["owa"].median().min()
         rows.append({"Round": r, "Configs": n_cfg, "Runs": n_runs,
-                      "Epochs": max_ep, "Best Med OWA": f"{best:.3f}"})
+                      "Epochs": max_ep, "Best Med OWA": f"{best:.4f}"})
     print(pd.DataFrame(rows).to_markdown(index=False))
     print()
     if len(rounds) >= 2:
@@ -139,8 +135,7 @@ def funnel_summary(df):
         last_cfgs = rows[-1]["Configs"]
         print(f"The successive halving procedure pruned from {first_cfgs} to {last_cfgs} "
               f"configurations across {len(rounds)} rounds, retaining the top "
-              f"{last_cfgs/first_cfgs*100:.0f}% of candidates. Each round increased "
-              f"the training budget while eliminating weaker configurations.")
+              f"{last_cfgs/first_cfgs*100:.0f}% of candidates.")
     print()
 
 
@@ -148,8 +143,9 @@ def hyperparameter_marginals(df):
     """Marginal effect of each hyperparameter on median OWA."""
     for col, label in [
         ("ae_variant", "AE Variant"),
-        ("latent_dim_cfg", "Latent Dim (search)"),
-        ("thetas_dim_cfg", "Thetas Dim (search)"),
+        ("latent_dim_cfg", "Latent Dim"),
+        ("thetas_dim_cfg", "Thetas Dim"),
+        ("trend_thetas_dim_cfg", "Trend Thetas Dim"),
         ("active_g", "active_g"),
     ]:
         if col not in df.columns:
@@ -170,7 +166,6 @@ def hyperparameter_marginals(df):
             "mean_owa": "Mean OWA", "std_owa": "Std", "n_runs": "N", "med_params": "Med Params"})
         tbl["Med Params"] = tbl["Med Params"].apply(lambda x: f"{x:,.0f}")
         print(tbl.to_markdown(index=False))
-        # Commentary
         best_val = grp.index[0]
         worst_val = grp.index[-1]
         delta = grp.iloc[-1].med_owa - grp.iloc[0].med_owa
@@ -191,7 +186,7 @@ def hyperparameter_marginals(df):
             print(f"\n{llm_text}")
         else:
             print(f"\n**{best_val}** yields the best median OWA while **{worst_val}** "
-                  f"is the weakest (Δ = {delta:.3f}).")
+                  f"is the weakest (Δ = {delta:.4f}).")
         print()
 
 
@@ -221,15 +216,15 @@ def latent_dim_discussion(df):
           "AERootBlock backbone. The encoder compresses each block's input from "
           "`backcast_length → units/2 → latent_dim`, and the decoder expands it back "
           "to `latent_dim → units/2 → units` before the head layers produce backcast "
-          "and forecast outputs. A smaller latent dim forces stronger compression, "
-          "which acts as a regulariser but may discard useful signal; a larger latent "
-          "dim preserves more information but risks overfitting.\n")
+          "and forecast outputs. A smaller latent dim forces stronger compression "
+          "(regularisation); a larger dim preserves more information but risks "
+          "overfitting.\n")
 
-    print(f"Across this experiment (backcast_length = {int(df['backcast_length'].iloc[0])}, "
-          f"forecast_length = {int(df['forecast_length'].iloc[0] if 'forecast_length' in df.columns else 6)}), "
-          f"three latent dimensions were tested: **{', '.join(str(int(d)) for d in dims)}**.\n")
+    bcl = int(df["backcast_length"].iloc[0]) if "backcast_length" in df.columns else 30
+    fcl = int(df["forecast_length"].iloc[0]) if "forecast_length" in df.columns else 6
+    print(f"With backcast_length = {bcl} and forecast_length = {fcl}, the tested "
+          f"latent dimensions are: **{', '.join(str(int(d)) for d in dims)}**.\n")
 
-    # Per-dim summary
     for d in dims:
         r = grp.loc[d]
         tag = " ← best" if d == best_dim else (" ← worst" if d == worst_dim else "")
@@ -244,9 +239,9 @@ def latent_dim_discussion(df):
 
     llm_ctx = {
         "parameter_name": "latent_dim",
-        "architecture_name": "AE+Trend",
-        "backcast_length": int(df["backcast_length"].iloc[0]) if "backcast_length" in df.columns else 30,
-        "forecast_length": int(df["forecast_length"].iloc[0]) if "forecast_length" in df.columns else 6,
+        "architecture_name": "TrendAE",
+        "backcast_length": bcl,
+        "forecast_length": fcl,
         "best_value": int(best_dim),
         "best_owa": float(best_owa),
         "worst_value": int(worst_dim),
@@ -263,163 +258,26 @@ def latent_dim_discussion(df):
     if llm_text:
         print(f"\n{llm_text}")
     else:
-        # Interpretation
         if best_dim == min(dims):
             print("The smallest bottleneck wins, indicating that strong compression "
-                  "acts as beneficial regularisation for this architecture on M4-Yearly. "
-                  "The AE+Trend stack already has a structured trend head that constrains "
-                  "the forecast space, so the backbone needs only a narrow latent "
-                  "representation to capture residual patterns.\n")
+                  "benefits the TrendAE stacks. Since each AE block is paired with a "
+                  "structured Trend block that constrains the output via a polynomial "
+                  "basis, the backbone needs only a minimal latent representation.\n")
         elif best_dim == max(dims):
             print("The largest bottleneck wins, suggesting that the AE backbone benefits "
-                  "from preserving more information before handing off to the trend head. "
-                  "The trend polynomial basis already provides strong inductive bias, "
-                  "so an over-compressed latent may strip useful structure.\n")
+                  "from preserving more information. Despite the Trend block's polynomial "
+                  "constraints, the backbone's richer features improve forecast quality "
+                  "at the cost of mild overfitting risk.\n")
         else:
             print("A mid-range bottleneck achieves the best balance between compression "
-                  "and information preservation, suggesting diminishing returns at "
-                  "higher dimensions while the lowest dimension is too aggressive.\n")
+                  "and information preservation. The Trend head constrains the output "
+                  "space, so the backbone doesn't need maximum capacity, but too-narrow "
+                  "a bottleneck discards useful structure.\n")
 
-        print("**Practical recommendation:** Use `latent_dim = "
-              f"{int(best_dim)}` as the default for AE+Trend configurations on "
-              "M4-Yearly. When adapting to datasets with longer backcast windows "
-              "or more complex seasonal patterns, consider scaling latent_dim "
-              "proportionally (e.g. latent_dim ≈ backcast_length / 5–10).\n")
-
-
-def param_efficiency(df):
-    """Show OWA vs parameter count for final-round configs."""
-    last_round = df["search_round"].max()
-    rdf = df[df["search_round"] == last_round]
-    agg = (
-        rdf.groupby("config_name")
-        .agg(
-            med_owa=("owa", "median"),
-            n_params=("n_params", "first"),
-            ae_variant=("ae_variant", "first"),
-        )
-        .sort_values("n_params")
-    )
-    rows = []
-    for name, r in agg.iterrows():
-        reduction = (1 - r.n_params / NBEATS_G_PARAMS) * 100
-        hit = "✓" if r.med_owa < TARGET_OWA and r.n_params < TARGET_PARAMS else "✗"
-        rows.append({"Config": name, "Params": f"{r.n_params:,.0f}",
-                      "Reduction": f"{reduction:.1f}%", "Med OWA": f"{r.med_owa:.3f}", "Target": hit})
-    print(pd.DataFrame(rows).to_markdown(index=False))
-    print()
-    best_efficiency = agg.iloc[agg["med_owa"].values.argmin()]
-    llm_ctx = {
-        "baseline_params": NBEATS_G_PARAMS,
-        "best_config": {
-            "name": str(best_efficiency.name) if hasattr(best_efficiency, "name") else "best",
-            "params": int(best_efficiency.n_params),
-            "owa": float(best_efficiency.med_owa),
-            "reduction_pct": float((1 - best_efficiency.n_params / NBEATS_G_PARAMS) * 100),
-        },
-        "configs": [
-            {"name": str(n), "params": int(r.n_params), "owa": float(r.med_owa),
-             "reduction_pct": float((1 - r.n_params / NBEATS_G_PARAMS) * 100)}
-            for n, r in agg.iterrows()
-        ],
-    }
-    llm_text = generate_commentary("param_efficiency", llm_ctx) if _LLM else None
-    if llm_text:
-        print(llm_text)
-    else:
-        print(f"All AE+Trend configurations achieve substantial parameter reductions "
-              f"relative to the {NBEATS_G_PARAMS:,}-parameter Generic baseline. "
-              f"The best-performing config uses {best_efficiency.n_params:,.0f} parameters "
-              f"({(1 - best_efficiency.n_params/NBEATS_G_PARAMS)*100:.0f}% reduction) "
-              f"while achieving OWA = {best_efficiency.med_owa:.3f}.")
-    print()
-
-
-def stability_analysis(df):
-    """Analyse OWA variance across seeds for each round."""
-    all_spreads = {}
-    for r in sorted(df["search_round"].unique()):
-        rdf = df[df["search_round"] == r]
-        spread = (
-            rdf.groupby("config_name")["owa"]
-            .agg(["median", "min", "max", "std"])
-            .assign(range=lambda x: x["max"] - x["min"])
-        )
-        all_spreads[r] = spread
-        print(f"\n### Round {r}\n")
-        print(f"- **Mean spread (max−min):** {spread['range'].mean():.3f}")
-        print(f"- **Max spread (max−min):** {spread['range'].max():.3f} "
-              f"(`{spread['range'].idxmax()}`)")
-        print(f"- **Mean std:** {spread['std'].mean():.3f}")
-        most_stable = spread.sort_values("range").head(3)
-        print(f"- **Most stable configs:** "
-              + ", ".join(f"`{n}` (±{rv:.3f})" for n, rv in most_stable["range"].items()))
-    print()
-
-    # Build context for LLM from the last round's spread data
-    last_r = max(all_spreads.keys())
-    last_spread = all_spreads[last_r]
-    llm_ctx = {
-        "mean_spread": float(last_spread["range"].mean()),
-        "max_spread": float(last_spread["range"].max()),
-        "most_stable": list(last_spread.sort_values("range").head(3).index),
-        "most_volatile": list(last_spread.sort_values("range", ascending=False).head(3).index),
-    }
-    llm_text = generate_commentary("stability_analysis", llm_ctx) if _LLM else None
-    if llm_text:
-        print(llm_text)
-    else:
-        print("Lower spread values indicate more consistent performance across random seeds. "
-              "Configurations with high spread may be sensitive to initialization.")
-    print()
-
-
-def round_progression(df):
-    """Track how promoted configs improve across rounds."""
-    rounds = sorted(df["search_round"].unique())
-    if len(rounds) < 2:
-        print("(need ≥2 rounds for progression)")
-        return
-
-    last_round = rounds[-1]
-    final_configs = set(df[df["search_round"] == last_round]["config_name"].unique())
-
-    medians = {}
-    for r in rounds:
-        rdf = df[(df["search_round"] == r) & (df["config_name"].isin(final_configs))]
-        if rdf.empty:
-            continue
-        medians[r] = rdf.groupby("config_name")["owa"].median()
-
-    prog = pd.DataFrame(medians)
-    prog.columns = [f"R{r}" for r in prog.columns]
-    if len(prog.columns) >= 2:
-        first_col, last_col = prog.columns[0], prog.columns[-1]
-        prog["Δ"] = prog[last_col] - prog[first_col]
-        prog["Δ%"] = (prog["Δ"] / prog[first_col] * 100).round(1)
-    prog = prog.sort_values(prog.columns[-2])
-
-    print(prog.round(3).to_markdown())
-    print()
-    if "Δ" in prog.columns:
-        improved = (prog["Δ"] < 0).sum()
-        llm_ctx = {
-            "n_improved": int(improved),
-            "n_total": int(len(prog)),
-            "progression_data": [
-                {"config": str(name), "delta": float(row["Δ"]), "delta_pct": float(row["Δ%"])}
-                for name, row in prog.iterrows()
-                if "Δ" in row.index
-            ],
-        }
-        llm_text = generate_commentary("round_progression", llm_ctx) if _LLM else None
-        if llm_text:
-            print(llm_text)
-        else:
-            print(f"**{improved} of {len(prog)} surviving configurations improved** their OWA "
-                  f"from the first to the last round, confirming that additional training "
-                  f"epochs benefit the top candidates.")
-    print()
+        print(f"**Practical recommendation:** Use `latent_dim = {int(best_dim)}` as the "
+              "default for TrendAE stacks on M4-Yearly. For longer forecast horizons or "
+              "higher-frequency data, consider scaling proportionally "
+              "(e.g. latent_dim ≈ backcast_length / 5–10).\n")
 
 
 def variant_head_to_head(df):
@@ -456,10 +314,142 @@ def variant_head_to_head(df):
     if llm_text:
         print(llm_text)
     else:
-        print("This head-to-head comparison reveals which AE backbone architectures are "
-              "most competitive at each stage of the search. Variants that maintain top "
-              "positions across rounds demonstrate robust performance independent of "
-              "training budget.")
+        print("Variants that maintain top positions across rounds demonstrate robust "
+              "performance independent of training budget.")
+    print()
+
+
+def stability_analysis(df):
+    """Analyse OWA variance across seeds for each round."""
+    last_spread = None
+    for r in sorted(df["search_round"].unique()):
+        rdf = df[df["search_round"] == r]
+        spread = (
+            rdf.groupby("config_name")["owa"]
+            .agg(["median", "min", "max", "std"])
+            .assign(range=lambda x: x["max"] - x["min"])
+        )
+        last_spread = spread
+        print(f"\n### Round {r}\n")
+        print(f"- **Mean spread (max−min):** {spread['range'].mean():.4f}")
+        print(f"- **Max spread (max−min):** {spread['range'].max():.4f} "
+              f"(`{spread['range'].idxmax()}`)")
+        print(f"- **Mean std:** {spread['std'].mean():.4f}")
+        most_stable = spread.sort_values("range").head(3)
+        print(f"- **Most stable configs:** "
+              + ", ".join(f"`{n}` (±{rv:.4f})" for n, rv in most_stable["range"].items()))
+    print()
+
+    if last_spread is not None:
+        llm_ctx = {
+            "mean_spread": float(last_spread["range"].mean()),
+            "max_spread": float(last_spread["range"].max()),
+            "most_stable": list(last_spread.sort_values("range").head(3).index),
+            "most_volatile": list(last_spread.sort_values("range", ascending=False).head(3).index),
+        }
+        llm_text = generate_commentary("stability_analysis", llm_ctx) if _LLM else None
+        if llm_text:
+            print(llm_text)
+        else:
+            print("Lower spread values indicate more consistent performance across random seeds. "
+                  "Configurations with high spread may be sensitive to initialization.")
+    print()
+
+
+def round_progression(df):
+    """Track how promoted configs improve across rounds."""
+    rounds = sorted(df["search_round"].unique())
+    if len(rounds) < 2:
+        print("(need ≥2 rounds for progression)")
+        return
+
+    last_round = rounds[-1]
+    final_configs = set(df[df["search_round"] == last_round]["config_name"].unique())
+
+    medians = {}
+    for r in rounds:
+        rdf = df[(df["search_round"] == r) & (df["config_name"].isin(final_configs))]
+        if rdf.empty:
+            continue
+        medians[r] = rdf.groupby("config_name")["owa"].median()
+
+    prog = pd.DataFrame(medians)
+    prog.columns = [f"R{r}" for r in prog.columns]
+    if len(prog.columns) >= 2:
+        first_col, last_col = prog.columns[0], prog.columns[-1]
+        prog["Δ"] = prog[last_col] - prog[first_col]
+        prog["Δ%"] = (prog["Δ"] / prog[first_col] * 100).round(1)
+    prog = prog.sort_values(prog.columns[-2])
+
+    print(prog.round(4).to_markdown())
+    print()
+    if "Δ" in prog.columns:
+        improved = (prog["Δ"] < 0).sum()
+        llm_ctx = {
+            "n_improved": int(improved),
+            "n_total": int(len(prog)),
+            "progression_data": [
+                {"config": str(name), "delta": float(row["Δ"]), "delta_pct": float(row["Δ%"])}
+                for name, row in prog.iterrows()
+                if "Δ" in row.index
+            ],
+        }
+        llm_text = generate_commentary("round_progression", llm_ctx) if _LLM else None
+        if llm_text:
+            print(llm_text)
+        else:
+            print(f"**{improved} of {len(prog)} surviving configurations improved** their OWA "
+                  f"from R1 to R{last_round}, confirming that additional training "
+                  f"epochs benefit the top candidates.")
+    print()
+
+
+
+def param_efficiency(df):
+    """Show OWA vs parameter count for final-round configs."""
+    last_round = df["search_round"].max()
+    rdf = df[df["search_round"] == last_round]
+    agg = (
+        rdf.groupby("config_name")
+        .agg(
+            med_owa=("owa", "median"),
+            n_params=("n_params", "first"),
+            ae_variant=("ae_variant", "first"),
+        )
+        .sort_values("n_params")
+    )
+    rows = []
+    for name, r in agg.iterrows():
+        reduction = (1 - r.n_params / NBEATS_G_PARAMS) * 100
+        hit = "✓" if r.med_owa < TARGET_OWA and r.n_params < TARGET_PARAMS else "✗"
+        rows.append({"Config": name, "Params": f"{r.n_params:,.0f}",
+                      "Reduction": f"{reduction:.1f}%", "Med OWA": f"{r.med_owa:.4f}", "Target": hit})
+    print(pd.DataFrame(rows).to_markdown(index=False))
+    print()
+    best_efficiency = agg.iloc[agg["med_owa"].values.argmin()]
+    llm_ctx = {
+        "baseline_params": NBEATS_G_PARAMS,
+        "best_config": {
+            "name": str(best_efficiency.name) if hasattr(best_efficiency, "name") else "best",
+            "params": int(best_efficiency.n_params),
+            "owa": float(best_efficiency.med_owa),
+            "reduction_pct": float((1 - best_efficiency.n_params / NBEATS_G_PARAMS) * 100),
+        },
+        "configs": [
+            {"name": str(n), "params": int(r.n_params), "owa": float(r.med_owa),
+             "reduction_pct": float((1 - r.n_params / NBEATS_G_PARAMS) * 100)}
+            for n, r in agg.iterrows()
+        ],
+    }
+    llm_text = generate_commentary("param_efficiency", llm_ctx) if _LLM else None
+    if llm_text:
+        print(llm_text)
+    else:
+        print(f"All TrendAE configurations achieve substantial parameter reductions "
+              f"relative to the {NBEATS_G_PARAMS:,}-parameter Generic baseline. "
+              f"The best-performing config uses {best_efficiency.n_params:,.0f} parameters "
+              f"({(1 - best_efficiency.n_params/NBEATS_G_PARAMS)*100:.0f}% reduction) "
+              f"while achieving OWA = {best_efficiency.med_owa:.4f}.")
     print()
 
 
@@ -479,6 +469,7 @@ def final_verdict(df):
             ae_variant=("ae_variant", "first"),
             latent_dim=("latent_dim_cfg", "first"),
             thetas_dim=("thetas_dim_cfg", "first"),
+            trend_thetas_dim=("trend_thetas_dim_cfg", "first"),
             active_g=("active_g", "first"),
         )
         .sort_values("med_owa")
@@ -495,11 +486,12 @@ def final_verdict(df):
         for name, r in winners.iterrows():
             reduction = (1 - r.n_params / NBEATS_G_PARAMS) * 100
             print(f"**{name}**\n")
-            print(f"- OWA: {r.med_owa:.3f} (range {r.min_owa:.3f}–{r.max_owa:.3f})")
+            print(f"- OWA: {r.med_owa:.4f} (range {r.min_owa:.4f}–{r.max_owa:.4f})")
             print(f"- sMAPE: {r.med_smape:.2f}, MASE: {r.med_mase:.2f}")
             print(f"- Params: {r.n_params:,.0f} ({reduction:.0f}% reduction)")
-            print(f"- Hyperparams: ae={r.ae_variant}, latent_dim={r.latent_dim}, "
-                  f"thetas_dim={r.thetas_dim}, active_g={r.active_g}")
+            print(f"- Hyperparams: ae={r.ae_variant}, latent_dim={int(r.latent_dim)}, "
+                  f"thetas_dim={int(r.thetas_dim)}, "
+                  f"trend_thetas_dim={int(r.trend_thetas_dim)}, active_g={r.active_g}")
             print()
     else:
         print("❌ No configurations meet both OWA and parameter targets.\n")
@@ -507,7 +499,7 @@ def final_verdict(df):
     if len(near_miss) > 0:
         print(f"⚠️ **{len(near_miss)} configuration(s) meet OWA target but exceed "
               f"parameter budget:**\n")
-        rows = [{"Config": name, "OWA": f"{r.med_owa:.3f}",
+        rows = [{"Config": name, "OWA": f"{r.med_owa:.4f}",
                  "Params": f"{r.n_params:,.0f}"} for name, r in near_miss.iterrows()]
         print(pd.DataFrame(rows).to_markdown(index=False))
         print()
@@ -520,9 +512,9 @@ def main():
     total_rounds = df["search_round"].nunique()
     total_time = df["training_time_seconds"].sum()
 
-    print("# AE+Trend Architecture Search — Results Analysis\n")
+    print("# TrendAE Architecture Search — Results Analysis\n")
 
-    # --- Compute abstract key takeaways ---
+    # --- Abstract ---
     last_round = df["search_round"].max()
     r_final = df[df["search_round"] == last_round]
     best_cfg_owa = r_final.groupby("config_name")["owa"].median().sort_values()
@@ -531,25 +523,37 @@ def main():
     best_params = r_final[r_final["config_name"] == best_name]["n_params"].iloc[0]
     param_reduction = (1 - best_params / NBEATS_G_PARAMS) * 100
 
+    # Identify best AE variant from R1
+    r1 = df[df["search_round"] == 1]
+    best_variant = r1.groupby("ae_variant")["owa"].median().idxmin()
+
+    n_diverged = df["diverged"].sum() if "diverged" in df.columns else 0
+    n_variants = df["ae_variant"].nunique()
+
     print("## Abstract\n")
-    print("This study applies successive-halving architecture search to AE+Trend hybrid "
-          "configurations on the M4-Yearly dataset. The AE+Trend stack pairs a compact "
-          "autoencoder block with a trend block, aiming to match or beat established "
-          "N-BEATS baselines at a fraction of the parameter cost.\n")
+    print(f"This study evaluates **{n_variants} AE-backbone variants** paired with Trend "
+          f"blocks across {total_configs} configurations on M4-Yearly, using successive "
+          f"halving over {total_rounds} rounds ({total_runs} total runs, "
+          f"{total_time / 60:.1f} min compute). Each configuration combines an AE block "
+          f"(AutoEncoder, GenericAE, GenericAEBackcast, BottleneckGenericAE, and their "
+          f"AE-backbone counterparts) with a Trend block, varying latent_dim, thetas_dim, "
+          f"trend_thetas_dim, and active_g.\n")
     print("**Key Takeaways:**\n")
-    print(f"- **Best configuration:** `{best_name}` achieves median OWA = **{best_owa:.4f}** "
-          f"with only {best_params:,.0f} parameters ({param_reduction:.0f}% fewer than NBEATS-G).")
+    print(f"1. **Best configuration:** `{best_name}` — median OWA = **{best_owa:.4f}** "
+          f"with {best_params:,.0f} params ({param_reduction:.0f}% fewer than NBEATS-G).")
     target_met = best_owa < TARGET_OWA
-    print(f"- **Target OWA < {TARGET_OWA}:** {'Met ✓' if target_met else 'Not met'}")
-    n_r1 = df[df["search_round"] == 1]["config_name"].nunique()
+    print(f"2. **Target OWA < {TARGET_OWA}:** {'Met ✓' if target_met else 'Not met ✗'}")
+    print(f"3. **Best AE variant (R1 marginal):** `{best_variant}`")
+    n_r1 = r1["config_name"].nunique()
     n_rf = r_final["config_name"].nunique()
-    print(f"- **Search scope:** {n_r1} initial configs narrowed to {n_rf} across "
-          f"{total_rounds} rounds of successive halving.")
-    print(f"- **Total compute:** {total_time / 60:.1f} minutes across {total_runs} training runs.\n")
+    print(f"4. **Search scope:** {n_r1} → {n_rf} configs via successive halving.")
+    print(f"5. **Convergence:** {n_diverged} diverged runs out of {total_runs} ({n_diverged/total_runs*100:.1f}%).\n")
 
     print(f"- **CSV:** `{CSV_PATH}`")
     print(f"- **Rows:** {total_runs} ({total_configs} unique configs, {total_rounds} rounds)")
+    print(f"- **AE variants:** {sorted(df['ae_variant'].unique())}")
     print(f"- **Total training time:** {total_time / 60:.1f} min")
+    print(f"- **OWA range:** {df['owa'].min():.4f} – {df['owa'].max():.4f}")
     print()
 
     section("1. Successive Halving Funnel")
@@ -560,7 +564,6 @@ def main():
         round_leaderboard(df, r)
 
     section("3. Hyperparameter Marginals (Round 1 — Full Grid)")
-    r1 = df[df["search_round"] == 1]
     hyperparameter_marginals(r1)
 
     section("3b. Selecting the Optimal Latent Dimension")

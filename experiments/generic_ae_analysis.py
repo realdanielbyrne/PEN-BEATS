@@ -24,6 +24,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+try:
+    from llm_commentary import generate_commentary
+    _LLM = True
+except ImportError:
+    _LLM = False
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 pd.set_option("display.width", 140)
 pd.set_option("display.max_colwidth", 55)
@@ -243,8 +249,24 @@ def hyperparameter_marginals(df):
         best_val = grp.index[0]
         worst_val = grp.index[-1]
         gap = grp.iloc[-1].med_owa - grp.iloc[0].med_owa
-        print(f"\n**{best_val}** leads with the lowest median OWA; "
-              f"the gap to the worst level ({worst_val}) is {gap:.4f}.\n")
+        llm_ctx = {
+            "parameter_name": col,
+            "best_value": str(best_val),
+            "best_owa": float(grp.iloc[0].med_owa),
+            "worst_value": str(worst_val),
+            "worst_owa": float(grp.iloc[-1].med_owa),
+            "delta": float(gap),
+            "all_values": [
+                {"value": str(v), "med_owa": float(r.med_owa)}
+                for v, r in grp.iterrows()
+            ],
+        }
+        llm_text = generate_commentary("hyperparameter_marginal", llm_ctx) if _LLM else None
+        if llm_text:
+            print(f"\n{llm_text}\n")
+        else:
+            print(f"\n**{best_val}** leads with the lowest median OWA; "
+                  f"the gap to the worst level ({worst_val}) is {gap:.4f}.\n")
 
 
 def latent_dim_discussion(df):
@@ -296,32 +318,54 @@ def latent_dim_discussion(df):
           f"(median OWA {best_owa:.4f}), outperforming the worst "
           f"(latent_dim = {int(worst_dim)}) by Δ = {delta:.4f}. ")
 
-    if best_dim == min(dims):
-        print("The smallest bottleneck wins, suggesting aggressive compression "
-              "is beneficial. Since GenericAE uses direct linear projections to "
-              "target lengths (no structured basis), the backbone's inductive bias "
-              "comes entirely from the AE bottleneck. A narrow latent prevents the "
-              "network from memorising noise in the lookback window.\n")
-    elif best_dim == max(dims):
-        print("The widest bottleneck wins, indicating the generic head layers "
-              "need richer features from the backbone. Unlike structured blocks "
-              "(Trend, Seasonality) that constrain the output space, GenericAE's "
-              "direct projection benefits from a larger latent representation.\n")
+    llm_ctx = {
+        "parameter_name": "latent_dim",
+        "architecture_name": "GenericAE",
+        "backcast_length": bcl,
+        "forecast_length": 6,
+        "best_value": int(best_dim),
+        "best_owa": float(best_owa),
+        "worst_value": int(worst_dim),
+        "worst_owa": float(worst_owa),
+        "delta": float(delta),
+        "all_values": [
+            {"value": int(d), "med_owa": float(grp.loc[d, "med_owa"]),
+             "std_owa": float(grp.loc[d, "std_owa"]),
+             "med_params": float(grp.loc[d, "med_params"])}
+            for d in dims
+        ],
+    }
+    llm_text = generate_commentary("hyperparameter_discussion", llm_ctx) if _LLM else None
+    if llm_text:
+        print(f"\n{llm_text}")
     else:
-        print("A mid-range bottleneck strikes the best balance. Too narrow forces "
-              "excessive information loss; too wide provides diminishing returns "
-              "as the generic head already has unconstrained capacity.\n")
+        if best_dim == min(dims):
+            print("The smallest bottleneck wins, suggesting aggressive compression "
+                  "is beneficial. Since GenericAE uses direct linear projections to "
+                  "target lengths (no structured basis), the backbone's inductive bias "
+                  "comes entirely from the AE bottleneck. A narrow latent prevents the "
+                  "network from memorising noise in the lookback window.\n")
+        elif best_dim == max(dims):
+            print("The widest bottleneck wins, indicating the generic head layers "
+                  "need richer features from the backbone. Unlike structured blocks "
+                  "(Trend, Seasonality) that constrain the output space, GenericAE's "
+                  "direct projection benefits from a larger latent representation.\n")
+        else:
+            print("A mid-range bottleneck strikes the best balance. Too narrow forces "
+                  "excessive information loss; too wide provides diminishing returns "
+                  "as the generic head already has unconstrained capacity.\n")
 
-    print("**Practical recommendation:** Use `latent_dim = "
-          f"{int(best_dim)}` for GenericAE / BottleneckGenericAE stacks on "
-          "M4-Yearly. For longer horizons or more complex datasets, consider "
-          "scaling latent_dim proportionally to backcast_length "
-          "(e.g. latent_dim ≈ backcast_length / 5–10) and re-evaluating "
-          "via a small grid search.\n")
+        print("**Practical recommendation:** Use `latent_dim = "
+              f"{int(best_dim)}` for GenericAE / BottleneckGenericAE stacks on "
+              "M4-Yearly. For longer horizons or more complex datasets, consider "
+              "scaling latent_dim proportionally to backcast_length "
+              "(e.g. latent_dim ≈ backcast_length / 5–10) and re-evaluating "
+              "via a small grid search.\n")
 
 
 def stability_analysis(df):
     print("Stability is measured by the OWA spread (max − min) across random seeds for each configuration.\n")
+    last_spread = None
     for r in sorted(df["search_round"].unique()):
         rdf = df[df["search_round"] == r]
         spread = (
@@ -329,6 +373,7 @@ def stability_analysis(df):
             .agg(["median", "min", "max", "std"])
             .assign(range=lambda x: x["max"] - x["min"])
         )
+        last_spread = spread
         print(f"### Round {r}\n")
         print(f"- **Mean spread (max−min):** {spread['range'].mean():.4f}")
         print(f"- **Max spread:** {spread['range'].max():.4f} ({spread['range'].idxmax()})")
@@ -338,6 +383,18 @@ def stability_analysis(df):
         print("**Most stable configs:**\n")
         print(most_stable[["Config", "Median OWA", "Range", "Std"]].to_markdown(index=False, floatfmt=".4f"))
         print()
+
+    if last_spread is not None:
+        llm_ctx = {
+            "mean_spread": float(last_spread["range"].mean()),
+            "max_spread": float(last_spread["range"].max()),
+            "most_stable": list(last_spread.sort_values("range").head(3).index),
+            "most_volatile": list(last_spread.sort_values("range", ascending=False).head(3).index),
+        }
+        llm_text = generate_commentary("stability_analysis", llm_ctx) if _LLM else None
+        if llm_text:
+            print(llm_text)
+            print()
 
 
 def param_efficiency(df):
@@ -365,8 +422,29 @@ def param_efficiency(df):
                       "Params": f"{r.n_params:,.0f}", "Reduction": f"{reduction:.1f}%",
                       "Med OWA": f"{r.med_owa:.4f}", "Pareto": pareto_tag})
     print(pd.DataFrame(rows).to_markdown(index=False))
-    print(f"\nConfigurations on the Pareto frontier achieve the best OWA for their "
-          f"parameter budget — they cannot be improved on one axis without regressing on the other.\n")
+    best_cfg_name = agg.iloc[agg["med_owa"].values.argmin()].name if hasattr(agg, "name") else agg["med_owa"].idxmin()
+    best_row = agg.loc[best_cfg_name]
+    llm_ctx = {
+        "baseline_params": NBEATS_G_PARAMS,
+        "best_config": {
+            "name": str(best_cfg_name),
+            "params": int(best_row.n_params),
+            "owa": float(best_row.med_owa),
+            "reduction_pct": float((1 - best_row.n_params / NBEATS_G_PARAMS) * 100),
+        },
+        "configs": [
+            {"name": str(n), "params": int(r.n_params), "owa": float(r.med_owa),
+             "reduction_pct": float((1 - r.n_params / NBEATS_G_PARAMS) * 100),
+             "pareto": n in pareto}
+            for n, r in agg.iterrows()
+        ],
+    }
+    llm_text = generate_commentary("param_efficiency", llm_ctx) if _LLM else None
+    if llm_text:
+        print(f"\n{llm_text}")
+    else:
+        print(f"\nConfigurations on the Pareto frontier achieve the best OWA for their "
+              f"parameter budget — they cannot be improved on one axis without regressing on the other.\n")
 
 
 def statistical_significance(df):
@@ -447,8 +525,21 @@ def round_progression(df):
     print(prog.round(4).reset_index().rename(columns={"index": "Config"}).to_markdown(index=False))
     if "Δ" in prog.columns:
         improved = (prog["Δ"] < 0).sum()
-        print(f"\n{improved} of {len(prog)} configs improved with additional training epochs. "
-              f"Mean Δ = {prog['Δ'].mean():.4f}.\n")
+        llm_ctx = {
+            "n_improved": int(improved),
+            "n_total": int(len(prog)),
+            "progression_data": [
+                {"config": str(name), "delta": float(row["Δ"]), "delta_pct": float(row["Δ%"])}
+                for name, row in prog.iterrows()
+                if "Δ" in row.index
+            ],
+        }
+        llm_text = generate_commentary("round_progression", llm_ctx) if _LLM else None
+        if llm_text:
+            print(f"\n{llm_text}\n")
+        else:
+            print(f"\n{improved} of {len(prog)} configs improved with additional training epochs. "
+                  f"Mean Δ = {prog['Δ'].mean():.4f}.\n")
 
 if __name__ == "__main__":
     main()

@@ -23,6 +23,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+try:
+    from llm_commentary import generate_commentary
+    _LLM = True
+except ImportError:
+    _LLM = False
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 pd.set_option("display.width", 140)
 pd.set_option("display.float_format", "{:.4f}".format)
@@ -155,7 +161,22 @@ def activeg_head_to_head(df):
     print(f"- **Mann-Whitney U p-value:** {p:.4f} {sig_stars(p)}")
     verdict = "Active_g produces significantly lower loss." if delta < 0 and p < 0.05 else \
               "No significant difference; baseline is comparable or better."
-    print(f"- **Verdict:** {verdict}\n")
+    print(f"- **Verdict:** {verdict}")
+
+    llm_ctx = {
+        "epoch_stats": {
+            "baseline_med_loss": float(baseline.median()),
+            "activeg_med_loss": float(activeg.median()),
+            "delta": float(delta),
+            "p_value": float(p),
+            "significant": bool(delta < 0 and p < 0.05),
+        },
+        "context_extra": "Milk univariate 10-stack convergence study comparing baseline vs active_g=True",
+    }
+    llm_text = generate_commentary("convergence_analysis", llm_ctx) if _LLM else None
+    if llm_text:
+        print(f"\n{llm_text}")
+    print()
 
 
 def main():

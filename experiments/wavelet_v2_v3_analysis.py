@@ -26,6 +26,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+try:
+    from llm_commentary import generate_commentary
+    _LLM = True
+except ImportError:
+    _LLM = False
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 pd.set_option("display.width", 140)
 pd.set_option("display.max_colwidth", 55)
@@ -139,6 +145,28 @@ def v2_v3_head_to_head(df2, df3):
     v2_wins = (merged["Δ(V3-V2)"] > 0).sum()
     print(f"\n**V3 wins {v3_wins}/{len(merged)}** head-to-head matchups; V2 wins {v2_wins}/{len(merged)}.")
 
+    llm_ctx = {
+        "variants": ["WaveletV2", "WaveletV3"],
+        "round_results": {
+            "v3_wins": int(v3_wins),
+            "v2_wins": int(v2_wins),
+            "total_matchups": int(len(merged)),
+            "family_results": [
+                {
+                    "family": str(name),
+                    "v2_owa": float(row["V2_owa"]),
+                    "v3_owa": float(row["V3_owa"]),
+                    "delta": float(row["Δ(V3-V2)"]),
+                    "winner": str(row["Winner"]),
+                }
+                for name, row in merged.iterrows()
+            ],
+        },
+    }
+    llm_text = generate_commentary("variant_comparison", llm_ctx) if _LLM else None
+    if llm_text:
+        print(f"\n{llm_text}")
+
 
 def family_marginals(df, version_tag):
     df = df.copy()
@@ -168,6 +196,17 @@ def stability_analysis(df, version_tag):
     print(f"- **Mean spread (max−min):** {spread['range'].mean():.4f}")
     print(f"- **Max spread (max−min):** {spread['range'].max():.4f} (`{spread['range'].idxmax()}`)")
     print(f"- **Mean std:** {spread['std'].mean():.4f}\n")
+
+    llm_ctx = {
+        "mean_spread": float(spread["range"].mean()),
+        "max_spread": float(spread["range"].max()),
+        "most_stable": list(spread.sort_values("range").head(3).index),
+        "most_volatile": list(spread.sort_values("range", ascending=False).head(3).index),
+    }
+    llm_text = generate_commentary("stability_analysis", llm_ctx) if _LLM else None
+    if llm_text:
+        print(llm_text)
+        print()
 
 
 def param_efficiency(df2, df3):

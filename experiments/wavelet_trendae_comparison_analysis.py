@@ -22,6 +22,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+try:
+    from llm_commentary import generate_commentary
+    _LLM = True
+except ImportError:
+    _LLM = False
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 pd.set_option("display.width", 140)
 pd.set_option("display.max_colwidth", 55)
@@ -125,8 +131,25 @@ def marginals(df):
         print(tbl.to_markdown(index=False, floatfmt=("", ".4f", ".4f", ".4f", ".0f", ",.0f")))
         best_val = grp.index[0]
         worst_val = grp.index[-1]
-        print(f"\n`{best_val}` is the strongest setting (median OWA {grp.iloc[0].med_owa:.4f}) "
-              f"while `{worst_val}` is the weakest ({grp.iloc[-1].med_owa:.4f}).")
+        delta = grp.iloc[-1].med_owa - grp.iloc[0].med_owa
+        llm_ctx = {
+            "parameter_name": col,
+            "best_value": str(best_val),
+            "best_owa": float(grp.iloc[0].med_owa),
+            "worst_value": str(worst_val),
+            "worst_owa": float(grp.iloc[-1].med_owa),
+            "delta": float(delta),
+            "all_values": [
+                {"value": str(v), "med_owa": float(r.med_owa)}
+                for v, r in grp.iterrows()
+            ],
+        }
+        llm_text = generate_commentary("hyperparameter_marginal", llm_ctx) if _LLM else None
+        if llm_text:
+            print(f"\n{llm_text}")
+        else:
+            print(f"\n`{best_val}` is the strongest setting (median OWA {grp.iloc[0].med_owa:.4f}) "
+                  f"while `{worst_val}` is the weakest ({grp.iloc[-1].med_owa:.4f}).")
 
 
 def latent_dim_discussion(df):
@@ -175,29 +198,50 @@ def latent_dim_discussion(df):
           f"(median OWA {best_owa:.4f}), outperforming the worst "
           f"(latent_dim = {int(worst_dim)}) by Δ = {delta:.4f}. ")
 
-    if best_dim == min(dims):
-        print("The tightest bottleneck wins. The TrendAE head already imposes "
-              "strong inductive bias via its polynomial basis, so the backbone "
-              "needs only a minimal latent representation. Combined with the "
-              "WaveletV3 stack handling oscillatory components, the TrendAE "
-              "can afford aggressive compression for the slowly-varying residual.\n")
-    elif best_dim == max(dims):
-        print("The widest bottleneck wins, suggesting the trend polynomial "
-              "benefits from richer backbone features. In this wavelet+TrendAE "
-              "combination, the wavelet stack absorbs oscillatory patterns, "
-              "leaving the TrendAE to model a potentially complex residual "
-              "that benefits from a wider information path.\n")
+    llm_ctx = {
+        "parameter_name": "latent_dim",
+        "architecture_name": "Wavelet+TrendAE",
+        "backcast_length": bcl,
+        "forecast_length": 6,
+        "best_value": int(best_dim),
+        "best_owa": float(best_owa),
+        "worst_value": int(worst_dim),
+        "worst_owa": float(worst_owa),
+        "delta": float(delta),
+        "all_values": [
+            {"value": int(d), "med_owa": float(grp.loc[d, "med_owa"]),
+             "std_owa": float(grp.loc[d, "std_owa"]),
+             "med_params": float(grp.loc[d, "med_params"])}
+            for d in dims
+        ],
+    }
+    llm_text = generate_commentary("hyperparameter_discussion", llm_ctx) if _LLM else None
+    if llm_text:
+        print(f"\n{llm_text}")
     else:
-        print("A mid-range bottleneck provides the best trade-off. "
-              "The wavelet stack handles oscillatory components, so the TrendAE "
-              "residual is relatively smooth but not trivially simple — a moderate "
-              "bottleneck captures enough structure without overfitting.\n")
+        if best_dim == min(dims):
+            print("The tightest bottleneck wins. The TrendAE head already imposes "
+                  "strong inductive bias via its polynomial basis, so the backbone "
+                  "needs only a minimal latent representation. Combined with the "
+                  "WaveletV3 stack handling oscillatory components, the TrendAE "
+                  "can afford aggressive compression for the slowly-varying residual.\n")
+        elif best_dim == max(dims):
+            print("The widest bottleneck wins, suggesting the trend polynomial "
+                  "benefits from richer backbone features. In this wavelet+TrendAE "
+                  "combination, the wavelet stack absorbs oscillatory patterns, "
+                  "leaving the TrendAE to model a potentially complex residual "
+                  "that benefits from a wider information path.\n")
+        else:
+            print("A mid-range bottleneck provides the best trade-off. "
+                  "The wavelet stack handles oscillatory components, so the TrendAE "
+                  "residual is relatively smooth but not trivially simple — a moderate "
+                  "bottleneck captures enough structure without overfitting.\n")
 
-    print("**Practical recommendation:** Use `latent_dim = "
-          f"{int(best_dim)}` for Wavelet+TrendAE stacks on M4-Yearly. "
-          "Since the TrendAE only needs to model the slowly-varying residual "
-          "after the wavelet stack, the latent dimension can be kept small. "
-          "For longer forecast horizons, experiment with slightly larger values.\n")
+        print("**Practical recommendation:** Use `latent_dim = "
+              f"{int(best_dim)}` for Wavelet+TrendAE stacks on M4-Yearly. "
+              "Since the TrendAE only needs to model the slowly-varying residual "
+              "after the wavelet stack, the latent dimension can be kept small. "
+              "For longer forecast horizons, experiment with slightly larger values.\n")
 
 
 def stability_analysis(df):
@@ -215,6 +259,16 @@ def stability_analysis(df):
     print(f"\n### Most Stable Configs (smallest max−min spread)\n")
     print(most_stable[["Config", "Median OWA", "Range", "Std"]].to_markdown(
         index=False, floatfmt=("", ".4f", ".4f", ".4f")))
+
+    llm_ctx = {
+        "mean_spread": float(spread["range"].mean()),
+        "max_spread": float(spread["range"].max()),
+        "most_stable": list(spread.sort_values("range").head(3).index),
+        "most_volatile": list(spread.sort_values("range", ascending=False).head(3).index),
+    }
+    llm_text = generate_commentary("stability_analysis", llm_ctx) if _LLM else None
+    if llm_text:
+        print(f"\n{llm_text}")
 
 
 def param_efficiency(df):
@@ -258,6 +312,18 @@ def baseline_comparison(df):
     verdict = "improves upon" if best_delta < -0.001 else "matches" if abs(best_delta) < 0.005 else "falls short of"
     print(f"\nThe best Wavelet+TrendAE config (`{best_name}`) {verdict} the AE+Trend baseline "
           f"(Δ = {best_delta:+.4f}).")
+
+    llm_ctx = {
+        "variants": ["WaveletV3+TrendAE", "AE+Trend (baseline)", "NBEATS-I+G"],
+        "round_results": {
+            "best_wavelet_trendae": {"config": str(best_name), "owa": float(top5.iloc[0])},
+            "baselines": {name: {"owa": vals["owa"]} for name, vals in PUBLISHED_BASELINES.items()},
+            "delta_vs_ae_trend": float(best_delta),
+        },
+    }
+    llm_text = generate_commentary("variant_comparison", llm_ctx) if _LLM else None
+    if llm_text:
+        print(f"\n{llm_text}")
 
 
 def training_stability(df):

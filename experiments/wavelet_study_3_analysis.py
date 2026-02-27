@@ -22,6 +22,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+try:
+    from llm_commentary import generate_commentary
+    _LLM = True
+except ImportError:
+    _LLM = False
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 pd.set_option("display.width", 160)
 pd.set_option("display.max_colwidth", 60)
@@ -274,6 +280,25 @@ def section_marginals(df):
             columns={"owa_count": "n_runs", "owa_disp": "OWA", "smape_disp": "sMAPE", "mase_disp": "MASE"}
         )
         print(disp.sort_values("OWA").to_markdown())
+        owa_agg = agg["owa_mean"].sort_values()
+        best_val = str(owa_agg.index[0])
+        worst_val = str(owa_agg.index[-1])
+        delta = float(owa_agg.iloc[-1] - owa_agg.iloc[0])
+        llm_ctx = {
+            "parameter_name": factor,
+            "best_value": best_val,
+            "best_owa": float(owa_agg.iloc[0]),
+            "worst_value": worst_val,
+            "worst_owa": float(owa_agg.iloc[-1]),
+            "delta": delta,
+            "all_values": [
+                {"value": str(v), "med_owa": float(owa)}
+                for v, owa in owa_agg.items()
+            ],
+        }
+        llm_text = generate_commentary("hyperparameter_marginal", llm_ctx) if _LLM else None
+        if llm_text:
+            print(f"\n{llm_text}")
         print()
 
 
@@ -417,6 +442,24 @@ def section_stability(df):
             cmp_rows.append({"Pass": label, "Mean Std": spread['std'].mean(),
                              "Mean OWA": spread['mean'].mean()})
         print(pd.DataFrame(cmp_rows).to_markdown(index=False, floatfmt=".4f"))
+
+        # LLM stability summary for R3
+        r3_base = r3[r3["active_g_cfg"] == "False"]
+        if not r3_base.empty:
+            r3_spread = (
+                r3_base.groupby("config_name")["owa"]
+                .agg(["mean", "std", "min", "max"])
+                .assign(range=lambda x: x["max"] - x["min"])
+            )
+            llm_ctx = {
+                "mean_spread": float(r3_spread["range"].mean()),
+                "max_spread": float(r3_spread["range"].max()),
+                "most_stable": list(r3_spread.sort_values("range").head(3).index),
+                "most_volatile": list(r3_spread.sort_values("range", ascending=False).head(3).index),
+            }
+            llm_text = generate_commentary("stability_analysis", llm_ctx) if _LLM else None
+            if llm_text:
+                print(f"\n{llm_text}")
     print()
 
 
@@ -837,6 +880,22 @@ def section_verdict(df):
         overall = "WaveletV3+Trend does **NOT** match NBEATS-I+G but may beat simpler baselines."
 
     print(f"\n> **OVERALL VERDICT:** {overall}")
+
+    # LLM variant comparison
+    top_wavelet = r1.groupby("wavelet")["owa"].mean().sort_values()
+    llm_ctx = {
+        "variants": list(top_wavelet.index[:5]),
+        "round_results": {
+            "R1_wavelet_means": {str(k): float(v) for k, v in top_wavelet.items()},
+            "best_r3_config": str(best_row.config_name),
+            "best_r3_owa": float(best_owa),
+            "vs_NBEATS_I+G": float(best_owa - ig_owa),
+            "vs_AE+Trend": float(best_owa - BASELINES["AE+Trend"]["owa"]),
+        },
+    }
+    llm_text = generate_commentary("variant_comparison", llm_ctx) if _LLM else None
+    if llm_text:
+        print(f"\n{llm_text}")
     print()
 
 
