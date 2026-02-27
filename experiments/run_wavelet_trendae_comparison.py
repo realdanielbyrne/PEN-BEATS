@@ -10,7 +10,7 @@ Architecture: ["TrendAE", <WaveletV3>] * 5  (10 stacks total)
 Fixed from wavelet_study_3 round 3 winners:
   - active_g=False, sum_losses=False, activation=ReLU
   - n_blocks_per_stack=1, share_weights=True
-  - trend_thetas_dim=3 (except Symlet10 config which uses ttd=5)
+  - trend_thetas_dim=3 
 
 New search dimension:
   - latent_dim: [2, 5, 8]  (AERootBlock bottleneck width)
