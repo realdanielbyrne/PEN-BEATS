@@ -287,6 +287,17 @@ def run_trendae_experiment(
     latent_dim = cfg.get("latent_dim", LATENT_DIM)
     trend_td = cfg.get("trend_thetas_dim", 5)
 
+    # Cosine annealing LR scheduler: hold constant for 15 epochs, then decay
+    warmup_epochs = 15
+    if max_epochs > warmup_epochs:
+        lr_scheduler_config = {
+            "warmup_epochs": warmup_epochs,
+            "T_max": max_epochs - warmup_epochs,
+            "eta_min": 1e-6,
+        }
+    else:
+        lr_scheduler_config = None  # too few epochs for annealing
+
     extra_row = {
         "search_round": round_num,
         "arch_pattern": cfg.get("arch_pattern", "trendae_ae_alternating"),
@@ -327,6 +338,7 @@ def run_trendae_experiment(
         thetas_dim_override=thetas_dim,
         latent_dim_override=latent_dim,
         trend_thetas_dim=trend_td,
+        lr_scheduler_config=lr_scheduler_config,
     )
 
 
