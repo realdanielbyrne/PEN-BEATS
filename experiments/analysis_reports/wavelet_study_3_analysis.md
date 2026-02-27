@@ -1111,31 +1111,3 @@ Tracking **29** configs that survived to Round 3.
 
 > **OVERALL VERDICT:** WaveletV3+Trend **MATCHES** NBEATS-I+G with ~80% fewer params.
 
-## 15. Conclusions
-
-Successive halving effectively identified strong WaveletV3+Trend candidates, improving best OWA from 0.8974 (R1) to 0.8061 (R3). The best configuration (`Haar_bd4_lt_fcast_ttd3`, active_g=forecast) is competitive with NBEATS-I+G while using roughly one-fifth the parameters.
-
-The results consistently favor `ttd=3` over `ttd=5`, and indicate that several wavelet families can achieve near-parity OWA when paired with a stable Trend stack. This makes WaveletV3+Trend a viable efficiency-focused alternative for M4-Yearly.
-
-## 16. Recommended Parameter Configurations
-
-### Primary recommendation
-
-- **Config:** `Haar_bd4_lt_fcast_ttd3` (`active_g=forecast`)
-- **Median OWA:** 0.8061
-- **Params:** 5,070,095
-- **When to use:** default WaveletV3+Trend setting for balanced accuracy and efficiency.
-
-### Secondary recommendation
-
-- **Config:** `DB20_bd15_lt_bcast_ttd3` (`active_g=forecast`)
-- **Median OWA:** 0.8062
-- **Params:** 5,103,375
-- **When to use:** near-tied alternative with comparable stability.
-
-### Baseline-safe recommendation
-
-- **Config:** `DB20_bd15_lt_bcast_ttd3` (`active_g=False`)
-- **Median OWA:** 0.8107
-- **Params:** 5,103,375
-- **When to use:** if you prefer baseline output heads while staying close to best performance.

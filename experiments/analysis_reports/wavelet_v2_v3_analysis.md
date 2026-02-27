@@ -175,35 +175,3 @@ The best V3 config on Yearly is `Trend+Coif2WaveletV3` with median OWA **0.7969*
 | DB2WaveletV3         | 24668160 |         0.1 |    0.8091 |          |
 | Symlet3WaveletV3     | 24668160 |         0.1 |    0.8132 |          |
 | HaarWaveletV3        | 24668160 |         0.1 |    0.8127 |          |
-
-## 8. Conclusions
-
-WaveletV3 is the stronger generation overall on M4-Yearly, winning 6 of 7 family-matched head-to-head comparisons against WaveletV2. The best V3 model (`Trend+Coif2WaveletV3`, OWA 0.7969) outperforms the best V2 model (`Trend+HaarWaveletV2`, OWA 0.8012) and beats the NBEATS-I+G baseline.
-
-Performance is concentrated in trend+wavelet hybrids for both versions, but V3 consistently improves pure-wavelet families and matched DB/Coif/Symlet variants. If the objective is Yearly OWA quality, V3 should be the default starting point.
-
-## 9. Recommended Parameter Configurations
-
-### Primary recommendation (best overall)
-
-- **Config:** `Trend+Coif2WaveletV3`
-- **Version:** `WaveletV3`
-- **Median OWA:** 0.7969
-- **Params:** 15,433,035
-- **When to use:** default for strongest Yearly benchmark performance.
-
-### Secondary recommendation (near-best with same budget)
-
-- **Config:** `Trend+DB3WaveletV3`
-- **Version:** `WaveletV3`
-- **Median OWA:** 0.7986
-- **Params:** 15,433,035
-- **When to use:** robust alternative if Coif2 behavior is not preferred.
-
-### V2 fallback recommendation
-
-- **Config:** `Trend+HaarWaveletV2`
-- **Version:** `WaveletV2`
-- **Median OWA:** 0.8012
-- **Params:** 16,225,995
-- **When to use:** if V3-specific basis behavior is unavailable in a legacy pipeline.

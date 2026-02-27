@@ -99,29 +99,3 @@ Each pair is tested with a one-sided Mann-Whitney U to determine which condition
 
 6 of 6 pairs show statistically significant differences (p < 0.05).
 
-## 7. Conclusions
-
-Across all four `active_g` modes on Milk6, the baseline (`active_g=False`) is the clear winner on validation loss quality, with median best_val_loss 1.4726. Every alternative activation mode performs significantly worse in pairwise testing, despite converging faster in epochs and wall-clock time.
-
-The results indicate that asymmetric or balanced activation on Generic heads trades off optimization quality for speed in this setup. Forecast-only and backcast-only modes are better than balanced `True`, but neither approaches baseline loss levels.
-
-## 8. Recommended Parameter Configurations
-
-### Primary recommendation
-
-- **Config:** `Milk6_baseline`
-- **Setting:** `active_g=False`
-- **Median best_val_loss:** 1.4726
-- **When to use:** default setting for best validation quality on Milk6.
-
-### Secondary recommendation (if faster convergence is required)
-
-- **Config:** `Milk6_activeG_forecastOnly`
-- **Setting:** `active_g=forecast-only`
-- **Median best_val_loss:** 2.2391
-- **Median best epoch:** 56
-- **When to use:** speed-oriented experiments where higher loss is acceptable.
-
-### Avoid in this setup
-
-- `active_g=True (balanced)` and `active_g=backcast-only`, due to significantly higher loss and no quality advantage.

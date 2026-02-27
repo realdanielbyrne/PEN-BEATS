@@ -1,4 +1,5 @@
 # project
+.llm_cache/
 .DS_Store
 *.lock
 run_configs/
