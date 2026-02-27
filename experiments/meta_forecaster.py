@@ -49,12 +49,16 @@ class MetaForecaster:
 
     BACKCAST_LENGTH = 6
     FORECAST_LENGTH = 6
-    META_STACK_TYPES = ["Generic"] * 3
-    META_WIDTH = 64
+    META_STACK_TYPES = ["TrendAE", "HaarWaveletV3"] * 3  # 6 alternating stacks
+    META_T_WIDTH = 32                        # TrendAE hidden width
+    META_G_WIDTH = 32                        # WaveletV3 hidden width
     META_BLOCKS_PER_STACK = 1
+    META_LATENT_DIM = 2                      # AE bottleneck
+    META_TREND_THETAS_DIM = 3                # Cubic polynomial basis
+    META_BASIS_DIM = 4                       # Wavelet basis functions
     META_MAX_EPOCHS = 200
     META_PATIENCE = 20
-    MODEL_FILENAME = "meta_forecaster.ckpt"
+    MODEL_FILENAME = "meta_forecaster_v2.ckpt"
 
     def __init__(self, cache_dir):
         """Initialize with a directory for saving/loading the trained model.
@@ -237,7 +241,7 @@ class MetaForecaster:
         X, Y = self._build_dataset_arrays(segments)
         n_samples = len(X)
 
-        print(f"  [META] Training data: {len(all_curves)} curves → "
+        print(f"  [META] Training data: {len(all_curves)} curves -> "
               f"{n_samples} sliding-window samples")
 
         # Build a combined array for TimeSeriesDataModule-compatible format.
@@ -257,13 +261,17 @@ class MetaForecaster:
             backcast_length=self.BACKCAST_LENGTH,
             forecast_length=self.FORECAST_LENGTH,
             stack_types=self.META_STACK_TYPES,
-            g_width=self.META_WIDTH,
+            t_width=self.META_T_WIDTH,
+            g_width=self.META_G_WIDTH,
             n_blocks_per_stack=self.META_BLOCKS_PER_STACK,
             share_weights=True,
             loss="SMAPELoss",
             learning_rate=1e-3,
             activation="ReLU",
             no_val=False,
+            latent_dim=self.META_LATENT_DIM,
+            trend_thetas_dim=self.META_TREND_THETAS_DIM,
+            basis_dim=self.META_BASIS_DIM,
         )
 
         # Train
