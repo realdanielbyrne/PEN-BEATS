@@ -6,7 +6,9 @@ Reads experiments/results/<dataset>/generic_ae_pure_stack_results.csv and produc
   3. Per-round leaderboard (median primary metric)
   4. Round-1 hyperparameter marginals
   5. Final-round stability and training behavior
-  6. Optional M4 OWA significance vs NBEATS-I+G baseline
+  6. Round-1 to final-round progression summary
+  7. Optional LLM commentary synthesis
+  8. Optional M4 OWA significance vs NBEATS-I+G baseline
 
 Metric policy:
   - Use OWA when available (M4)
@@ -16,6 +18,11 @@ Usage:
     python experiments/generic_ae_analysis.py --dataset m4
     python experiments/generic_ae_analysis.py --dataset weather
     python experiments/generic_ae_analysis.py --dataset all
+    python experiments/generic_ae_analysis.py --dataset weather --no-llm
+
+LLM notes:
+  - Commentary uses experiments/llm_commentary.py when available.
+  - Configure credentials via ANTHROPIC_API_KEY or OPENAI_API_KEY.
 """
 
 import argparse
@@ -28,6 +35,11 @@ import pandas as pd
 from scipy import stats
 
 from run_generic_ae_study import STUDY_DATASETS, _csv_path
+try:
+    from llm_commentary import generate_commentary
+    _LLM = True
+except ImportError:
+    _LLM = False
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 pd.set_option("display.width", 140)
@@ -67,6 +79,22 @@ def _sig_stars(p_value):
     if p_value < 0.05:
         return "*"
     return "ns"
+
+
+def _emit_llm_commentary(section_type, context, instructions="", use_llm=True, heading=None):
+    """Print LLM commentary if available and enabled."""
+    if not use_llm or not _LLM:
+        return False
+
+    llm_text = generate_commentary(section_type, context, instructions=instructions)
+    if not llm_text:
+        return False
+
+    if heading:
+        print(f"### {heading}\n")
+    print(llm_text)
+    print()
+    return True
 
 
 def _load_df(csv_path):
@@ -235,7 +263,7 @@ def _stability_final_round(df, metric):
 
     if spread.empty:
         print("(no stability rows)")
-        return
+        return None
 
     print(f"Final round analyzed: {last_round}")
     print(f"Mean spread: {spread['range'].mean():.4f}")
@@ -252,6 +280,14 @@ def _stability_final_round(df, metric):
     ]
     print("\nMost stable configs:\n")
     _print_table(stable[["Config", f"Median {metric['primary_label']}", "Range", "Std"]])
+
+    volatile = spread.sort_values("range", ascending=False).head(5)
+    return {
+        "mean_spread": float(spread["range"].mean()),
+        "max_spread": float(spread["range"].max()),
+        "most_stable": [str(v) for v in stable["Config"].tolist()],
+        "most_volatile": [str(v) for v in volatile.index.tolist()],
+    }
 
 
 def _training_stability(df):
@@ -277,6 +313,69 @@ def _training_stability(df):
         })
 
     _print_table(pd.DataFrame(rows))
+
+
+def _round_progression(df, metric):
+    first_round = int(df["search_round"].min())
+    last_round = int(df["search_round"].max())
+    if first_round == last_round:
+        print("(single round only; progression is not applicable)")
+        return None
+
+    first_med = (
+        df[df["search_round"] == first_round]
+        .groupby("config_name")[metric["primary_col"]]
+        .median()
+    )
+    last_med = (
+        df[df["search_round"] == last_round]
+        .groupby("config_name")[metric["primary_col"]]
+        .median()
+    )
+
+    common = sorted(set(first_med.index).intersection(set(last_med.index)))
+    if not common:
+        print("(no overlapping configs between first and final rounds)")
+        return None
+
+    rows = []
+    progression_data = []
+    for cfg in common:
+        first_val = float(first_med.loc[cfg])
+        last_val = float(last_med.loc[cfg])
+        delta = last_val - first_val
+        rows.append({
+            "Config": cfg,
+            f"Round {first_round}": f"{first_val:.4f}",
+            f"Round {last_round}": f"{last_val:.4f}",
+            "_delta_num": delta,
+            "Delta": f"{delta:+.4f}",
+        })
+        progression_data.append({
+            "config": cfg,
+            "first_round_metric": first_val,
+            "last_round_metric": last_val,
+            "delta": delta,
+        })
+
+    improved = sum(1 for p in progression_data if p["delta"] < 0)
+    worsened = sum(1 for p in progression_data if p["delta"] > 0)
+
+    print(
+        f"Compared {len(common)} final-round survivors from round {first_round} "
+        f"to round {last_round}: {improved} improved, {worsened} worsened."
+    )
+    ranked = pd.DataFrame(rows).sort_values("_delta_num")
+    _print_table(ranked.drop(columns=["_delta_num"]))
+
+    top_n = min(12, len(progression_data))
+    return {
+        "n_improved": int(improved),
+        "n_total": int(len(common)),
+        "progression_data": sorted(
+            progression_data, key=lambda x: x["delta"]
+        )[:top_n],
+    }
 
 
 def _significance_m4(df, metric, dataset_name, period):
@@ -322,7 +421,7 @@ def _significance_m4(df, metric, dataset_name, period):
         print("(no configs with enough OWA samples for significance test)")
 
 
-def analyze_dataset(dataset_name):
+def analyze_dataset(dataset_name, use_llm=True):
     period = STUDY_DATASETS[dataset_name]
     csv_path = _csv_path(dataset_name)
 
@@ -353,12 +452,44 @@ def analyze_dataset(dataset_name):
     _marginals_round1(df, metric)
 
     _section(f"4. Stability ({metric['primary_label']} spread)")
-    _stability_final_round(df, metric)
+    stability_ctx = _stability_final_round(df, metric)
 
     _section("5. Training Stability")
     _training_stability(df)
 
-    _section("6. Significance vs NBEATS-I+G")
+    _section(f"6. Round Progression ({metric['primary_label']})")
+    progression_ctx = _round_progression(df, metric)
+
+    if use_llm:
+        _section("7. LLM Commentary")
+        llm_metric_hint = (
+            f"Primary metric is {metric['primary_label']} (lower is better). "
+            f"Dataset={dataset_name}, period={period}."
+        )
+        emitted_any = False
+        if stability_ctx is not None:
+            emitted_any = _emit_llm_commentary(
+                "stability_analysis",
+                stability_ctx,
+                instructions=llm_metric_hint,
+                use_llm=use_llm,
+                heading="Stability Interpretation",
+            ) or emitted_any
+        if progression_ctx is not None:
+            emitted_any = _emit_llm_commentary(
+                "round_progression",
+                progression_ctx,
+                instructions=llm_metric_hint,
+                use_llm=use_llm,
+                heading="Successive-Halving Progression",
+            ) or emitted_any
+        if not emitted_any:
+            print(
+                "(LLM commentary unavailable. Set credentials such as "
+                "ANTHROPIC_API_KEY or OPENAI_API_KEY.)"
+            )
+
+    _section("8. Significance vs NBEATS-I+G")
     _significance_m4(df, metric, dataset_name, period)
 
 
@@ -370,14 +501,20 @@ def main():
         choices=["m4", "weather", "all"],
         help="Dataset to analyze.",
     )
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="Disable LLM commentary sections.",
+    )
     args = parser.parse_args()
+    use_llm = not args.no_llm
 
     if args.dataset == "all":
         for dataset_name in sorted(STUDY_DATASETS.keys()):
-            analyze_dataset(dataset_name)
+            analyze_dataset(dataset_name, use_llm=use_llm)
             print("\n" + "-" * 90 + "\n")
     else:
-        analyze_dataset(args.dataset)
+        analyze_dataset(args.dataset, use_llm=use_llm)
 
 
 if __name__ == "__main__":
