@@ -6,7 +6,7 @@ stacks (no Trend anchors) to find optimal latent_dim, thetas_dim, and active_g
 configurations.
 
 Architecture: [GenericAE] * 10  or  [BottleneckGenericAE] * 10
-Dataset: M4-Yearly or Weather-96
+Dataset: M4-Yearly, Tourism-Yearly, Traffic-96, or Weather-96
 
 Hyperparameter search space:
   - latent_dim: [2, 4, 8, 16]     (AERootBlock bottleneck)
@@ -29,6 +29,8 @@ Usage:
     # Full pipeline (all 3 rounds)
     python experiments/run_generic_ae_study.py --round all
     python experiments/run_generic_ae_study.py --dataset weather --round all
+    python experiments/run_generic_ae_study.py --dataset tourism --round all
+    python experiments/run_generic_ae_study.py --dataset traffic --round all
 
     # Single round
     python experiments/run_generic_ae_study.py --round 1
@@ -39,7 +41,7 @@ Usage:
     # Smoke test
     python experiments/run_generic_ae_study.py --round 1 --max-epochs 2
 """
-
+ 
 import argparse
 import csv
 import gc
@@ -102,6 +104,8 @@ BLOCK_TYPES = ["GenericAE", "BottleneckGenericAE"]
 
 STUDY_DATASETS = {
     "m4": "Yearly",
+    "tourism": "Tourism-Yearly",
+    "traffic": "Traffic-96",
     "weather": "Weather-96",
 }
 

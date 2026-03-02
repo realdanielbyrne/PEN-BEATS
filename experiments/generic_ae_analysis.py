@@ -12,10 +12,12 @@ Reads experiments/results/<dataset>/generic_ae_pure_stack_results.csv and produc
 
 Metric policy:
   - Use OWA when available (M4)
-  - Fallback to best_val_loss when OWA is unavailable (Weather)
+  - Fallback to best_val_loss when OWA is unavailable (Tourism/Traffic/Weather)
 
 Usage:
     python experiments/generic_ae_analysis.py --dataset m4
+    python experiments/generic_ae_analysis.py --dataset tourism
+    python experiments/generic_ae_analysis.py --dataset traffic
     python experiments/generic_ae_analysis.py --dataset weather
     python experiments/generic_ae_analysis.py --dataset all
     python experiments/generic_ae_analysis.py --dataset weather --no-llm
@@ -495,10 +497,11 @@ def analyze_dataset(dataset_name, use_llm=True):
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze GenericAE pure-stack study results.")
+    dataset_choices = sorted(STUDY_DATASETS.keys()) + ["all"]
     parser.add_argument(
         "--dataset",
         default="m4",
-        choices=["m4", "weather", "all"],
+        choices=dataset_choices,
         help="Dataset to analyze.",
     )
     parser.add_argument(
