@@ -72,7 +72,7 @@ from run_unified_benchmark import (
     EARLY_STOPPING_PATIENCE,
     _shutdown_requested,
 )
-from meta_forecaster import MetaForecaster
+from tools.meta_forecaster import MetaForecaster
 
 torch.set_float32_matmul_precision("medium")
 

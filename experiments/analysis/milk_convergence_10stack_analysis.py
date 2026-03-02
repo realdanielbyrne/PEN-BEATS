@@ -27,7 +27,7 @@ _EXPERIMENTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _EXPERIMENTS_DIR)
 
 try:
-    from llm_commentary import generate_commentary
+    from tools.llm_commentary import generate_commentary
     _LLM = True
 except ImportError:
     _LLM = False

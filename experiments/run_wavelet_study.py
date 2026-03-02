@@ -671,7 +671,7 @@ def _run_wavelet_dataset(dataset_name, periods_filter, args, n_gpus):
 # SEARCH MODE — Hyperparameter Search with N-BEATS Meta-Forecaster
 # ===========================================================================
 
-from meta_forecaster import MetaForecaster
+from tools.meta_forecaster import MetaForecaster
 
 # ---------------------------------------------------------------------------
 # Search Constants

@@ -8,13 +8,13 @@ datasets using successive halving with meta-forecaster ranking.
 Config space (19 configs × 2 passes = 38 config-pass combos):
   Category 1 — Pure homogeneous stacks (9 configs):
     GenericAELG, BottleneckGenericAELG, GenericAEBackcastAELG, AutoEncoderAELG,
-    GenericAEVAE, BottleneckGenericAEVAE, GenericAEBackcastAEVAE, AutoEncoderAEVAE,
+    GenericVAE, BottleneckGenericVAE, GenericAEBackcastVAE, AutoEncoderVAE,
     VAE
   Category 2 — Trend + Wavelet mixed (8 configs):
-    TrendAELG/TrendAEVAE × {Haar, DB4, Coif2, Symlet3}WaveletV3
+    TrendAELG/TrendVAE × {Haar, DB4, Coif2, Symlet3}WaveletV3
   Category 3 — NBEATS-I style (2 configs):
     NBEATS-I-LG (TrendAELG + SeasonalityAELG, 3 blocks/stack)
-    NBEATS-I-VAE (TrendAEVAE + SeasonalityAEVAE, 3 blocks/stack)
+    NBEATS-I-VAE (TrendVAE + SeasonalityVAE, 3 blocks/stack)
 
 Two-pass design:
   Pass 1 ("baseline"):       active_g=False
@@ -99,7 +99,7 @@ from run_unified_benchmark import (
     M4_PERIODS,
     _shutdown_requested,
 )
-from meta_forecaster import MetaForecaster
+from tools.meta_forecaster import MetaForecaster
 
 torch.set_float32_matmul_precision("medium")
 
@@ -123,10 +123,10 @@ PURE_BLOCKS = [
     "BottleneckGenericAELG",
     "GenericAEBackcastAELG",
     "AutoEncoderAELG",
-    "GenericAEVAE",
-    "BottleneckGenericAEVAE",
-    "GenericAEBackcastAEVAE",
-    "AutoEncoderAEVAE",
+    "GenericVAE",
+    "BottleneckGenericVAE",
+    "GenericAEBackcastVAE",
+    "AutoEncoderVAE",
     "VAE",
 ]
 
@@ -181,7 +181,7 @@ def _backbone_family(block_type):
         return "RootBlock"
     if block_type.endswith("AELG") or "AELG" in block_type:
         return "LG"
-    if block_type.endswith("AEVAE") or "AEVAE" in block_type:
+    if block_type.endswith("VAE"):
         return "VAE"
     return "unknown"
 
@@ -225,7 +225,7 @@ def generate_lg_vae_configs(dataset_name, round_num=1, promoted_configs=None):
         }
 
     # Category 2: Trend + Wavelet mixed
-    for trend_block in ["TrendAELG", "TrendAEVAE"]:
+    for trend_block in ["TrendAELG", "TrendVAE"]:
         for wavelet, short_name in REPRESENTATIVE_WAVELETS:
             name = f"{trend_block}+{short_name}"
             configs[name] = {
@@ -240,7 +240,7 @@ def generate_lg_vae_configs(dataset_name, round_num=1, promoted_configs=None):
 
     # Category 3: NBEATS-I style
     for suffix, trend, seas in [("LG", "TrendAELG", "SeasonalityAELG"),
-                                 ("VAE", "TrendAEVAE", "SeasonalityAEVAE")]:
+                                 ("VAE", "TrendVAE", "SeasonalityVAE")]:
         name = f"NBEATS-I-{suffix}"
         configs[name] = {
             "category": "nbeats_i_style",

@@ -34,7 +34,7 @@ sys.path.insert(0, _EXPERIMENTS_DIR)
 from run_lg_vae_study import LG_VAE_STUDY_DATASETS, _search_csv_path
 
 try:
-    from llm_commentary import generate_commentary
+    from tools.llm_commentary import generate_commentary
     _LLM = True
 except ImportError:
     _LLM = False
@@ -66,14 +66,14 @@ NUMERIC_COLS = [
 
 # LG/VAE head-to-head matched pairs: (LG block, VAE block)
 LG_VAE_PAIRS = [
-    ("GenericAELG",          "GenericAEVAE"),
-    ("BottleneckGenericAELG", "BottleneckGenericAEVAE"),
-    ("GenericAEBackcastAELG", "GenericAEBackcastAEVAE"),
-    ("AutoEncoderAELG",      "AutoEncoderAEVAE"),
-    ("TrendAELG+Haar",       "TrendAEVAE+Haar"),
-    ("TrendAELG+DB4",        "TrendAEVAE+DB4"),
-    ("TrendAELG+Coif2",      "TrendAEVAE+Coif2"),
-    ("TrendAELG+Symlet3",    "TrendAEVAE+Symlet3"),
+    ("GenericAELG",          "GenericVAE"),
+    ("BottleneckGenericAELG", "BottleneckGenericVAE"),
+    ("GenericAEBackcastAELG", "GenericAEBackcastVAE"),
+    ("AutoEncoderAELG",      "AutoEncoderVAE"),
+    ("TrendAELG+Haar",       "TrendVAE+Haar"),
+    ("TrendAELG+DB4",        "TrendVAE+DB4"),
+    ("TrendAELG+Coif2",      "TrendVAE+Coif2"),
+    ("TrendAELG+Symlet3",    "TrendVAE+Symlet3"),
     ("NBEATS-I-LG",          "NBEATS-I-VAE"),
 ]
 

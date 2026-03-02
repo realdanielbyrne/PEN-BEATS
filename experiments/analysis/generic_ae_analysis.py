@@ -23,7 +23,7 @@ Usage:
     python experiments/analysis/generic_ae_analysis.py --dataset weather --no-llm
 
 LLM notes:
-  - Commentary uses experiments/llm_commentary.py when available.
+  - Commentary uses experiments/tools/llm_commentary.py when available.
   - Configure credentials via ANTHROPIC_API_KEY or OPENAI_API_KEY.
 """
 
@@ -41,7 +41,7 @@ sys.path.insert(0, _EXPERIMENTS_DIR)
 
 from run_generic_ae_study import STUDY_DATASETS, _csv_path
 try:
-    from llm_commentary import generate_commentary
+    from tools.llm_commentary import generate_commentary
     _LLM = True
 except ImportError:
     _LLM = False
