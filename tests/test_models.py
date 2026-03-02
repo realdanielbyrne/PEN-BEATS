@@ -341,11 +341,18 @@ class TestTrendThetasDim:
         assert block.backcast_linear.out_features == 8
         assert block.forecast_linear.out_features == 8
 
-    def test_trend_thetas_dim_defaults_to_5(self):
-        """When trend_thetas_dim is not specified, Trend uses default of 5."""
+    def test_trend_thetas_dim_defaults_to_3(self):
+        """When trend_thetas_dim is not specified, Trend uses default of 3."""
         model = _make_model(["Trend"], t_width=32, thetas_dim=8)
         block = model.stacks[0][0]
-        assert block.backcast_linear.out_features == 5
+        assert block.backcast_linear.out_features == 3
+
+    def test_trend_thetas_dim_none_falls_back_to_global_thetas_dim(self):
+        """trend_thetas_dim=None should use global thetas_dim for Trend blocks."""
+        model = _make_model(["Trend"], t_width=32, thetas_dim=8, trend_thetas_dim=None)
+        block = model.stacks[0][0]
+        assert block.backcast_linear.out_features == 8
+        assert block.forecast_linear.out_features == 8
 
     def test_trend_thetas_dim_invalid_raises(self):
         """trend_thetas_dim must be a positive integer."""
@@ -355,7 +362,7 @@ class TestTrendThetasDim:
             _make_model(["Trend"], t_width=32, trend_thetas_dim=-1)
 
     def test_trend_thetas_dim_accepts_any_positive_int(self):
-        """trend_thetas_dim=5 (original default) should work."""
+        """trend_thetas_dim=5 should work as a valid positive integer."""
         model = _make_model(["Trend"], t_width=32, trend_thetas_dim=5)
         block = model.stacks[0][0]
         assert block.backcast_linear.out_features == 5

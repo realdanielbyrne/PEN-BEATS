@@ -42,7 +42,7 @@ class NBeatsNet(pl.LightningModule):
       basis_offset:int = 0,
       stack_basis_offsets:list = None,
       forecast_basis_dim:int = None,
-      trend_thetas_dim:int = 5,
+      trend_thetas_dim:int | None = 3,
       lr_scheduler_config:dict = None
     ):
 
@@ -138,11 +138,11 @@ class NBeatsNet(pl.LightningModule):
         forecast_length) while the backcast path continues to use basis_dim.
         Allows asymmetric regularization when backcast and forecast lengths differ.
         Default None (both paths use basis_dim).
-    trend_thetas_dim : int, optional
+    trend_thetas_dim : int or None, optional
         The polynomial degree for Trend and TrendAE blocks, independent of the
         global ``thetas_dim`` used by other block types.  Any positive integer
         is accepted (e.g. 2 = linear, 3 = cubic, 5 = degree-4 polynomial).
-        Default 5.
+        Default 3. If None, falls back to ``thetas_dim``.
     lr_scheduler_config : dict, optional
         Configuration for a SequentialLR scheduler that holds the learning rate
         constant for a warmup phase then applies cosine annealing decay.
@@ -188,9 +188,9 @@ class NBeatsNet(pl.LightningModule):
     self.basis_offset = basis_offset
     self.stack_basis_offsets = stack_basis_offsets
     self.forecast_basis_dim = forecast_basis_dim
-    if not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1:
+    if trend_thetas_dim is not None and (not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1):
       raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
-    self.trend_thetas_dim = trend_thetas_dim
+    self.trend_thetas_dim = self.thetas_dim if trend_thetas_dim is None else trend_thetas_dim
     self.lr_scheduler_config = lr_scheduler_config
     self.loss_fn = self.configure_loss()
 
@@ -396,5 +396,3 @@ class NBeatsNet(pl.LightningModule):
         }
 
     return optimizer
-
-
