@@ -1,0 +1,21 @@
+\begin{table}[ht!] 
+% \tiny
+\scriptsize
+    \begin{center}
+    \caption{Empirical evaluation of long multi-horizon multivariate forecasts for \ours\ with/without enhancements. MAE and MSE for predictions averaged over eight runs, and five datasets, the best result is highlighted in bold, second best in blue (lower is better).}
+    \label{table:ablation_nhits_contributions}
+	\begin{tabular}{ll | ccccc} \toprule
+    						&     & \ours                    & \ours$_{2}$             & \ours$_{3}$              & \ours$_{4}$ & \NBEATSi \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{A. MSE}}}
+							& 96  & \textcolor{blue}{0.195}  & 0.196                   & \textbf{0.192}           & 0.196       & 0.209    \\
+							& 192 & \textbf{0.250}           & 0.261                   & \textcolor{blue}{0.251}  & 0.263       & 0.266    \\
+							& 336 & \textbf{0.315}           & \textcolor{blue}{0.315} & 0.342                    & 0.346       & 0.408    \\
+							& 720 & \textbf{0.484}           & \textcolor{blue}{0.498} & 0.518                    & 0.548       & 0.794    \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{A. MAE}}}
+							& 96  & \textcolor{blue}{0.239}  & 0.241                   & \textbf{0.237}           & 0.240       & 0.254   \\
+							& 192 & \textbf{0.290}           & 0.299                   & \textcolor{blue}{0.291}  & 0.300       & 0.307   \\
+							& 336 & \textbf{0.338}           & \textcolor{blue}{0.342} & 0.346                    & 0.352       & 0.405   \\
+							& 720 & \textbf{0.439}           & \textcolor{blue}{0.450} & 0.454                    & 0.468       & 0.597   \\ \bottomrule
+	\end{tabular}
+	\end{center}
+\end{table}

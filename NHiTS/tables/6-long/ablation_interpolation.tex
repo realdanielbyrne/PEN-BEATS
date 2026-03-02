@@ -1,0 +1,42 @@
+\begin{table}[ht!] %ht!
+%\tiny
+\scriptsize
+    \begin{center}
+    \caption{Empirical evaluation of long multi-horizon multivariate forecasts for \ours\ with different interpolation configurations. All other hyperparameters were kept constant across all datasets. MAE and MSE for predictions averaged over eight seeds, the best result is highlighted in bold (lower is better). Percentage difference relative to n. neighbor in the last panel, average across datasets.}
+    \label{table:ablation_interpolation}    
+	\begin{tabular}{ll | cccccc} \toprule
+    						        &     & \multicolumn{2}{c}{Linear}          & \multicolumn{2}{c}{Cubic}         & \multicolumn{2}{c}{N.Neighbor}  \\
+    						        &     & MSE              & MAE              & MSE             & MAE             & MSE            & MAE            \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\ETTm$_{2}$}}}    						        
+									& 96  & 0.185            & 0.265            & \textbf{0.179}  & \textbf{0.256}  & 0.180          & 0.259          \\
+									& 192 & 0.244            & 0.308            & \textbf{0.241}  & \textbf{0.303}  & 0.252          & 0.315          \\
+									& 336 & \textbf{0.301}   & \textbf{0.347}   & 0.314           &  0.358          & 0.302          & 0.351          \\
+									& 720 & \textbf{0.429}   & \textbf{0.438}   & 0.439           &  0.450          & 0.442          & 0.455          \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\Electricity}}}
+									& 96  & 0.152            & 0.257            & \textbf{0.149}  & \textbf{0.252}  & 0.151          & 0.255          \\
+									& 192 & \textbf{0.172}   & \textbf{0.275}   & 0.174           &  0.279          & 0.175          & 0.279          \\
+									& 336 & 0.197            & 0.304            & \textbf{0.190}  &  \textbf{0.295} & 0.211          & 0.318          \\
+									& 720 & \textbf{0.248}   & \textbf{0.347}   & 0.256           &  0.353          & 0.263          & 0.358          \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\Exchange}}}
+									& 96  & \textbf{0.109}   & \textbf{0.232}   & 0.1307          &  0.254          & 0.126          & 0.248          \\
+									& 192 & 0.280            & 0.375            & \textbf{0.247}  &  \textbf{0.357} & 0.357          & 0.416          \\
+									& 336 & \textbf{0.472}   & \textbf{0.504}   & 0.625           &  0.560          & 0.646          & 0.560          \\
+									& 720 & \textbf{1.241}   & \textbf{0.823}   & 1.539           &  0.925          & 1.740          & 0.973          \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\TrafficL}}}
+									& 96  & 0.405            & 0.286            & \textbf{0.402}  & \textbf{0.282}  & 0.405          & 0.359          \\
+									& 192 & 0.421            & 0.297            & \textbf{0.417}  & \textbf{0.295}  & 0.419          & 0.201          \\
+									& 336 & 0.448            & 0.318            & \textbf{0.446}  & \textbf{0.315}  & 0.445          & 0.253          \\
+									& 720 & 0.527            & 0.362            & 0.540           &  0.366          & \textbf{0.525} & \textbf{0.318} \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\Weather}}}									
+									& 96  & 0.164            & 0.199            & 0.162           &  0.203          & \textbf{0.161} & 0.360          \\
+									& 192 & 0.224            & 0.255            & 0.225           &  0.257          & \textbf{0.218} & 0.928          \\
+									& 336 & \textbf{0.285}   & \textbf{0.311}   & 0.285           &  0.304          & 0.298          & 0.988          \\
+									& 720 & \textbf{0.366}   & \textbf{0.359}   & 0.380           &  0.369          & 0.368          & 1.047          \\ \midrule \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{P. Diff.}}}
+									& 96  & \textbf{-0.907}  & \textbf{-0.717}  & 0.146           & 1.61            & 0.000          & 0.000          \\
+									& 192 & -5.582           & -3.259.          & \textbf{-7.985} & \textbf{-4.332} & 0.000          & 0.000          \\
+									& 336 & \textbf{-10.516} & \textbf{-4.199}  & -2.108          & -1.455          & 0.000          & 0.000          \\
+									& 720 & \textbf{-15.800} & \textbf{-7.042}  & -5.480          & -1.579          & 0.000          & 0.000          \\ \bottomrule
+	\end{tabular}
+	\end{center}
+\end{table}

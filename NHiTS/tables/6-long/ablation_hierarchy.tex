@@ -1,0 +1,43 @@
+\begin{table}[ht!] %ht! t
+%\tiny
+\scriptsize
+% \footnotesize
+    \begin{center}
+    \caption{Empirical evaluation of long multi-horizon multivariate forecasts for \ours\ with different hierarchical orders. All other hyperparameters were kept constant across all datasets. MAE and MSE for predictions averaged over eight seeds, the best result is highlighted in bold (lower is better). Average percentage difference relative to ascending hierarchy in the last panel.}
+    \label{table:ablation_hierarchy_order}
+	\begin{tabular}{ll | cccccc} \toprule
+    						        &     & \multicolumn{2}{c}{Top-Down}       & \multicolumn{2}{c}{Bottom-Up} \\
+    						        &     & MSE             & MAE              & MSE            & MAE          \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\ETTm$_{2}$}}}
+									& 96  & \textbf{0.185}  & \textbf{0.265}   & 0.191          & 0.266        \\
+									& 192 & \textbf{0.244}  & \textbf{0.308}   & 0.261          & 0.320        \\
+									& 336 & \textbf{0.301}  & \textbf{0.347}   & 0.302          & 0.353        \\
+									& 720 & \textbf{0.429}  & \textbf{0.438}   & 0.440          & 0.454        \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\Electricity}}}
+									& 96  & \textbf{0.152} & \textbf{0.257}    & 0.164          & 0.270        \\
+									& 192 & \textbf{0.172} & \textbf{0.275}    & 0.186          & 0.292        \\
+									& 336 & \textbf{0.197} & \textbf{0.304}    & 0.217          & 0.327        \\
+									& 720 & \textbf{0.248} & \textbf{0.347}    & 0.273          & 0.369        \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\Exchange}}}
+									& 96  & \textbf{0.109} & \textbf{0.232}    & 0.114          & 0.242        \\
+									& 192 & \textbf{0.280} & \textbf{0.375}    & 0.436          & 0.452        \\
+									& 336 & \textbf{0.472} & \textbf{0.504}    & 0.654          & 0.574        \\
+									& 720 & \textbf{1.241} & \textbf{0.823}    & 1.312          & 0.861        \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\TrafficL}}}
+									& 96  & \textbf{0.405} & \textbf{0.286}    & 0.410          & 0.292        \\
+									& 192 & \textbf{0.421} & \textbf{0.297}    & 0.427          & 0.305        \\
+									& 336 & \textbf{0.448} & \textbf{0.318}    & 0.456          & 0.323        \\
+									& 720 & \textbf{0.527} & \textbf{0.362}    & 0.557          & 0.379        \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\Weather}}}
+									& 96  & 0.164          & \textbf{0.199}    & \textbf{0.163} & 0.200           \\
+									& 192 & 0.224          & 0.255             & \textbf{0.219} & \textbf{0.252}  \\
+									& 336 & \textbf{0.285} & \textbf{0.311}    & 0.288          & 0.311           \\
+									& 720 & 0.366          & 0.359             & \textbf{0.365} & \textbf{0.355}  \\ \midrule \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{P. Diff.}}}
+									& 96  & \textbf{-2.523}  & \textbf{-2.497} & 0.000          & 0.000        \\
+									& 192 & \textbf{-12.296} & \textbf{-6.793} & 0.000          & 0.000        \\
+									& 336 & \textbf{-11.176} & \textbf{-5.507} & 0.000          & 0.000        \\
+									& 720 & \textbf{-4.638}  & \textbf{-3.699} & 0.000          & 0.000        \\ \bottomrule
+	\end{tabular}
+	\end{center}
+\end{table}

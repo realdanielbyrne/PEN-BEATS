@@ -1,0 +1,31 @@
+\begin{table}[!ht] %h
+\caption{Considered hyperparameters for \ours.}
+\label{table:hyperparameters}
+% \tiny
+\scriptsize
+% \footnotesize
+\centering
+\tiny
+    \begin{tabular}{ll}
+    \toprule
+    \textsc{Hyperparameter}                               & \textsc{Considered Values}                                  \\ \midrule
+    Initial learning rate.                                & \{1e-3\}                                                    \\
+    Training steps.                                       & \{1000\}                                                    \\ 
+    %\{32,\,64, 128, 256, 512, 1024\}
+    Random seed for initialization.                       & DiscreteRange(1, 10)                                        \\ \midrule
+    Input size multiplier (L=m*H).                        & $m \in \{5\}$                                               \\
+    Batch Size.                                           & \{256\}                                                     \\
+    Activation Function.                                  & ReLU                                                        \\
+    Learning rate decay (3 times).                        & 0.5                                                         \\
+    Pooling Kernel Size.                                  & $[k_{1},k_{2},k_{3}]\in\ $ \{[2,2,2], [4,4,4], [8,8,8],     \\
+    &                                          \quad \quad \quad \quad \quad \quad \quad  [8,4,1], [16,8,1]\}           \\
+    Number of Stacks.                                     & $S \in \{3\}$                                               \\
+    Number of Blocks in each stack.                       & $B \in \{1\}$                                               \\
+    \MLP \ Layers.                                        & $\{2\}$                                                     \\
+    Coefficients Hidden Size.                             & $N_{h}\in\{512\}$                                           \\
+    Number of Stacks' Coefficients.                       & $[r^{-1}_{1},r^{-1}_{2},r^{-1}_{3}]\in $ \{[168,24,1], [24,12,1] \\
+    &                                                     \quad \quad \quad \quad \quad \quad \quad \quad \quad [180,60,1], [40,20,1], \\ 
+    &                                                     \quad \quad \quad \quad \quad \quad \quad \quad \quad [64,8,1] \} \\ 
+    Interpolation strategy                                & $g(\tau,\btheta)\in\{\text{Linear}\}$                        \\ \bottomrule 
+    \end{tabular}
+\end{table}

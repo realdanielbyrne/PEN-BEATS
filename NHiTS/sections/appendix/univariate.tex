@@ -1,0 +1,7 @@
+As a complement of the main results from Section~\ref{section:main_results}, in this Appendix, we performed univariate forecasting experiments for the \ETTm$_{2}$ and \Exchange\ datasets. This experiment allows us to compare closely with other methods specialized in long-horizon forecasting that also considered this setting \citep{zhou2021informer, wu2021autoformer}.
+
+For the univariate setting, we consider the Transformer-based (1) \Autoformer~\citep{wu2021autoformer}, (2) \Informer~\citep{zhou2021informer}, (3) \LogTrans~\citep{li2019logtrans} and (4) \Reformer~\citep{kitaev2020reformer} models. We selected other well-established univariate forecasting benchmarks: (5) \NBEATS~\citep{oreshkin2020nbeats}, (6) \DeepAR~\citep{salinas2020deepAR} model, which takes autoregressive features and combines them with classic recurrent networks. (7) \Prophet~\citep{taylor2018facebook_prophet}, an additive regression model that accounts for different frequencies non-linear trends, seasonal and holiday effects and (8) an auto \ARIMA~\citep{hyndman2008automatic_arima}.
+
+Table~\ref{table:main_results_univar} summarizes the univariate forecasting results. \ours \ significantly improves over the alternatives, decreasing \univarMAEgains\% in MAE and \univarMSEgains\% in MSE across datasets and horizons, with respect the best alternative. As noticed by the community recurrent based strategies like the one from \ARIMA, tend to degrade due to the concatenation of errors phenomenon.
+
+\input{tables/6-long/univariate_results.tex}

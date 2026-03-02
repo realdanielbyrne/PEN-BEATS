@@ -1,0 +1,4 @@
+$ENV{'TEXINPUTS'}='./icml2021//:' . $ENV{'TEXINPUTS'};
+$ENV{'BSTINPUTS'}='./icml2021//:' . $ENV{'BSTINPUTS'};
+$ENV{'TEXINPUTS'}='./icml2022//:' . $ENV{'TEXINPUTS'};
+$ENV{'BSTINPUTS'}='./icml2022//:' . $ENV{'BSTINPUTS'};

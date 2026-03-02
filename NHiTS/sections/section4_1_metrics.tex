@@ -1,0 +1,10 @@
+\subsection{Evaluation Setup}
+We evaluate the accuracy of our approach using \emph{mean absolute error} (MAE) and \emph{mean squared error} (MSE) metrics, which are well-established in the literature~\citep{zhou2021informer,wu2021autoformer}, for varying horizon lengths $H$:
+\begin{equation}
+    \mathrm{MSE} = \frac{1}{H} \sum^{t+H}_{\tau=t}\left(\mathbf{y}_{\tau}-\hat{\mathbf{y}}_{\tau}\right)^{2},\qquad \mathrm{MAE} = \frac{1}{H} \sum^{t+H}_{\tau=t} |\mathbf{y}_{\tau}-\hat{\mathbf{y}}_{\tau}| %\nonumber
+\end{equation}
+
+Note that for multivariate datasets, our algorithm produces forecast for each feature in the dataset and metrics are averaged across dataset features. Since our model is univariate, each variable is predicted using only its own history, $\mathbf{y}_{t-L:t}$, as input. Datasets are partitioned into train, validation and test splits. Train split is used to train model parameters, validation split is used to tune hyperparameters, and test split is used to compute metrics reported in Table~\ref{table:main_results_multivar}. Appendix~\ref{section:datasets} shows partitioning into train, validation and test splits: seventy, ten, and twenty percent of the available observations respectively, with the exception of \ETTm$_2$\ that uses twenty percent as validation.
+
+
+

@@ -1,0 +1,9 @@
+In the last year, interest in long-horizon forecasting applications caused a rapid growth of research dominated by Transformer-based forecasting methods. In addition to \Autoformer\ and \Informer, new variants, yet to be published, have been proposed, including \FEDformer, \ETSformer, \Preformer, \Triformer \citep{zhouFEDformer2022, wooETSformer2022, dazhaoPreformer2022, cirsteaTRIFormer2022}. 
+
+For the completeness of our empirical evaluation, we include in Table~\ref{table:main_results_multivar_concurrent} the comparison with the concurrent research. Some caveats of this comparison are that these articles have not yet been peer-reviewed; some evaluations deviate in the length of the forecast horizons or don't report results for all the benchmark datasets, and finally, unfortunately, most studies only report a single run or don't report standard deviations in their accuracy measurements for which it is difficult to evaluate the significance of the results.
+
+Table~\ref{table:main_results_multivar_concurrent} shows that \ours\ maintains MAE 11\% and MSE 9\% performance improvements across all the benchmark datasets and horizons. The only experiment setting where a concurrent research model outperforms \ours\ predictions is short-horizon \Exchange\ where \ETSformer\ reports MSE improvements of 9\% and MAE improvements of 4\%.
+
+\input{tables/6-long/results_concurrent}
+
+% We observed that on \Exchange\ accuracy measurements present high variance between each run, and most of the Transformer-based methods (including \ETSformer) do not report standard deviations on their accuracy measurements. As research progresses and the performance gap between models continues to shrink, it will be advisable to use statistical tests like Giacomini-White or Diebold-Mariano \citep{giacomini_white2006test, diebold_mariano1995test} to assess the performance differences significance. 

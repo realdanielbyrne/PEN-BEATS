@@ -1,0 +1,24 @@
+We follow the experimental settings from \citep{wu2021autoformer, zhou2021informer} (NeurIPS 2021 and AAAI 2021 Best Paper Award). We first describe datasets, baselines and metrics used for the quantitative evaluation of our model. Table~\ref{table:main_results_multivar} presents our key results, demonstrating SoTA performance of our method relative to existing work. We then carefully describe the details of training and evaluation setups. We conclude the section by describing ablation studies.  % In this section we present our empirical results. 
+
+\input{tables/6-long/main_results.tex}
+
+\subsection{Datasets}
+\label{section:datasets}
+
+All large-scale datasets used in our empirical studies are publicly available and have been used in neural forecasting literature, particularly in the context of long-horizon~\citep{lai2018lstnet, zhou2019epf_heterogeneous_lstm, li2019logtrans, wu2021autoformer}. Table A1 summarizes their characteristics. Each set is normalized with the train data mean and standard deviation. 
+
+% \footnote{\ETTm$_2$\ is available at the \href{https://github.com/zhouhaoyi/ETDataset}{\textcolor{blue}{\Informer's repository}}.
+% \Exchange \ is available at the \href{https://github.com/laiguokun/multivariate-time-series-data}{\textcolor{blue}{\LSTNet's dataset repository}}.
+% \Electricity \ is available at the \href{https://archive.ics.uci.edu/ml/datasets/ElectricityLoadDiagrams20112014}{\textcolor{blue}{UCI ML repository}}.
+% \TrafficL, \ is reported by the \href{https://pems.dot.ca.gov/}{\textcolor{blue}{California Department of Transportation}}.
+% \Weather \ is published by \href{https://www.bgc-jena.mpg.de/wetter/}{\textcolor{blue}{Max Planck Institute}}.
+% \href{https://gis.cdc.gov/grasp/fluview/fluportaldashboard.html}{\textcolor{blue}{US Centers for Disease Control and Prevention}} reports \ILI.
+% }
+
+\textbf{Electricity Transformer Temperature.} The \ETTm$_{2}$\ dataset measures an electricity transformer from a region of a province of China including oil temperature and variants of load (such as high useful load and high useless load) from July 2016 to July 2018 at a fifteen minutes frequency. %\citep{zhou2021informer}
+\textbf{Exchange-Rate.} The \Exchange\ dataset is a collection of daily exchange rates of eight countries relative to the US dollar. The countries include Australia, UK, Canada, Switzerland, China, Japan, New Zealand and Singapore from 1990 to 2016. % \citep{lai2018lstnet}
+\textbf{Electricity.} The \Electricity\ dataset reports the fifteen minute electricity consumption (KWh) of 321 customers from 2012 to 2014. For comparability, we aggregate it hourly. %\citep{zhou2021informer, li2019local_transformer}
+\textbf{San Francisco Bay Area Highway Traffic.} This \TrafficL\ dataset was collected by the California Department of Transportation, it reports road hourly occupancy rates of 862 sensors, from January 2015 to December 2016. %\citep{lai2018lstnet,wu2021autoformer}
+\textbf{Weather.} This \Weather\ dataset contains the 2020 year of 21 meteorological measurements recorded every 10 minutes from the Weather Station of the Max Planck Biogeochemistry Institute in Jena, Germany. %\citep{wu2021autoformer}
+\textbf{Influenza-like illness.} The \ILI\ dataset reports weekly recorded influenza-like illness (ILI) patients from Centers for Disease Control and Prevention of the United States from 2002 to 2021. It is a ratio of ILI patients vs. the week's total. %%\citep{wu2021autoformer}
+

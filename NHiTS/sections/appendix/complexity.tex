@@ -1,0 +1,9 @@
+We consider a single forecast of length H for the following complexity analysis, with a \NBEATS\ and a \ours\ architecture of $B$ blocks. We do not consider the batch dimension. We consider most practical situations, the input size $L=\mathcal{O}(H)$ linked to the horizon length.
+
+The block operation described by Equation~(\ref{equation:nhits_projections}) has complexity dominated by the fully connected layers of $\mathcal{O}(H\,N_{h})$, with $N_{h}$ the number of hidden units that we treat as a constant. The depth of stacked blocks in the \NBEATSg\ architecture, that endows it with its expressivity, is associated to a computational complexity that scales linearly $\mathcal{O}(H B)$, with $B$ the number of blocks.
+
+The block operation described by Equation~(\ref{equation:nhits_projections}) has complexity dominated by the fully connected layers of $\mathcal{O}(H\,N_{h})$, with $N_{h}$ the number of hidden units that we treat as a constant. The depth of stacked blocks in the \NBEATSg\ architecture, which endows it with its expressivity, is associated with a computational complexity that scales linearly $\mathcal{O}(H B)$, with $B$ the number of blocks.
+
+In contrast the \ours\ architecture that specializes each stack in different frequencies, through the expressivity ratios, can greatly reduce the amount of parameters needed for each layer. When we use \emph{exponentially increasing expressivity} ratios through the depth of the architecture blocks it allows to model complex dependencies, while controlling the number of parameters used on each output layer. If the \emph{expressivity ratio} is defined as $r_{\ell} = r^{l}$ then the space complexity of \ours\ scales geometrically $\mathcal{O}(\sum^{B}_{l=0} H r^{l}) =\mathcal{O}\left((H(1-r^{B})/(1-r)\right)$.
+
+\input{tables/6-long/ablation_complexity.tex}

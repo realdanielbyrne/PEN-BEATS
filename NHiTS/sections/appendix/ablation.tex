@@ -1,0 +1,125 @@
+
+This section performs ablation studies on the validation set of five datasets that share horizon lengths, \ETTm$_2$, \Exchange, \Electricity, \TrafficL, and \Weather. The section's experiments control for \ours\ settings described in Table~\ref{table:hyperparameters}, only varying a single characteristic of interest of the network and measuring the effects in validation.
+
+% -------------------------------------------------------------------------------------------------------------
+% \clearpage
+\subsubsection{Pooling Configurations}
+\label{appendix:ablation_pooling_configurations}
+% -------------------------------------------------------------------------------------------------------------
+
+\begin{figure}[ht!]
+\centering
+\includegraphics[width=0.7\linewidth]{images/Pooling.pdf}
+\caption{Proposed pooling configurations.} \label{fig:pooling_appendix}
+\end{figure}
+
+
+In Section~\ref{section:multirate_sampling} we described the \emph{multi-rate signal sampling} enhancement of the \ours\ architecture. Here we conduct a study to compare the accuracy effects of different pooling alternatives, on Equation~(\ref{equation:nhits_mixed_datasampling}). We consider the MaxPool and AveragePool configurations.
+
+As shown in Table~\ref{table:ablation_pooling}, the MaxPool operation consistently outperforms the AveragePool alternative, with MAE improvements up to 15\% and MSE up to 8\% in the most extended horizon. On average, the forecasting accuracy favors the MaxPool method across the datasets and horizons. 
+%We conducted the main experiments of this work with this technique.
+
+\input{tables/6-long/ablation_pooling.tex}
+
+% -------------------------------------------------------------------------------------------------------------
+%\clearpage
+% \vspace{14mm}
+\subsubsection{Interpolation Configurations}
+\label{appendix:ablation_interpolation_configurations}
+% -------------------------------------------------------------------------------------------------------------
+
+\begin{figure}[!ht]
+\centering
+\subfigure[N.Neighbor]{\label{fig:interpolation_nn}
+\includegraphics[width=0.15\linewidth]{images/Interpolation2.pdf}} %0.23
+\subfigure[Linear]{\label{fig:interpolation_linear}
+\includegraphics[width=0.15\linewidth]{images/Interpolation1.pdf}} %0.23
+\subfigure[Cubic]{\label{fig:interpolation_cubic}
+\includegraphics[width=0.22\linewidth]{images/Interpolation3.pdf}} %0.3
+\caption{Proposed interpolator configurations.} \label{fig:interpolation_appendix}
+\end{figure}
+
+In Section~\ref{section:hierarchical_interpolation} we described the \emph{hierarchical interpolation} enhancement of the multi-step prediction strategy. Here we conduct a study to compare the accuracy effects of different interpolation alternatives. To do it, we change the interpolation technique used in the multi-step forecasting strategy of the \ours\ architecture. The interpolation techniques considered are nearest neighbor, linear and cubic. We describe them in detail below.
+
+Recalling the notation from Section~\ref{section:hierarchical_interpolation}, consider the time indexes of a multi-step prediction $\tau \in \{t+1,\dots,t+H\}$, let $\mathcal{T}=\{t+1,t+1+1/r_{\ell}\dots,t+H\}$ be the anchored indexes in \ours\ layer $\ell$, and the forecast $\hat{y}_{\tau,\ell} = g(\tau, \btheta^{f}_{\ell})$ and backast $\tilde{y}_{\tau,\ell} = g(\tau, \btheta^{f}_{\ell})$ components. Here we define different alternatives for the interpolating function $g \in \mathcal{C}^{0}, \mathcal{C}^{1}, \mathcal{C}^{2}$. For simplicity we skip the $\ell$ layer index.
+
+\textbf{Nearest Neighbor.} In the simplest interpolation, we use the anchor observations in the time dimension closest to the observation we want to predict. Specifically, the prediction is defined as follows:
+\begin{equation}
+    \hat{y}_{\tau}
+    = \theta[t^{*}]  \quad \text{with} \quad t^{*} = \text{argmin}_{t\in \mathcal{T}}\{|t-\tau|\}
+    \label{equation:interpolation_nearest}
+\end{equation}
+
+\textbf{Linear.} An efficient alternative is the linear interpolation method, which uses the two closest neighbor indexes $t_{1}$ and $t_{1}$, and fits a linear function that passes through both.
+\begin{equation}
+    \hat{y}_{\tau}
+    = \left(\theta[t_{1}] + \left(\frac{\theta[t_{2}]-\theta[t_{1}]}{t_{2}-t_{1}}\right)(\tau-t_{1})\right)
+    \label{equation:interpolation_linear2}
+\end{equation}
+
+\textbf{Cubic.} Finally we consider the Hermite cubic polynomials defined by the interpolation constraints for two anchor observations $\theta_{t_{1}}$ and $\theta_{t_{1}}$ and its first derivatives $\theta^{'}_{t_{1}}$ and $\theta^{'}_{t_{1}}$.
+\begin{equation}
+    \hat{y}_{\tau}
+    = \theta[t_{1}] \phi_{1}(\tau) + \theta[t_{2}] \phi_{2}(\tau) +
+      \theta^{'}[t_{1}] \psi_{1}(\tau) + \theta^{'}[t_{2}]\psi_{2}(\tau)
+    \label{equation:interpolation_cubic}
+\end{equation}
+
+With the Hermite cubic basis defined by:
+\begin{subequations}
+\begin{alignat}{3} 
+    \phi_{1}(\tau) = 2 \tau^{3}-3\tau^{2} + 1 \\
+    \phi_{2}(\tau) = -2 \tau^{3}+ 3\tau^{2} \\
+    \psi_{1}(\tau) = \tau^{3}-2\tau^{2} + \tau \\
+    \psi_{2}(\tau) = \tau^{3}-\tau^{2}
+\end{alignat}
+\end{subequations}
+
+The ablation study results for the different interpolation techniques are summarized in Table~\ref{table:ablation_interpolation}, we report the average MAE and MSE performance across the five datasets. Figure ~\ref{fig:decomposition_pooling} presents the decomposition for the different interpolation techniques. We found that linear and cubic interpolation consistently outperform the nearest neighbor alternative, and show monotonic improvements relative to the nearest neighbor technique along the forecasting horizon. 
+
+% \clearpage
+\begin{figure*}[ht!]
+\centering
+\subfigure[Nearest neighbor interpolation]{\label{fig:decomposition_nearest}
+\includegraphics[width=0.48\linewidth]{images/plots-interpetable-decomposition-nearest.pdf}}
+\subfigure[Linear interpolation]{\label{fig:decomposition_linear2}
+\includegraphics[width=0.48\linewidth]{images/plots-interpetable-decomposition.pdf}}
+        ~
+        ~
+        ~
+        ~
+\subfigure[Cubic interpolation]{\label{fig:decomposition_cubic}
+\includegraphics[width=0.48\linewidth]{images/plots-interpetable-decomposition-cubic.pdf}}
+\subfigure[No interpolation]{\label{fig:decomposition_generic2}
+\includegraphics[width=0.48\linewidth]{images/plots-interpetable-decomposition-generic.pdf}}
+\vspace{-0.25cm}
+\caption{\ETTm2 and 720 ahead forecasts using \ours\ with different interpolation techniques. The top row shows the original signal and the forecast. The second, third and fourth rows show the forecast components across stack, residuals in the last row.} 
+\label{fig:decomposition_pooling}
+\end{figure*}
+
+The linear interpolation improvements over nearest neighbors are up to 15.8\%, and up to 7.0\% for the cubic interpolation. When comparing between linear and cubic the results are inconclusive as different datasets and horizons slight performance differences. On average across the datasets both the forecasting accuracy and computational performance favors the linear method, with which we conducted the main experiments of this work with this technique.
+
+\input{tables/6-long/ablation_interpolation.tex}
+
+% -------------------------------------------------------------------------------------------------------------
+% \clearpage
+% \newpage
+%\vspace{10mm}
+\subsubsection{Order of Hierarchical Representations}
+\label{appendix:ablation_hierarchy_configurations}
+% -------------------------------------------------------------------------------------------------------------
+
+\begin{figure}[!ht]
+\centering
+\subfigure[\emph{Top-Down}]{\label{fig:hierarchy_descending}
+\includegraphics[width=0.28\linewidth]{images/nhits_descending.pdf}}
+\subfigure[\emph{Bottom-Up}]{\label{fig:hierarchy_ascending}
+\includegraphics[width=0.28\linewidth]{images/nhits_ascending.pdf}}
+\caption{Hierarchical representation configurations.} \label{fig:hierarchies}
+\end{figure}
+
+Deep Learning in classic tasks like computer vision and natural language processing is known to learn hierarchical representations from raw data that increase complexity as the information flows through the network. This automatic feature extraction phenomenon is believed to drive to a large degree the algorithms' success \citep{bengio2014hierarchical_representations}. Our approach differs from the conventions in the sense that we use a \emph{Top-Down} hierarchy where we prioritize in the synthesis of the predictions to low frequencies and sequentially complement them with higher frequencies details, as explained in Section~\ref{section3:model}. We achieve this with \ours' \emph{expressiveness ratio} schedules. Our intuition is that the \emph{Top-Down} hierarchy acts as a regularizer and helps the model to focus on the broader factors driving the predictions rather than narrowing its focus at the beginning on the details that compose them. To test these intuitions, we designed an experiment where we inverted the expressiveness ratio schedule into \emph{Bottom-Up} hierarchy predictions and compared the validation performance.
+
+Remarkably, as shown in Table~\ref{table:ablation_hierarchy_order}, the \emph{Top-Down} predictions consistently outperform the \emph{Bottom-Up} counterpart. Relative improvements in MAE are 4.6\%, in MSE of 7.5\%, across horizons and datasets. Our observations match the forecasting community practice that addresses long-horizon predictions by first modeling the long-term seasonal components and then its residuals. %Research on long-horizon forecasting has primarily focused on long-term seasonal component, as it is a common belief that it is the most important.
+
+\input{tables/6-long/ablation_hierarchy.tex}

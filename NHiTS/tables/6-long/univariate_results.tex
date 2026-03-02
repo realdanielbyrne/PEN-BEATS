@@ -1,0 +1,25 @@
+\begin{table*}[!ht]
+%\tiny
+\footnotesize
+    \begin{center}
+    \caption{Empirical evaluation of long multi-horizon \textbf{univariate} forecasts. \emph{Mean Absolute Error} (MAE) and \emph{Mean Squared Error} (MSE) for predictions averaged over eight runs, the best result is highlighted in bold (lower is better). We gradually prolong the forecast horizon.}
+    \label{table:main_results_univar}
+    \setlength\tabcolsep{3.5pt}
+    \begin{tabular}{ll | ccccccccccccccccccc} \toprule
+    						        &     & \multicolumn{2}{c}{\ours}  & \multicolumn{2}{c}{\Autoformer}  & \multicolumn{2}{c}{\Informer} & \multicolumn{2}{c}{\LogTrans} & \multicolumn{2}{c}{\Reformer} & \multicolumn{2}{c}{\NBEATS} & \multicolumn{2}{c}{\DeepAR} &      \multicolumn{2}{c}{\Prophet} &      \multicolumn{2}{c}{\ARIMA} \\
+    						        &     & MSE   & MAE   & MSE   & MAE   & MSE   & MAE   & MSE   & MAE   & MSE   & MAE   & MSE   & MAE   & MSE   & MAE   & MSE   & MAE   & MSE   & MAE  \\ \midrule
+    %\multirow{4}{0.1cm}{\ETT}
+    \parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\ETTm$_{2}$}}}
+                                    & 96  & 0.066          & \textbf{0.185} & \textbf{0.065} & 0.189  & 0.088 & 0.225 & 0.082 & 0.217 & 0.131 & 0.288 & 0.082 & 0.219 & 0.099 & 0.237 & 0.287  & 0.456 & 0.211 & 0.362 \\
+    					            & 192 & \textbf{0.087} & \textbf{0.223} & 0.118          & 0.256  & 0.132 & 0.283 & 0.133 & 0.284 & 0.186 & 0.354 & 0.120 & 0.268 & 0.154 & 0.310 & 0.312  & 0.483 & 0.261 & 0.406 \\
+     					            & 336 & \textbf{0.106} & \textbf{0.251} & 0.154          & 0.305  & 0.180 & 0.336 & 0.201 & 0.361 & 0.220 & 0.381 & 0.226 & 0.370 & 0.277 & 0.428 & 0.331  & 0.474 & 0.317 & 0.448 \\
+     					            & 720 & \textbf{0.157} & \textbf{0.312} & 0.182          & 0.335  & 0.300 & 0.435 & 0.268 & 0.407 & 0.267 & 0.430 & 0.188 & 0.338 & 0.332 & 0.468 & 0.534  & 0.593 & 0.366 & 0.487 \\ \midrule
+    \parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{\Exchange}}}
+                                    & 96  & \textbf{0.093} & \textbf{0.223} & 0.241          & 0.299  & 0.591 & 0.615 & 0.279 & 0.441 & 1.327 & 0.944 & 0.156 & 0.299 & 0.417 & 0.515 & 0.828  & 0.762 & 0.112 & 0.245 \\
+    					            & 192 & \textbf{0.230} & \textbf{0.313} & 0.273          & 0.665  & 1.183 & 0.912 & 1.950 & 1.048 & 1.258 & 0.924 & 0.669 & 0.665 & 0.813 & 0.735 & 0.909  & 0.974 & 0.304 & 0.404 \\
+    					            & 336 & \textbf{0.370} & \textbf{0.486} & 0.508          & 0.605  & 1.367 & 0.984 & 2.438 & 1.262 & 2.179 & 1.296 & 0.611 & 0.605 & 1.331 & 0.962 & 1.304  & 0.988 & 0.736 & 0.598 \\
+    					            & 720 & \textbf{0.728} & \textbf{0.569} & 0.991          & 0.860  & 1.872 & 1.072 & 2.010 & 1.247 & 1.280 & 0.953 & 1.111 & 0.860 & 1.890 & 1.181 & 3.238  & 1.566 & 1.871 & 0.935 \\
+    \bottomrule
+    \end{tabular}
+    \end{center}
+\end{table*}

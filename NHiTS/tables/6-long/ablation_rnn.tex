@@ -1,0 +1,21 @@
+\begin{table}[ht!] 
+% \tiny
+\scriptsize
+    \begin{center}
+    \caption{Empirical evaluation of long multi-horizon multivariate forecasts for \DilRNN\ with/without enhancements. Average MAE and MSE for five datasets, the best result is highlighted in bold, second best in blue (lower is better).}
+    \label{table:ablation_rnn}
+	\begin{tabular}{ll | cccc} \toprule
+    						&     & \DilRNN$_{1}$            & \DilRNN$_{2}$           & \DilRNN$_{3}$    & \DilRNN  \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{A. MSE}}}
+							& 96  & \textcolor{blue}{0.346}  & \textbf{0.331}          & 0.369            & 0.347    \\
+							& 192 & \textcolor{blue}{0.539}  & \textbf{0.528}          & 0.545            & 0.561    \\
+							& 336 & \textbf{0.647}           & \textcolor{blue}{0.691} & 0.705            & 0.723    \\
+							& 720 & \textcolor{blue}{0.765}  & \textbf{0.762}          & 0.789            & 0.800    \\ \midrule
+\parbox[t]{1mm}{\multirow{4}{*}{\rotatebox[origin=c]{90}{A. MAE}}}
+							& 96  & \textbf{0.343}           & \textcolor{blue}{0.335} & 0.352            & 0.347   \\
+							& 192 & \textcolor{blue}{0.460}  & \textbf{0.444}          & 0.462            & 0.468   \\
+							& 336 & \textbf{0.513}           & \textcolor{blue}{0.537} & 0.539            & 0.649   \\
+							& 720 & \textcolor{blue}{0.585}  & \textbf{0.566}          & 0.600            & 0.598   \\ \bottomrule
+	\end{tabular}
+	\end{center}
+\end{table}

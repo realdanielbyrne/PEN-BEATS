@@ -1,0 +1,11 @@
+Table~\ref{table:main_results_multivar} only reports the average accuracy measurements to comply with page restrictions. Here we complement the Table's results with standard deviation associated with the eight runs of the forecasting pipeline composed of the training and hyperparameter optimization methodologies described in  Section~\ref{section:training_methodology}. Overall the standard deviation of the forecasting pipelines accounts for 2.9\% of the MSE measurements and 1.75\% of the MAE measurements. The small standard deviation verifies the robustness of the results and accuracy improvements of \ours\ predictions. We observed that the \Exchange\ accuracy measurements present the most variance between each run. 
+
+% \newpage
+For the completeness of our empirical evaluation, we include in Table~\ref{table:main_results_multivar_stds} the comparison with the concurrent research including \ETSformer and \Preformer \citep{wooETSformer2022, dazhaoPreformer2022}. Table~\ref{table:main_results_multivar_stds} shows that \ours\ maintains MAE 11\% and MSE 9\% performance improvements across all the benchmark datasets and horizons versus the second best alternative. The only experiment setting where a concurrent research model outperforms \ours\ predictions is short-horizon \Exchange\ where \ETSformer\ reports MSE improvements of 9\% and MAE improvements of 4\%.
+
+%Some caveats of this comparison are that these articles have not yet been peer-reviewed; some evaluations deviate in the length of the forecast horizons or don't report results for all the benchmark datasets, and finally, unfortunately, most studies only report a single run or don't report standard deviations in their accuracy measurements for which it is difficult to evaluate the significance of the results.
+
+%As research progresses and the performance gap between different models continues to shrink, it will be advisable to use statistical tests like Giacomini-White or Diebold-Mariano \citep{giacomini_white2006test, diebold_mariano1995test} to assess the performance differences significance.
+
+\input{tables/6-long/main_results_std.tex}
+
