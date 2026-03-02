@@ -67,12 +67,12 @@ BLOCKS = [
   "AutoEncoderAELG",
   "GenericAEBackcastAELG",
   # Variational AE (VAE) blocks
-  "GenericAEVAE",
-  "BottleneckGenericAEVAE",
-  "TrendAEVAE",
-  "SeasonalityAEVAE",
-  "AutoEncoderAEVAE",
-  "GenericAEBackcastAEVAE",
+  "GenericVAE",
+  "BottleneckGenericVAE",
+  "TrendVAE",
+  "SeasonalityVAE",
+  "AutoEncoderVAE",
+  "GenericAEBackcastVAE",
   # V3 Wavelet blocks (orthonormal DWT basis)
   "HaarWaveletV3",
   "DB2WaveletV3",

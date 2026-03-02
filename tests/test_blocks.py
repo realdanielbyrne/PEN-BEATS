@@ -379,8 +379,8 @@ class TestAllBlocksOutputShapes:
         "GenericAELG", "BottleneckGenericAELG", "TrendAELG", "SeasonalityAELG",
         "AutoEncoderAELG", "GenericAEBackcastAELG",
         # Variational AE (VAE) blocks
-        "GenericAEVAE", "BottleneckGenericAEVAE", "TrendAEVAE", "SeasonalityAEVAE",
-        "AutoEncoderAEVAE", "GenericAEBackcastAEVAE",
+        "GenericVAE", "BottleneckGenericVAE", "TrendVAE", "SeasonalityVAE",
+        "AutoEncoderVAE", "GenericAEBackcastVAE",
         # V3 Wavelet blocks (orthonormal DWT basis)
         "HaarWaveletV3", "DB2WaveletV3", "DB3WaveletV3", "DB4WaveletV3",
         "DB10WaveletV3", "DB20WaveletV3",
@@ -401,8 +401,8 @@ class TestAllBlocksOutputShapes:
                           "GenericAE", "BottleneckGenericAE", "TrendAE",
                           "GenericAELG", "BottleneckGenericAELG", "TrendAELG",
                           "SeasonalityAELG", "AutoEncoderAELG", "GenericAEBackcastAELG",
-                          "GenericAEVAE", "BottleneckGenericAEVAE", "TrendAEVAE",
-                          "SeasonalityAEVAE", "AutoEncoderAEVAE", "GenericAEBackcastAEVAE"]
+                          "GenericVAE", "BottleneckGenericVAE", "TrendVAE",
+                          "SeasonalityVAE", "AutoEncoderVAE", "GenericAEBackcastVAE"]
         if block_name in ae_root_blocks:
             kwargs["latent_dim"] = LATENT_DIM
 
@@ -412,11 +412,11 @@ class TestAllBlocksOutputShapes:
             kwargs["thetas_dim"] = THETAS_DIM
 
         if block_name in ["AutoEncoder", "AutoEncoderAE", "GenericAEBackcast", "GenericAEBackcastAE",
-                         "AutoEncoderAELG", "AutoEncoderAEVAE",
-                         "GenericAEBackcastAELG", "GenericAEBackcastAEVAE",
+                         "AutoEncoderAELG", "AutoEncoderVAE",
+                         "GenericAEBackcastAELG", "GenericAEBackcastVAE",
                          "VAE"]:
             kwargs["share_weights"] = False
-        elif block_name in ["Trend", "TrendAE", "TrendAELG", "TrendAEVAE"]:
+        elif block_name in ["Trend", "TrendAE", "TrendAELG", "TrendVAE"]:
             kwargs["share_weights"] = False
 
         block = block_class(**kwargs)
@@ -452,8 +452,8 @@ class TestAERootBlockVAEProperties:
     """Verify VAE blocks store kl_loss after forward pass."""
 
     @pytest.mark.parametrize("block_name", [
-        "GenericAEVAE", "BottleneckGenericAEVAE", "TrendAEVAE",
-        "SeasonalityAEVAE", "AutoEncoderAEVAE", "GenericAEBackcastAEVAE",
+        "GenericVAE", "BottleneckGenericVAE", "TrendVAE",
+        "SeasonalityVAE", "AutoEncoderVAE", "GenericAEBackcastVAE",
     ])
     def test_kl_loss_stored_after_forward(self, block_name):
         block_class = getattr(b, block_name)
@@ -469,8 +469,8 @@ class TestAERootBlockVAEProperties:
         assert block.kl_loss.item() >= 0, f"{block_name} kl_loss should be non-negative"
 
     @pytest.mark.parametrize("block_name", [
-        "GenericAEVAE", "BottleneckGenericAEVAE", "TrendAEVAE",
-        "SeasonalityAEVAE", "AutoEncoderAEVAE", "GenericAEBackcastAEVAE",
+        "GenericVAE", "BottleneckGenericVAE", "TrendVAE",
+        "SeasonalityVAE", "AutoEncoderVAE", "GenericAEBackcastVAE",
     ])
     def test_eval_mode_uses_mu_directly(self, block_name):
         block_class = getattr(b, block_name)

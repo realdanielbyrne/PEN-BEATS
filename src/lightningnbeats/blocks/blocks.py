@@ -1138,10 +1138,10 @@ class GenericAEBackcastAELG(AERootBlockLG):
 # Variational AE (VAE) Subclasses — AERootBlockVAE backbone
 # ---------------------------------------------------------------------------
 
-class GenericAEVAE(AERootBlockVAE):
+class GenericVAE(AERootBlockVAE):
   def __init__(self, units, backcast_length, forecast_length, thetas_dim=5,
                share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
-    super(GenericAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    super(GenericVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.backcast_length = backcast_length
     self.forecast_length = forecast_length
     self.active_g = active_g
@@ -1149,7 +1149,7 @@ class GenericAEVAE(AERootBlockVAE):
     self.theta_f_fc = nn.Linear(units, forecast_length, bias=False)
 
   def forward(self, x):
-    x = super(GenericAEVAE, self).forward(x)
+    x = super(GenericVAE, self).forward(x)
     backcast = self.theta_b_fc(x)
     forecast = self.theta_f_fc(x)
     if self.active_g:
@@ -1160,10 +1160,10 @@ class GenericAEVAE(AERootBlockVAE):
     return backcast, forecast
 
 
-class BottleneckGenericAEVAE(AERootBlockVAE):
+class BottleneckGenericVAE(AERootBlockVAE):
   def __init__(self, units, backcast_length, forecast_length, thetas_dim=5,
                share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
-    super(BottleneckGenericAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    super(BottleneckGenericVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     if share_weights:
       self.backcast_linear = self.forecast_linear = nn.Linear(units, thetas_dim)
     else:
@@ -1174,7 +1174,7 @@ class BottleneckGenericAEVAE(AERootBlockVAE):
     self.active_g = active_g
 
   def forward(self, x):
-    x = super(BottleneckGenericAEVAE, self).forward(x)
+    x = super(BottleneckGenericVAE, self).forward(x)
     theta_b = self.backcast_linear(x)
     theta_f = self.forecast_linear(x)
     backcast = self.backcast_g(theta_b)
@@ -1187,10 +1187,10 @@ class BottleneckGenericAEVAE(AERootBlockVAE):
     return backcast, forecast
 
 
-class TrendAEVAE(AERootBlockVAE):
+class TrendVAE(AERootBlockVAE):
   def __init__(self, units, backcast_length, forecast_length, thetas_dim,
                share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
-    super(TrendAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    super(TrendVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     if share_weights:
       self.backcast_linear = self.forecast_linear = nn.Linear(units, thetas_dim)
     else:
@@ -1200,7 +1200,7 @@ class TrendAEVAE(AERootBlockVAE):
     self.forecast_g = _TrendGenerator(thetas_dim, forecast_length)
 
   def forward(self, x):
-    x = super(TrendAEVAE, self).forward(x)
+    x = super(TrendVAE, self).forward(x)
     backcast_thetas = self.backcast_linear(x)
     forecast_thetas = self.forecast_linear(x)
     backcast = self.backcast_g(backcast_thetas)
@@ -1208,17 +1208,17 @@ class TrendAEVAE(AERootBlockVAE):
     return backcast, forecast
 
 
-class SeasonalityAEVAE(AERootBlockVAE):
+class SeasonalityVAE(AERootBlockVAE):
   def __init__(self, units, backcast_length, forecast_length, thetas_dim=5,
                share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
-    super(SeasonalityAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    super(SeasonalityVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.backcast_linear = nn.Linear(units, 2 * int(backcast_length / 2 - 1) + 1, bias=False)
     self.forecast_linear = nn.Linear(units, 2 * int(forecast_length / 2 - 1) + 1, bias=False)
     self.backcast_g = _SeasonalityGenerator(backcast_length)
     self.forecast_g = _SeasonalityGenerator(forecast_length)
 
   def forward(self, x):
-    x = super(SeasonalityAEVAE, self).forward(x)
+    x = super(SeasonalityVAE, self).forward(x)
     backcast_thetas = self.backcast_linear(x)
     forecast_thetas = self.forecast_linear(x)
     backcast = self.backcast_g(backcast_thetas)
@@ -1226,10 +1226,10 @@ class SeasonalityAEVAE(AERootBlockVAE):
     return backcast, forecast
 
 
-class AutoEncoderAEVAE(AERootBlockVAE):
+class AutoEncoderVAE(AERootBlockVAE):
   def __init__(self, units, backcast_length, forecast_length, thetas_dim,
                share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
-    super(AutoEncoderAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    super(AutoEncoderVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.units = units
     self.thetas_dim = thetas_dim
     self.share_weights = share_weights
@@ -1249,7 +1249,7 @@ class AutoEncoderAEVAE(AERootBlockVAE):
         nn.Linear(thetas_dim, units), getattr(nn, activation)(), nn.Linear(units, forecast_length))
 
   def forward(self, x):
-    x = super(AutoEncoderAEVAE, self).forward(x)
+    x = super(AutoEncoderVAE, self).forward(x)
     b = self.b_encoder(x)
     b = self.b_decoder(b)
     f = self.f_encoder(x)
@@ -1262,10 +1262,10 @@ class AutoEncoderAEVAE(AERootBlockVAE):
     return b, f
 
 
-class GenericAEBackcastAEVAE(AERootBlockVAE):
+class GenericAEBackcastVAE(AERootBlockVAE):
   def __init__(self, units, backcast_length, forecast_length, thetas_dim,
                share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
-    super(GenericAEBackcastAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    super(GenericAEBackcastVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.units = units
     self.thetas_dim = thetas_dim
     self.share_weights = share_weights
@@ -1280,7 +1280,7 @@ class GenericAEBackcastAEVAE(AERootBlockVAE):
         nn.Linear(thetas_dim, units), nn.ReLU(), nn.Linear(units, backcast_length))
 
   def forward(self, x):
-    x = super(GenericAEBackcastAEVAE, self).forward(x)
+    x = super(GenericAEBackcastVAE, self).forward(x)
     b = self.b_encoder(x)
     b = self.b_decoder(b)
     theta_f = self.forecast_linear(x)

@@ -226,19 +226,19 @@ class NBeatsNet(pl.LightningModule):
         else:           
           if stack_type in ["Generic", "BottleneckGeneric", "GenericAE", "BottleneckGenericAE", "GenericAEBackcast", "GenericAEBackcastAE",
                            "GenericAELG", "BottleneckGenericAELG", "GenericAEBackcastAELG",
-                           "GenericAEVAE", "BottleneckGenericAEVAE", "GenericAEBackcastAEVAE"]:
+                           "GenericVAE", "BottleneckGenericVAE", "GenericAEBackcastVAE"]:
             units = self.g_width
-          elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityAEVAE"]:
+          elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityVAE"]:
             units = self.s_width
-          elif stack_type in ["Trend", "TrendAE", "TrendAELG", "TrendAEVAE"]:
+          elif stack_type in ["Trend", "TrendAE", "TrendAELG", "TrendVAE"]:
             units = self.t_width
-          elif stack_type in ["AutoEncoder", "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderAEVAE", "VAE"]:
+          elif stack_type in ["AutoEncoder", "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderVAE", "VAE"]:
             units = self.ae_width
           else:
             units = self.g_width
 
           # Use trend_thetas_dim for Trend/TrendAE when set, else global thetas_dim
-          if stack_type in ("Trend", "TrendAE", "TrendAELG", "TrendAEVAE"):
+          if stack_type in ("Trend", "TrendAE", "TrendAELG", "TrendVAE"):
             effective_td = self.trend_thetas_dim
           else:
             effective_td = self.thetas_dim
@@ -248,8 +248,8 @@ class NBeatsNet(pl.LightningModule):
               "AutoEncoderAE", "TrendAE",
               "GenericAELG", "BottleneckGenericAELG", "SeasonalityAELG",
               "AutoEncoderAELG", "TrendAELG", "GenericAEBackcastAELG",
-              "GenericAEVAE", "BottleneckGenericAEVAE", "SeasonalityAEVAE",
-              "AutoEncoderAEVAE", "TrendAEVAE", "GenericAEBackcastAEVAE",
+              "GenericVAE", "BottleneckGenericVAE", "SeasonalityVAE",
+              "AutoEncoderVAE", "TrendVAE", "GenericAEBackcastVAE",
           )
           if stack_type in ae_latent_blocks:
             block = getattr(b,stack_type)(
