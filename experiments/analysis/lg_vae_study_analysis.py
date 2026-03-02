@@ -14,10 +14,10 @@ Sections:
   9. Final Verdict
 
 Usage:
-    python experiments/lg_vae_study_analysis.py --dataset all
-    python experiments/lg_vae_study_analysis.py --dataset m4
-    python experiments/lg_vae_study_analysis.py --dataset weather
-    python experiments/lg_vae_study_analysis.py --dataset m4 --llm
+    python experiments/analysis/lg_vae_study_analysis.py --dataset all
+    python experiments/analysis/lg_vae_study_analysis.py --dataset m4
+    python experiments/analysis/lg_vae_study_analysis.py --dataset weather
+    python experiments/analysis/lg_vae_study_analysis.py --dataset m4 --llm
 """
 
 import argparse
@@ -28,8 +28,8 @@ import sys
 import numpy as np
 import pandas as pd
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _SCRIPT_DIR)
+_EXPERIMENTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _EXPERIMENTS_DIR)
 
 from run_lg_vae_study import LG_VAE_STUDY_DATASETS, _search_csv_path
 
@@ -44,7 +44,7 @@ pd.set_option("display.width", 160)
 pd.set_option("display.max_colwidth", 60)
 pd.set_option("display.float_format", "{:.4f}".format)
 
-BASELINE_CSV = os.path.join(_SCRIPT_DIR, "results", "m4", "block_benchmark_results.csv")
+BASELINE_CSV = os.path.join(_EXPERIMENTS_DIR, "results", "m4", "block_benchmark_results.csv")
 
 BASELINES = {
     "NBEATS-I+G": {"owa": 0.8057, "smape": 13.53, "params": 35_900_000},

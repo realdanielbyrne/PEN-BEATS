@@ -12,7 +12,7 @@ import sys, os, json
 sys.stdout.reconfigure(line_buffering=True)
 import numpy as np, pandas as pd
 
-_DIR = os.path.dirname(os.path.abspath(__file__))
+_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_DIR, "..", "src"))
 
 from lightningnbeats.data import M4Dataset

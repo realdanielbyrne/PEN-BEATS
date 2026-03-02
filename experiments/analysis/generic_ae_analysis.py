@@ -15,12 +15,12 @@ Metric policy:
   - Fallback to best_val_loss when OWA is unavailable (Tourism/Traffic/Weather)
 
 Usage:
-    python experiments/generic_ae_analysis.py --dataset m4
-    python experiments/generic_ae_analysis.py --dataset tourism
-    python experiments/generic_ae_analysis.py --dataset traffic
-    python experiments/generic_ae_analysis.py --dataset weather
-    python experiments/generic_ae_analysis.py --dataset all
-    python experiments/generic_ae_analysis.py --dataset weather --no-llm
+    python experiments/analysis/generic_ae_analysis.py --dataset m4
+    python experiments/analysis/generic_ae_analysis.py --dataset tourism
+    python experiments/analysis/generic_ae_analysis.py --dataset traffic
+    python experiments/analysis/generic_ae_analysis.py --dataset weather
+    python experiments/analysis/generic_ae_analysis.py --dataset all
+    python experiments/analysis/generic_ae_analysis.py --dataset weather --no-llm
 
 LLM notes:
   - Commentary uses experiments/llm_commentary.py when available.
@@ -36,6 +36,9 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+_EXPERIMENTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _EXPERIMENTS_DIR)
+
 from run_generic_ae_study import STUDY_DATASETS, _csv_path
 try:
     from llm_commentary import generate_commentary
@@ -48,8 +51,6 @@ pd.set_option("display.width", 140)
 pd.set_option("display.max_colwidth", 60)
 pd.set_option("display.float_format", "{:.4f}".format)
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
 NUM_COLS = [
     "smape", "mase", "mae", "mse", "owa", "norm_mae", "norm_mse",
     "n_params", "training_time_seconds", "epochs_trained",
@@ -59,7 +60,7 @@ NUM_COLS = [
 
 
 def _baseline_csv(dataset_name):
-    return os.path.join(_SCRIPT_DIR, "results", dataset_name, "block_benchmark_results.csv")
+    return os.path.join(_EXPERIMENTS_DIR, "results", dataset_name, "block_benchmark_results.csv")
 
 
 def _section(title):

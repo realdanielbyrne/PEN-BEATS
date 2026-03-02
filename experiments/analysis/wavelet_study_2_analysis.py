@@ -15,7 +15,7 @@ Produces:
   6. Convergence diagnostics (epochs, early stopping, val_loss curves)
 
 Usage:
-    python experiments/wavelet_study_2_analysis.py
+    python experiments/analysis/wavelet_study_2_analysis.py
 """
 
 import ast
@@ -34,8 +34,8 @@ pd.set_option("display.float_format", "{:.4f}".format)
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CSV_PATH = os.path.join(_SCRIPT_DIR, "results", "m4", "wavelet_study_2_basis_dim_results.csv")
+_EXPERIMENTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CSV_PATH = os.path.join(_EXPERIMENTS_DIR, "results", "m4", "wavelet_study_2_basis_dim_results.csv")
 
 METRICS = ["smape", "mase", "owa", "best_val_loss"]
 NUMERIC_COLS = [

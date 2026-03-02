@@ -1,8 +1,8 @@
-"""TrendAE architecture search analysis across runner-targeted datasets.
+"""AE+Trend architecture search analysis across runner-targeted datasets.
 
 Behavior:
-- Discovers datasets from run_trendae_study.TRENDAE_DATASETS
-- Resolves CSV paths from run_trendae_study._search_csv_path
+- Discovers datasets from run_ae_trend_study.AE_TREND_DATASETS
+- Resolves CSV paths from run_ae_trend_study._search_csv_path
 - Supports --dataset {all,<dataset>}
 - Skips missing/empty CSVs
 - Uses OWA when finite values exist, else falls back to best_val_loss
@@ -16,7 +16,10 @@ import sys
 import numpy as np
 import pandas as pd
 
-from run_trendae_study import TRENDAE_DATASETS, _search_csv_path
+_EXPERIMENTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _EXPERIMENTS_DIR)
+
+from run_ae_trend_study import AE_TREND_DATASETS, _search_csv_path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 pd.set_option("display.width", 140)
@@ -42,7 +45,7 @@ def section(title):
 
 
 def _resolve_datasets(dataset_arg):
-    available = list(TRENDAE_DATASETS.keys())
+    available = list(AE_TREND_DATASETS.keys())
     if dataset_arg == "all":
         return available
     return [dataset_arg]
@@ -115,7 +118,6 @@ def round_leaderboard(df, round_num, m):
             ae_variant=("ae_variant", "first"),
             latent_dim=("latent_dim_cfg", "first"),
             thetas_dim=("thetas_dim_cfg", "first"),
-            trend_thetas_dim=("trend_thetas_dim_cfg", "first"),
             active_g=("active_g", "first"),
             med_time=("training_time_seconds", "median"),
         )
@@ -163,7 +165,6 @@ def hyperparameter_marginals(df, m):
         ("ae_variant", "AE Variant"),
         ("latent_dim_cfg", "Latent Dim"),
         ("thetas_dim_cfg", "Thetas Dim"),
-        ("trend_thetas_dim_cfg", "Trend Thetas Dim"),
         ("active_g", "active_g"),
     ]:
         if col not in df.columns:
@@ -418,16 +419,16 @@ def analyze_dataset(dataset_name, csv_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="TrendAE multi-dataset analysis")
+    parser = argparse.ArgumentParser(description="AE+Trend multi-dataset analysis")
     parser.add_argument(
         "--dataset",
         default="all",
-        choices=["all", *list(TRENDAE_DATASETS.keys())],
+        choices=["all", *list(AE_TREND_DATASETS.keys())],
         help="Dataset to analyze or 'all'",
     )
     args = parser.parse_args()
 
-    print("# TrendAE Architecture Search - Multi-Dataset Analysis\n")
+    print("# AE+Trend Architecture Search - Multi-Dataset Analysis\n")
 
     requested = _resolve_datasets(args.dataset)
     analyzed = []

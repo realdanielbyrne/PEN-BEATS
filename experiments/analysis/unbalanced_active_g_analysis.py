@@ -18,8 +18,8 @@ Produces:
   8. Notable takeaways and recommendations
 
 Usage:
-    python experiments/unbalanced_active_g_analysis.py
-    python experiments/unbalanced_active_g_analysis.py > experiments/analysis_reports/unbalanced_active_g_analysis.md
+    python experiments/analysis/unbalanced_active_g_analysis.py
+    python experiments/analysis/unbalanced_active_g_analysis.py > experiments/analysis_reports/unbalanced_active_g_analysis.md
 """
 
 import io, os, sys
@@ -27,6 +27,9 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 from scipy import stats
+
+_EXPERIMENTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _EXPERIMENTS_DIR)
 
 try:
     from llm_commentary import generate_commentary
@@ -38,9 +41,8 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 pd.set_option("display.width", 140)
 pd.set_option("display.float_format", "{:.4f}".format)
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(
-    _SCRIPT_DIR, "results", "milk_convergence", "milk_convergence_results.csv"
+    _EXPERIMENTS_DIR, "results", "milk_convergence", "milk_convergence_results.csv"
 )
 
 NUM_COLS = [

@@ -17,6 +17,9 @@ import sys
 
 import pandas as pd
 
+_EXPERIMENTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _EXPERIMENTS_DIR)
+
 try:
     from llm_commentary import generate_commentary
     _LLM = True
@@ -33,9 +36,8 @@ pd.set_option("display.width", 160)
 pd.set_option("display.max_colwidth", 60)
 pd.set_option("display.float_format", "{:.4f}".format)
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BASELINE_CSV = os.path.join(_SCRIPT_DIR, "results", "m4", "block_benchmark_results.csv")
-AE_TREND_CSV = os.path.join(_SCRIPT_DIR, "results", "m4", "ae_trend_search_results.csv")
+BASELINE_CSV = os.path.join(_EXPERIMENTS_DIR, "results", "m4", "block_benchmark_results.csv")
+AE_TREND_CSV = os.path.join(_EXPERIMENTS_DIR, "results", "m4", "ae_trend_search_results.csv")
 
 BASELINES = {
     "NBEATS-I+G": {"owa": 0.8057, "smape": 13.53, "params": 35_900_000},

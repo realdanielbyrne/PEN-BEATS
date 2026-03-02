@@ -13,14 +13,17 @@ Reads experiments/results/m4/wavelet_trendae_comparison_results.csv and produces
  10. Notable takeaways and recommended configurations
 
 Usage:
-    python experiments/wavelet_trendae_comparison_analysis.py
-    python experiments/wavelet_trendae_comparison_analysis.py > experiments/analysis_reports/wavelet_trendae_comparison_analysis.md
+    python experiments/analysis/wavelet_trendae_comparison_analysis.py
+    python experiments/analysis/wavelet_trendae_comparison_analysis.py > experiments/analysis_reports/wavelet_trendae_comparison_analysis.md
 """
 
 import io, os, sys
 import numpy as np
 import pandas as pd
 from scipy import stats
+
+_EXPERIMENTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _EXPERIMENTS_DIR)
 
 try:
     from llm_commentary import generate_commentary
@@ -33,9 +36,8 @@ pd.set_option("display.width", 140)
 pd.set_option("display.max_colwidth", 55)
 pd.set_option("display.float_format", "{:.4f}".format)
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CSV_PATH = os.path.join(_SCRIPT_DIR, "results", "m4", "wavelet_trendae_comparison_results.csv")
-BASELINE_CSV = os.path.join(_SCRIPT_DIR, "results", "m4", "block_benchmark_results.csv")
+CSV_PATH = os.path.join(_EXPERIMENTS_DIR, "results", "m4", "wavelet_trendae_comparison_results.csv")
+BASELINE_CSV = os.path.join(_EXPERIMENTS_DIR, "results", "m4", "block_benchmark_results.csv")
 
 NBEATS_G_PARAMS = 24_700_000
 

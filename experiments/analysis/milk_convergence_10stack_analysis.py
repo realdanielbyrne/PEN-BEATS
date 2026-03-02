@@ -14,14 +14,17 @@ Produces:
   8. Notable takeaways
 
 Usage:
-    python experiments/milk_convergence_10stack_analysis.py
-    python experiments/milk_convergence_10stack_analysis.py > experiments/analysis_reports/milk_convergence_10stack_analysis.md
+    python experiments/analysis/milk_convergence_10stack_analysis.py
+    python experiments/analysis/milk_convergence_10stack_analysis.py > experiments/analysis_reports/milk_convergence_10stack_analysis.md
 """
 
 import io, os, sys
 import numpy as np
 import pandas as pd
 from scipy import stats
+
+_EXPERIMENTS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _EXPERIMENTS_DIR)
 
 try:
     from llm_commentary import generate_commentary
@@ -33,9 +36,8 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 pd.set_option("display.width", 140)
 pd.set_option("display.float_format", "{:.4f}".format)
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(
-    _SCRIPT_DIR, "results", "milk_convergence_10stack", "milk_convergence_10stack_results.csv"
+    _EXPERIMENTS_DIR, "results", "milk_convergence_10stack", "milk_convergence_10stack_results.csv"
 )
 
 NUM_COLS = [
