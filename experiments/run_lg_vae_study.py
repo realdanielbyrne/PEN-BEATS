@@ -49,6 +49,10 @@ Usage:
 
     # Smoke test
     python experiments/run_lg_vae_study.py --dataset m4 --round 1 --search-max-epochs 2
+
+    # Run all datasets in succession
+    python experiments/run_lg_vae_study.py --all
+    python experiments/run_lg_vae_study.py --all --round 1
 """
 
 import argparse
@@ -1002,9 +1006,13 @@ def main():
         description="LG/VAE Block Study — Successive Halving Search"
     )
     parser.add_argument(
-        "--dataset", required=True,
+        "--dataset", default=None,
         choices=list(LG_VAE_STUDY_DATASETS.keys()),
         help="Dataset to search (m4, tourism, weather, traffic)"
+    )
+    parser.add_argument(
+        "--all", dest="run_all", action="store_true",
+        help="Run against all target datasets in succession."
     )
     parser.add_argument(
         "--round", default=None,
@@ -1045,7 +1053,23 @@ def main():
     )
 
     args = parser.parse_args()
-    run_lg_vae_search(args)
+
+    if args.run_all:
+        datasets = list(LG_VAE_STUDY_DATASETS.keys())
+        print(f"Running LG/VAE study for all datasets: {datasets}")
+        for ds in datasets:
+            if _shutdown_requested:
+                print("[SHUTDOWN] Aborting --all run.")
+                break
+            print(f"\n{'='*70}")
+            print(f"Starting LG/VAE study for dataset: {ds.upper()}")
+            print(f"{'='*70}")
+            args.dataset = ds
+            run_lg_vae_search(args)
+    elif args.dataset is None:
+        parser.error("--dataset is required unless --all is specified.")
+    else:
+        run_lg_vae_search(args)
 
 
 if __name__ == "__main__":
