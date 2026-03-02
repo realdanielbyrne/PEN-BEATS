@@ -251,12 +251,25 @@ class NBeatsNet(pl.LightningModule):
               "GenericVAE", "BottleneckGenericVAE", "SeasonalityVAE",
               "AutoEncoderVAE", "TrendVAE", "GenericAEBackcastVAE",
           )
-          if stack_type in ae_latent_blocks:
+          if stack_type == "TrendWaveletAE":
+            block = b.TrendWaveletAE(
+                units, self.backcast_length, self.forecast_length,
+                trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
+                basis_offset=effective_offset,
+                share_weights=self.share_weights, activation=self.activation,
+                active_g=self.active_g, latent_dim=self.latent_dim,
+                forecast_basis_dim=self.forecast_basis_dim)
+          elif stack_type in ae_latent_blocks:
             block = getattr(b,stack_type)(
                 units, self.backcast_length, self.forecast_length, effective_td,
                 self.share_weights, self.activation, self.active_g, self.latent_dim)
           elif "Wavelet" in stack_type:
-            if "V3" in stack_type:
+            if "V3AE" in stack_type:
+              block = getattr(b, stack_type)(
+                  units, self.backcast_length, self.forecast_length, self.basis_dim,
+                  effective_offset, self.share_weights, self.activation, self.active_g,
+                  forecast_basis_dim=self.forecast_basis_dim, latent_dim=self.latent_dim)
+            elif "V3" in stack_type:
               block = getattr(b, stack_type)(
                   units, self.backcast_length, self.forecast_length, self.basis_dim,
                   effective_offset, self.share_weights, self.activation, self.active_g,

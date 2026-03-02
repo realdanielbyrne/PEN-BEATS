@@ -157,7 +157,7 @@ SEARCH_PASSES = [
 
 # Successive halving schedule (3 rounds, 3 runs each, keep top 33% / top 2 final)
 ROUND_SCHEDULE = {
-    1: {"max_epochs": 7,  "n_runs": 3, "keep_fraction": 0.33},
+    1: {"max_epochs": 10,  "n_runs": 3, "keep_fraction": 0.33},
     2: {"max_epochs": 15, "n_runs": 3, "keep_fraction": 0.33},
     3: {"max_epochs": 50, "n_runs": 3, "keep_fraction": 0.33, "top_k": 2},
 }

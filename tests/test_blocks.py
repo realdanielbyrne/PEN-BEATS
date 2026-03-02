@@ -386,6 +386,13 @@ class TestAllBlocksOutputShapes:
         "DB10WaveletV3", "DB20WaveletV3",
         "Coif1WaveletV3", "Coif2WaveletV3", "Coif3WaveletV3", "Coif10WaveletV3",
         "Symlet2WaveletV3", "Symlet3WaveletV3", "Symlet10WaveletV3", "Symlet20WaveletV3",
+        # TrendWaveletAE — merged polynomial + DWT basis (AE backbone, Option A)
+        "TrendWaveletAE",
+        # V3AE Wavelet blocks (orthonormal DWT basis, AE bottleneck backbone, Option B)
+        "HaarWaveletV3AE", "DB2WaveletV3AE", "DB3WaveletV3AE", "DB4WaveletV3AE",
+        "DB10WaveletV3AE", "DB20WaveletV3AE",
+        "Coif1WaveletV3AE", "Coif2WaveletV3AE", "Coif3WaveletV3AE", "Coif10WaveletV3AE",
+        "Symlet2WaveletV3AE", "Symlet3WaveletV3AE", "Symlet10WaveletV3AE", "Symlet20WaveletV3AE",
     ])
     def test_block_output_shape(self, block_name):
         block_class = getattr(b, block_name)
@@ -402,11 +409,21 @@ class TestAllBlocksOutputShapes:
                           "GenericAELG", "BottleneckGenericAELG", "TrendAELG",
                           "SeasonalityAELG", "AutoEncoderAELG", "GenericAEBackcastAELG",
                           "GenericVAE", "BottleneckGenericVAE", "TrendVAE",
-                          "SeasonalityVAE", "AutoEncoderVAE", "GenericAEBackcastVAE"]
+                          "SeasonalityVAE", "AutoEncoderVAE", "GenericAEBackcastVAE",
+                          # TrendWaveletAE and V3AE variants (AE backbone)
+                          "TrendWaveletAE",
+                          "HaarWaveletV3AE", "DB2WaveletV3AE", "DB3WaveletV3AE", "DB4WaveletV3AE",
+                          "DB10WaveletV3AE", "DB20WaveletV3AE",
+                          "Coif1WaveletV3AE", "Coif2WaveletV3AE", "Coif3WaveletV3AE", "Coif10WaveletV3AE",
+                          "Symlet2WaveletV3AE", "Symlet3WaveletV3AE", "Symlet10WaveletV3AE", "Symlet20WaveletV3AE"]
         if block_name in ae_root_blocks:
             kwargs["latent_dim"] = LATENT_DIM
 
-        if "Wavelet" in block_name:
+        if block_name == "TrendWaveletAE":
+            # TrendWaveletAE uses trend_dim + wavelet_dim instead of thetas_dim/basis_dim
+            kwargs["trend_dim"] = THETAS_DIM
+            kwargs["wavelet_dim"] = BASIS_DIM
+        elif "Wavelet" in block_name:
             kwargs["basis_dim"] = BASIS_DIM
         else:
             kwargs["thetas_dim"] = THETAS_DIM
@@ -416,7 +433,7 @@ class TestAllBlocksOutputShapes:
                          "GenericAEBackcastAELG", "GenericAEBackcastVAE",
                          "VAE"]:
             kwargs["share_weights"] = False
-        elif block_name in ["Trend", "TrendAE", "TrendAELG", "TrendVAE"]:
+        elif block_name in ["Trend", "TrendAE", "TrendAELG", "TrendVAE", "TrendWaveletAE"]:
             kwargs["share_weights"] = False
 
         block = block_class(**kwargs)
@@ -538,6 +555,11 @@ V3_WAVELET_BLOCKS = [
     "DB10WaveletV3", "DB20WaveletV3",
     "Coif1WaveletV3", "Coif2WaveletV3", "Coif3WaveletV3", "Coif10WaveletV3",
     "Symlet2WaveletV3", "Symlet3WaveletV3", "Symlet10WaveletV3", "Symlet20WaveletV3",
+    # V3AE variants (same orthonormal basis, AE bottleneck backbone)
+    "HaarWaveletV3AE", "DB2WaveletV3AE", "DB3WaveletV3AE", "DB4WaveletV3AE",
+    "DB10WaveletV3AE", "DB20WaveletV3AE",
+    "Coif1WaveletV3AE", "Coif2WaveletV3AE", "Coif3WaveletV3AE", "Coif10WaveletV3AE",
+    "Symlet2WaveletV3AE", "Symlet3WaveletV3AE", "Symlet10WaveletV3AE", "Symlet20WaveletV3AE",
 ]
 
 class TestWaveletV3Properties:
@@ -604,6 +626,21 @@ class TestWaveletV3Properties:
         ("sym3", "Symlet3WaveletV3"),
         ("sym10", "Symlet10WaveletV3"),
         ("sym20", "Symlet20WaveletV3"),
+        # V3AE variants (same orthonormal DWT basis, AE bottleneck backbone)
+        ("haar", "HaarWaveletV3AE"),
+        ("db2", "DB2WaveletV3AE"),
+        ("db3", "DB3WaveletV3AE"),
+        ("db4", "DB4WaveletV3AE"),
+        ("db10", "DB10WaveletV3AE"),
+        ("db20", "DB20WaveletV3AE"),
+        ("coif1", "Coif1WaveletV3AE"),
+        ("coif2", "Coif2WaveletV3AE"),
+        ("coif3", "Coif3WaveletV3AE"),
+        ("coif10", "Coif10WaveletV3AE"),
+        ("sym2", "Symlet2WaveletV3AE"),
+        ("sym3", "Symlet3WaveletV3AE"),
+        ("sym10", "Symlet10WaveletV3AE"),
+        ("sym20", "Symlet20WaveletV3AE"),
     ])
     def test_all_families_produce_full_rank(self, wavelet_type, wavelet_class):
         block_class = getattr(b, wavelet_class)

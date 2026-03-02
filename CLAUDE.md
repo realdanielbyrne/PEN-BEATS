@@ -33,7 +33,63 @@ python examples/M4AllBlks.py       # M4 dataset benchmark across all block types
 python examples/TourismAllBlks.py  # Tourism dataset benchmark
 ```
 
-The `experiments/run_experiments.py` script runs systematic benchmarks with multiple seeds across datasets:
+## YAML-driven Experiment Launcher (Recommended)
+
+`experiments/run_from_yaml.py` is the **unified experiment launcher** that standardizes the workflow across all study types. It accepts all parameters through a YAML configuration file and wraps `run_single_experiment()` from `run_unified_benchmark.py`.
+
+```bash
+# Run a pre-built config (dry-run first to check the plan)
+python experiments/run_from_yaml.py experiments/configs/nbeats_g.yaml --dry-run
+python experiments/run_from_yaml.py experiments/configs/nbeats_g.yaml
+
+# Override settings on the command line
+python experiments/run_from_yaml.py experiments/configs/nbeats_g.yaml \
+    --dataset m4 --periods Yearly --n-runs 3 --max-epochs 50
+
+# GenericAE successive halving search
+python experiments/run_from_yaml.py experiments/configs/genericae_pure.yaml
+
+# TrendAE alternating benchmark
+python experiments/run_from_yaml.py experiments/configs/trendae_ae_alternating.yaml
+
+# Analyze existing results without retraining
+python experiments/run_from_yaml.py experiments/configs/nbeats_g.yaml --analyze-only
+
+# Enable W&B logging
+python experiments/run_from_yaml.py experiments/configs/nbeats_g.yaml --wandb
+```
+
+### Example YAML configs (in `experiments/configs/`)
+
+| File | Description |
+|------|-------------|
+| `nbeats_g.yaml` | NBEATS-G — 30×Generic, two-pass (baseline + activeG_fcast), M4 all periods |
+| `nbeats_ig.yaml` | NBEATS-I+G — Trend+Seasonality+28×Generic, two-pass |
+| `genericae_pure.yaml` | GenericAE pure-stack successive halving search (40 configs, 3 rounds) |
+| `trendae_ae_alternating.yaml` | TrendAE+AE alternating patterns benchmark |
+
+### YAML schema
+
+Full documentation of all supported keys: [`experiments/configs/schema.md`](experiments/configs/schema.md)
+
+Key concepts:
+
+- **`stacks`**: Defines the stack architecture using one of: `homogeneous`, `prefix_body`, `alternating`, `concat`, `explicit`, `builtin` (references `UNIFIED_CONFIGS`), direct list, or string shorthand (`"Generic:30"`).
+- **`passes`**: Two-pass design (baseline + activeG_fcast). When absent, a single pass uses `experiment_name`.
+- **`search`**: Successive halving with `rounds` list (each with `max_epochs`, `n_runs`, `keep_fraction` / `top_k`).
+- **`extra_csv_columns`** + **`extra_fields`**: Extend the CSV schema for study-specific metadata.
+- All CLI flags override YAML values. Resumability is built-in (skips already-written CSV rows).
+
+### Replicating existing study scripts
+
+| Old script | Equivalent YAML approach |
+|-----------|--------------------------|
+| `run_unified_benchmark.py` | Use `configs: [{builtin: NBEATS-G}, ...]` + `passes:` |
+| `run_generic_ae_study.py` | See `configs/genericae_pure.yaml` |
+| `run_trendae_study.py` | See `configs/trendae_ae_alternating.yaml` |
+| Custom one-off experiment | Single top-level `stacks:` + `training:` |
+
+The `experiments/run_experiments.py` script also runs systematic benchmarks with multiple seeds across datasets:
 
 ```bash
 python experiments/run_experiments.py --dataset m4 --part 1 --periods Yearly --max-epochs 50
