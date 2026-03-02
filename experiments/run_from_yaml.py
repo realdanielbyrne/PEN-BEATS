@@ -90,6 +90,7 @@ DEFAULT_TRAINING = {
     "sum_losses": False,
     "activation": "ReLU",
     "loss": LOSS,
+    "optimizer": "Adam",          # Adam | SGD | RMSprop | Adagrad | Adadelta | AdamW
     "learning_rate": LEARNING_RATE,
     "max_epochs": MAX_EPOCHS,
     "patience": EARLY_STOPPING_PATIENCE,
@@ -110,7 +111,9 @@ DEFAULT_BLOCK_PARAMS = {
 DEFAULT_RUNS = {
     "n_runs": N_RUNS_DEFAULT,
     "base_seed": BASE_SEED,
-    "seeds": None,     # explicit list overrides n_runs + base_seed
+    "seed_mode": "sequential",  # sequential | random | fixed
+    "seed": None,               # fixed seed used when seed_mode="fixed"
+    "seeds": None,              # explicit per-run list; overrides seed_mode + base_seed
 }
 
 DEFAULT_OUTPUT = {
@@ -516,6 +519,33 @@ def _resolve_forecast_multiplier(training: dict, dataset) -> int:
     return FORECAST_MULTIPLIERS.get(_dataset_key_from_dataset(dataset), 5)
 
 
+def _compute_seed(runs_cfg: dict, run_idx: int) -> int:
+    """Compute the seed for a given run index.
+
+    Behaviour is controlled by ``runs.seed_mode`` in the YAML::
+
+        seed_mode: sequential  # seed = base_seed + run_idx  (default)
+        seed_mode: random      # new random seed per run
+        seed_mode: fixed       # every run uses the same seed (runs.seed)
+
+    An explicit ``runs.seeds`` list always takes precedence; if the list is
+    shorter than the total run count it wraps (cycles).
+    """
+    seeds_list = runs_cfg.get("seeds")
+    if seeds_list is not None:
+        return int(seeds_list[run_idx % len(seeds_list)])
+
+    seed_mode = runs_cfg.get("seed_mode", "sequential")
+    if seed_mode == "random":
+        return int(np.random.randint(0, 2 ** 31))
+    elif seed_mode == "fixed":
+        fixed = runs_cfg.get("seed")
+        return int(fixed) if fixed is not None else BASE_SEED
+    else:  # sequential (default)
+        base = int(runs_cfg.get("base_seed", BASE_SEED))
+        return base + run_idx
+
+
 # ---------------------------------------------------------------------------
 # Single Run Wrapper
 # ---------------------------------------------------------------------------
@@ -534,6 +564,7 @@ def run_single_config(
     logging_cfg: dict,
     csv_columns: list,
     round_num: int = None,
+    seed: int = None,
     dry_run: bool = False,
 ):
     """Execute one experiment (config × pass × period × run_idx).
@@ -552,7 +583,10 @@ def run_single_config(
     period : str
         Dataset period string (e.g. "Yearly", "Traffic-96").
     run_idx : int
-        Zero-based run index (seed = base_seed + run_idx).
+        Zero-based run index.
+    seed : int or None
+        Explicit RNG seed.  ``None`` defers to the ``BASE_SEED + run_idx``
+        formula inside :func:`run_single_experiment`.
     dataset
         Loaded benchmark dataset object.
     train_series_list : list
@@ -642,6 +676,10 @@ def run_single_config(
         latent_dim_override=block_params.get("latent_dim"),
         trend_thetas_dim=block_params.get("trend_thetas_dim"),
         lr_scheduler_config=lr_scheduler_cfg,
+        optimizer_name=training.get("optimizer", "Adam"),
+        learning_rate=training.get("learning_rate"),
+        loss_override=training.get("loss"),
+        seed=seed,
     )
 
 
@@ -661,9 +699,11 @@ def _run_standard(
     hardware_cfg: dict,
     logging_cfg: dict,
     csv_columns: list,
+    runs_cfg: dict = None,
     dry_run: bool = False,
 ):
     """Execute all (config × pass × run_idx) combinations for one period."""
+    runs_cfg = runs_cfg or {}
     total = len(configs) * len(passes) * n_runs
     done = 0
 
@@ -691,8 +731,10 @@ def _run_standard(
                     )
                     continue
 
+                seed = _compute_seed(runs_cfg, run_idx)
                 print(f"\n    [{done}/{total}] "
-                      f"{config_name} / {period} / run {run_idx}")
+                      f"{config_name} / {period} / run {run_idx}"
+                      f"  (seed={seed})")
 
                 run_single_config(
                     config=config,
@@ -707,6 +749,7 @@ def _run_standard(
                     hardware_cfg=hardware_cfg,
                     logging_cfg=logging_cfg,
                     csv_columns=csv_columns,
+                    seed=seed,
                     dry_run=dry_run,
                 )
 
@@ -829,6 +872,7 @@ def _run_successive_halving(
     hardware_cfg: dict,
     logging_cfg: dict,
     csv_columns: list,
+    runs_cfg: dict = None,
     dry_run: bool = False,
 ):
     """Run successive halving over the config list.
@@ -844,6 +888,7 @@ def _run_successive_halving(
         ``keep_fraction`` (float, default 0.5),
         ``top_k`` (int, optional — overrides keep_fraction for the last round).
     """
+    runs_cfg = runs_cfg or {}
     # Build lookup: config_name → config dict
     active_configs = {c["name"]: c for c in configs}
 
@@ -905,6 +950,7 @@ def _run_successive_halving(
                         logging_cfg=logging_cfg,
                         csv_columns=csv_columns,
                         round_num=round_num,
+                        seed=_compute_seed(runs_cfg, run_idx),
                         dry_run=dry_run,
                     )
 
@@ -1146,6 +1192,7 @@ def run_experiment(
                     hardware_cfg=hardware_cfg,
                     logging_cfg=logging_cfg,
                     csv_columns=csv_columns,
+                    runs_cfg=runs_cfg,
                     dry_run=dry_run,
                 )
             else:
@@ -1161,6 +1208,7 @@ def run_experiment(
                     hardware_cfg=hardware_cfg,
                     logging_cfg=logging_cfg,
                     csv_columns=csv_columns,
+                    runs_cfg=runs_cfg,
                     dry_run=dry_run,
                 )
 

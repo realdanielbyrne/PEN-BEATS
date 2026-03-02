@@ -791,6 +791,10 @@ def run_single_experiment(
     latent_dim_override=None,
     trend_thetas_dim=None,
     lr_scheduler_config=None,
+    optimizer_name="Adam",
+    learning_rate=None,      # None → uses module-level LEARNING_RATE constant
+    loss_override=None,      # None → uses module-level LOSS constant
+    seed=None,               # None → BASE_SEED + run_idx
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -801,7 +805,7 @@ def run_single_experiment(
         print(f"  {prefix}[SKIP] {config_name} / {period} / run {run_idx} -- already exists")
         return
 
-    seed = BASE_SEED + run_idx
+    seed = seed if seed is not None else (BASE_SEED + run_idx)
     set_seed(seed)
 
     forecast_length = dataset.forecast_length
@@ -831,7 +835,7 @@ def run_single_experiment(
         n_blocks_per_stack=n_blocks_per_stack,
         share_weights=share_weights,
         thetas_dim=effective_thetas_dim,
-        loss=LOSS,
+        loss=loss_override if loss_override is not None else LOSS,
         active_g=active_g,
         sum_losses=sum_losses,
         activation=activation,
@@ -841,7 +845,8 @@ def run_single_experiment(
         stack_basis_offsets=stack_basis_offsets,
         forecast_basis_dim=forecast_basis_dim,
         trend_thetas_dim=trend_thetas_dim,
-        learning_rate=LEARNING_RATE,
+        learning_rate=learning_rate if learning_rate is not None else LEARNING_RATE,
+        optimizer_name=optimizer_name,
         no_val=False,
         lr_scheduler_config=lr_scheduler_config,
     )

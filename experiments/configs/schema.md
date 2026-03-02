@@ -146,6 +146,7 @@ training:
   sum_losses: false        # true = add 0.25× backcast reconstruction loss
   activation: ReLU         # any name from constants.ACTIVATIONS
   loss: SMAPELoss          # any name from constants.LOSSES
+  optimizer: Adam          # Adam | SGD | RMSprop | Adagrad | Adadelta | AdamW
   learning_rate: 0.001
   max_epochs: 100
   patience: 10             # EarlyStopping patience
@@ -208,9 +209,28 @@ When `passes` is absent, a single pass is created whose name is `experiment_name
 
 ```yaml
 runs:
-  n_runs: 10          # Number of independent runs per (config × pass × period)
-  base_seed: 42       # Seed for run 0; run i gets seed = base_seed + i
-  seeds: null         # Explicit seed list (overrides n_runs + base_seed)
+  n_runs: 10           # Number of independent runs per (config × pass × period)
+  base_seed: 42        # Base seed for sequential mode (run i → seed = base_seed + i)
+  seed_mode: sequential  # sequential | random | fixed
+  seed: null           # Fixed seed used when seed_mode: fixed (null = 42)
+  seeds: null          # Explicit per-run seed list; wraps if shorter than n_runs
+```
+
+### Seed modes
+
+| `seed_mode` | Behaviour |
+|---|---|
+| `sequential` | `seed = base_seed + run_idx` — default, fully reproducible |
+| `random` | A fresh `numpy.random.randint` seed per run — stochastic exploration |
+| `fixed` | Every run uses the same seed (`runs.seed`, default 42) |
+
+An explicit `seeds` list always takes precedence over `seed_mode`.  
+If the list is shorter than `n_runs` it is cycled:
+
+```yaml
+runs:
+  n_runs: 5
+  seeds: [42, 137, 999]   # run 0→42, run 1→137, run 2→999, run 3→42, run 4→137
 ```
 
 ---
