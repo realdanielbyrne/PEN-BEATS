@@ -373,6 +373,14 @@ class TestAllBlocksOutputShapes:
         "GenericAEBackcast", "GenericAEBackcastAE",
         "Trend", "TrendAE", "Seasonality", "SeasonalityAE",
         "AutoEncoder", "AutoEncoderAE",
+        # VAE block (RootBlock backbone)
+        "VAE",
+        # Learned-Gate (LG) AE blocks
+        "GenericAELG", "BottleneckGenericAELG", "TrendAELG", "SeasonalityAELG",
+        "AutoEncoderAELG", "GenericAEBackcastAELG",
+        # Variational AE (VAE) blocks
+        "GenericAEVAE", "BottleneckGenericAEVAE", "TrendAEVAE", "SeasonalityAEVAE",
+        "AutoEncoderAEVAE", "GenericAEBackcastAEVAE",
         # V3 Wavelet blocks (orthonormal DWT basis)
         "HaarWaveletV3", "DB2WaveletV3", "DB3WaveletV3", "DB4WaveletV3",
         "DB10WaveletV3", "DB20WaveletV3",
@@ -390,7 +398,11 @@ class TestAllBlocksOutputShapes:
         }
 
         ae_root_blocks = ["SeasonalityAE", "GenericAEBackcastAE", "AutoEncoderAE",
-                          "GenericAE", "BottleneckGenericAE", "TrendAE"]
+                          "GenericAE", "BottleneckGenericAE", "TrendAE",
+                          "GenericAELG", "BottleneckGenericAELG", "TrendAELG",
+                          "SeasonalityAELG", "AutoEncoderAELG", "GenericAEBackcastAELG",
+                          "GenericAEVAE", "BottleneckGenericAEVAE", "TrendAEVAE",
+                          "SeasonalityAEVAE", "AutoEncoderAEVAE", "GenericAEBackcastAEVAE"]
         if block_name in ae_root_blocks:
             kwargs["latent_dim"] = LATENT_DIM
 
@@ -399,9 +411,12 @@ class TestAllBlocksOutputShapes:
         else:
             kwargs["thetas_dim"] = THETAS_DIM
 
-        if block_name in ["AutoEncoder", "AutoEncoderAE", "GenericAEBackcast", "GenericAEBackcastAE"]:
+        if block_name in ["AutoEncoder", "AutoEncoderAE", "GenericAEBackcast", "GenericAEBackcastAE",
+                         "AutoEncoderAELG", "AutoEncoderAEVAE",
+                         "GenericAEBackcastAELG", "GenericAEBackcastAEVAE",
+                         "VAE"]:
             kwargs["share_weights"] = False
-        elif block_name in ["Trend", "TrendAE"]:
+        elif block_name in ["Trend", "TrendAE", "TrendAELG", "TrendAEVAE"]:
             kwargs["share_weights"] = False
 
         block = block_class(**kwargs)
@@ -411,6 +426,109 @@ class TestAllBlocksOutputShapes:
 
         assert backcast.shape == (4, BACKCAST_LENGTH), f"{block_name} backcast shape incorrect"
         assert forecast.shape == (4, FORECAST_LENGTH), f"{block_name} forecast shape incorrect"
+
+
+# --- AERootBlockLG / AERootBlockVAE property tests ---
+
+class TestAERootBlockLGProperties:
+    """Verify learned-gate AE blocks have a latent_gate parameter."""
+
+    @pytest.mark.parametrize("block_name", [
+        "GenericAELG", "BottleneckGenericAELG", "TrendAELG",
+        "SeasonalityAELG", "AutoEncoderAELG", "GenericAEBackcastAELG",
+    ])
+    def test_has_latent_gate(self, block_name):
+        block_class = getattr(b, block_name)
+        kwargs = {"units": UNITS, "backcast_length": BACKCAST_LENGTH,
+                  "forecast_length": FORECAST_LENGTH, "thetas_dim": THETAS_DIM,
+                  "latent_dim": LATENT_DIM, "share_weights": False}
+        block = block_class(**kwargs)
+        assert hasattr(block, 'latent_gate'), f"{block_name} missing latent_gate"
+        assert block.latent_gate.shape == (LATENT_DIM,)
+        assert block.latent_gate.requires_grad
+
+
+class TestAERootBlockVAEProperties:
+    """Verify VAE blocks store kl_loss after forward pass."""
+
+    @pytest.mark.parametrize("block_name", [
+        "GenericAEVAE", "BottleneckGenericAEVAE", "TrendAEVAE",
+        "SeasonalityAEVAE", "AutoEncoderAEVAE", "GenericAEBackcastAEVAE",
+    ])
+    def test_kl_loss_stored_after_forward(self, block_name):
+        block_class = getattr(b, block_name)
+        kwargs = {"units": UNITS, "backcast_length": BACKCAST_LENGTH,
+                  "forecast_length": FORECAST_LENGTH, "thetas_dim": THETAS_DIM,
+                  "latent_dim": LATENT_DIM, "share_weights": False}
+        block = block_class(**kwargs)
+        block.train()
+        x = torch.randn(4, BACKCAST_LENGTH)
+        backcast, forecast = block(x)
+        assert hasattr(block, 'kl_loss'), f"{block_name} missing kl_loss"
+        assert isinstance(block.kl_loss, torch.Tensor)
+        assert block.kl_loss.item() >= 0, f"{block_name} kl_loss should be non-negative"
+
+    @pytest.mark.parametrize("block_name", [
+        "GenericAEVAE", "BottleneckGenericAEVAE", "TrendAEVAE",
+        "SeasonalityAEVAE", "AutoEncoderAEVAE", "GenericAEBackcastAEVAE",
+    ])
+    def test_eval_mode_uses_mu_directly(self, block_name):
+        block_class = getattr(b, block_name)
+        kwargs = {"units": UNITS, "backcast_length": BACKCAST_LENGTH,
+                  "forecast_length": FORECAST_LENGTH, "thetas_dim": THETAS_DIM,
+                  "latent_dim": LATENT_DIM, "share_weights": False}
+        block = block_class(**kwargs)
+        block.eval()
+        x = torch.randn(4, BACKCAST_LENGTH)
+        # Two eval passes should produce identical results (no stochastic sampling)
+        b1, f1 = block(x)
+        b2, f2 = block(x)
+        assert torch.allclose(b1, b2), f"{block_name} eval mode is stochastic"
+        assert torch.allclose(f1, f2), f"{block_name} eval mode is stochastic"
+
+
+class TestVAEBlockProperties:
+    """Verify the VAE block (RootBlock backbone) stores kl_loss and behaves correctly."""
+
+    def test_kl_loss_stored_after_forward(self):
+        block = b.VAE(units=UNITS, backcast_length=BACKCAST_LENGTH,
+                      forecast_length=FORECAST_LENGTH, thetas_dim=THETAS_DIM,
+                      share_weights=False)
+        block.train()
+        x = torch.randn(4, BACKCAST_LENGTH)
+        backcast, forecast = block(x)
+        assert hasattr(block, 'kl_loss'), "VAE missing kl_loss"
+        assert isinstance(block.kl_loss, torch.Tensor)
+        assert block.kl_loss.item() >= 0, "VAE kl_loss should be non-negative"
+
+    def test_eval_mode_is_deterministic(self):
+        block = b.VAE(units=UNITS, backcast_length=BACKCAST_LENGTH,
+                      forecast_length=FORECAST_LENGTH, thetas_dim=THETAS_DIM,
+                      share_weights=False)
+        block.eval()
+        x = torch.randn(4, BACKCAST_LENGTH)
+        b1, f1 = block(x)
+        b2, f2 = block(x)
+        assert torch.allclose(b1, b2), "VAE eval mode is stochastic"
+        assert torch.allclose(f1, f2), "VAE eval mode is stochastic"
+
+    def test_train_mode_is_stochastic(self):
+        block = b.VAE(units=UNITS, backcast_length=BACKCAST_LENGTH,
+                      forecast_length=FORECAST_LENGTH, thetas_dim=THETAS_DIM,
+                      share_weights=False)
+        block.train()
+        x = torch.randn(4, BACKCAST_LENGTH)
+        _, f1 = block(x)
+        _, f2 = block(x)
+        # With high probability, two stochastic passes produce different results
+        assert not torch.allclose(f1, f2, atol=1e-6), "VAE train mode should be stochastic"
+
+    def test_share_weights(self):
+        block = b.VAE(units=UNITS, backcast_length=BACKCAST_LENGTH,
+                      forecast_length=FORECAST_LENGTH, thetas_dim=THETAS_DIM,
+                      share_weights=True)
+        assert block.b_mu is block.f_mu, "share_weights should share mu heads"
+        assert block.b_logvar is block.f_logvar, "share_weights should share logvar heads"
 
 
 # --- V3 Wavelet property tests ---

@@ -57,6 +57,22 @@ BLOCKS = [
   "SeasonalityAE",
   "AutoEncoder",
   "AutoEncoderAE",
+  # VAE block (RootBlock backbone with reparameterization trick)
+  "VAE",
+  # Learned-Gate (LG) AE blocks
+  "GenericAELG",
+  "BottleneckGenericAELG",
+  "TrendAELG",
+  "SeasonalityAELG",
+  "AutoEncoderAELG",
+  "GenericAEBackcastAELG",
+  # Variational AE (VAE) blocks
+  "GenericAEVAE",
+  "BottleneckGenericAEVAE",
+  "TrendAEVAE",
+  "SeasonalityAEVAE",
+  "AutoEncoderAEVAE",
+  "GenericAEBackcastAEVAE",
   # V3 Wavelet blocks (orthonormal DWT basis)
   "HaarWaveletV3",
   "DB2WaveletV3",

@@ -224,28 +224,34 @@ class NBeatsNet(pl.LightningModule):
           # share weights across blocks
           block = blocks[-1]  
         else:           
-          if stack_type in ["Generic", "BottleneckGeneric", "GenericAE", "BottleneckGenericAE", "GenericAEBackcast", "GenericAEBackcastAE"]:
+          if stack_type in ["Generic", "BottleneckGeneric", "GenericAE", "BottleneckGenericAE", "GenericAEBackcast", "GenericAEBackcastAE",
+                           "GenericAELG", "BottleneckGenericAELG", "GenericAEBackcastAELG",
+                           "GenericAEVAE", "BottleneckGenericAEVAE", "GenericAEBackcastAEVAE"]:
             units = self.g_width
-          elif stack_type in ["Seasonality", "SeasonalityAE"]:
+          elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityAEVAE"]:
             units = self.s_width
-          elif stack_type in ["Trend", "TrendAE"]:
+          elif stack_type in ["Trend", "TrendAE", "TrendAELG", "TrendAEVAE"]:
             units = self.t_width
-          elif stack_type in ["AutoEncoder", "AutoEncoderAE"]:
+          elif stack_type in ["AutoEncoder", "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderAEVAE", "VAE"]:
             units = self.ae_width
           else:
             units = self.g_width
 
           # Use trend_thetas_dim for Trend/TrendAE when set, else global thetas_dim
-          if stack_type in ("Trend", "TrendAE"):
+          if stack_type in ("Trend", "TrendAE", "TrendAELG", "TrendAEVAE"):
             effective_td = self.trend_thetas_dim
           else:
             effective_td = self.thetas_dim
 
-          if (stack_type == "GenericAE" or
-              stack_type == "BottleneckGenericAE" or
-              stack_type == "SeasonalityAE" or
-              stack_type == "AutoEncoderAE" or
-              stack_type == "TrendAE"):
+          ae_latent_blocks = (
+              "GenericAE", "BottleneckGenericAE", "SeasonalityAE",
+              "AutoEncoderAE", "TrendAE",
+              "GenericAELG", "BottleneckGenericAELG", "SeasonalityAELG",
+              "AutoEncoderAELG", "TrendAELG", "GenericAEBackcastAELG",
+              "GenericAEVAE", "BottleneckGenericAEVAE", "SeasonalityAEVAE",
+              "AutoEncoderAEVAE", "TrendAEVAE", "GenericAEBackcastAEVAE",
+          )
+          if stack_type in ae_latent_blocks:
             block = getattr(b,stack_type)(
                 units, self.backcast_length, self.forecast_length, effective_td,
                 self.share_weights, self.activation, self.active_g, self.latent_dim)
@@ -302,10 +308,19 @@ class NBeatsNet(pl.LightningModule):
     
     # calculate loss
     loss = self.loss_fn(forecast, y)
-    
+
     if self.sum_losses:
       backcast_loss = self.loss_fn(backcast, torch.zeros_like(backcast))
       loss = loss + backcast_loss * 0.25
+
+    # Collect KL divergence loss from any VAE blocks
+    kl_loss = torch.tensor(0.0, device=x.device)
+    for stack in self.stacks:
+      for block in stack:
+        if isinstance(block, b.AERootBlockVAE) or isinstance(block, b.VAE):
+          kl_loss = kl_loss + block.kl_loss
+    if kl_loss.item() > 0:
+      loss = loss + kl_loss * 0.001
 
     self.log('train_loss', loss, prog_bar=True)
     return loss

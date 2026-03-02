@@ -67,8 +67,10 @@ Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loade
 
 - **`models.py`** — `NBeatsNet(pl.LightningModule)`: the main model class. Accepts a `stack_types` list of strings to define architecture. Handles forward pass with backward/forward residual connections, training/validation/test steps, loss configuration, and optimizer setup.
 - **`blocks/blocks.py`** — All block implementations (~1086 lines, the largest file). Two parallel inheritance hierarchies:
-  - `RootBlock(nn.Module)` — Standard backbone: 4 FC layers with activation. Parent of `Generic`, `BottleneckGeneric`, `Seasonality`, `Trend`, `AutoEncoder`, `GenericAEBackcast`, `WaveletV2`, `AltWaveletV2`, `WaveletV3`, and concrete wavelet subclasses.
+  - `RootBlock(nn.Module)` — Standard backbone: 4 FC layers with activation. Parent of `Generic`, `BottleneckGeneric`, `Seasonality`, `Trend`, `AutoEncoder`, `VAE`, `GenericAEBackcast`, `WaveletV2`, `AltWaveletV2`, `WaveletV3`, and concrete wavelet subclasses.
   - `AERootBlock(nn.Module)` — Autoencoder backbone: encoder (units → units/2 → latent_dim) then decoder (latent_dim → units/2 → units). Parent of `GenericAE`, `BottleneckGenericAE`, `TrendAE`, `SeasonalityAE`, `AutoEncoderAE`, `GenericAEBackcastAE`.
+  - `AERootBlockLG(nn.Module)` — Learned-Gate AE backbone: same encoder-decoder structure as `AERootBlock` but adds a learnable `nn.Parameter` gate vector (`latent_gate`) of size `latent_dim`. Applies `sigmoid(gate) * z` after the latent layer, allowing the network to discover effective latent dimensionality during training. Parent of `GenericAELG`, `BottleneckGenericAELG`, `TrendAELG`, `SeasonalityAELG`, `AutoEncoderAELG`, `GenericAEBackcastAELG`.
+  - `AERootBlockVAE(nn.Module)` — Variational AE backbone: replaces the deterministic bottleneck with a stochastic latent space. Uses two heads (`fc2_mu`, `fc2_logvar`) and the reparameterization trick (`z = mu + std * eps` during training, `z = mu` during eval). Stores `self.kl_loss` after each forward pass; KL loss is collected in `NBeatsNet.training_step()` and added to total loss with weight 0.001. Parent of `GenericAEVAE`, `BottleneckGenericAEVAE`, `TrendAEVAE`, `SeasonalityAEVAE`, `AutoEncoderAEVAE`, `GenericAEBackcastAEVAE`.
   - Wavelet blocks (`HaarWaveletV2`, `DB2WaveletV2`, `HaarWaveletV3`, etc.) are thin subclasses that only set the wavelet type string. `WaveletV2` uses a square basis with learned downsampling and numerical stabilization; `AltWaveletV2` uses a rectangular basis with direct output and stabilization; `WaveletV3` uses orthonormal DWT bases.
   - Basis generators (`_SeasonalityGenerator`, `_TrendGenerator`, `_WaveletGeneratorV2`, `_AltWaveletGeneratorV2`, `_WaveletGeneratorV3`) produce non-trainable basis matrices registered as buffers.
   - V1 wavelet blocks were removed due to instability (NaN failures and MASE blow-ups) documented in `NBEATS-Explorations/paper.md` Section 5.1.3. Use V2 or V3 wavelet variants.
@@ -108,7 +110,7 @@ The `create_stack` method selects hidden layer width by block type:
 
 ### Adding a New Block Type
 
-1. Create the block class in `blocks/blocks.py`, inheriting from `RootBlock` or `AERootBlock`. Must implement `forward()` returning `(backcast, forecast)`.
+1. Create the block class in `blocks/blocks.py`, inheriting from `RootBlock`, `AERootBlock`, `AERootBlockLG`, or `AERootBlockVAE`. Must implement `forward()` returning `(backcast, forecast)`.
 2. Add the class name string to the `BLOCKS` list in `constants.py`.
 3. If the block needs a new width parameter, add the mapping in `NBeatsNet.create_stack()` in `models.py`.
 4. Add a shape test in `tests/test_blocks.py` — the parametrized `TestAllBlocksOutputShapes` will automatically cover it if it's in `BLOCKS`.

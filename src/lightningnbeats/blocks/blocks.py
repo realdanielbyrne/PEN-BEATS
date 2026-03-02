@@ -115,6 +115,109 @@ class AutoEncoder(RootBlock):
 
       return b,f
 
+
+class VAE(RootBlock):
+  """Variational AutoEncoder block using the RootBlock backbone.
+
+  Alternative to the AutoEncoder block that replaces the deterministic encoder
+  bottleneck with a stochastic latent space using the reparameterization trick.
+  Each path (backcast and forecast) has its own mu/logvar heads. During training,
+  z = mu + std * eps; during eval, z = mu (deterministic). Stores self.kl_loss
+  after each forward pass for collection by the training step.
+
+  Args:
+      units (int): Width of the fully connected layers.
+      backcast_length (int): Length of the historical data.
+      forecast_length (int): Length of the forecast horizon.
+      thetas_dim (int): Latent space dimensionality for the VAE bottleneck.
+      share_weights (bool): If True, backcast and forecast encoders share parameters.
+      activation (str, optional): Activation function name. Defaults to 'ReLU'.
+      active_g (bool, optional): Apply activation to outputs. Defaults to False.
+  """
+  def __init__(self,
+                units:int,
+                backcast_length:int,
+                forecast_length:int,
+                thetas_dim:int,
+                share_weights:bool,
+                activation:str = 'ReLU',
+                active_g:bool = False):
+
+      super(VAE, self).__init__(backcast_length, units, activation)
+
+      self.units = units
+      self.thetas_dim = thetas_dim
+      self.share_weights = share_weights
+      self.activation = getattr(nn, activation)()
+      self.backcast_length = backcast_length
+      self.forecast_length = forecast_length
+      self.active_g = active_g
+
+      # VAE Encoders — mu and logvar heads instead of deterministic bottleneck
+      if share_weights:
+        self.b_mu = self.f_mu = nn.Linear(units, thetas_dim)
+        self.b_logvar = self.f_logvar = nn.Linear(units, thetas_dim)
+      else:
+        self.b_mu = nn.Linear(units, thetas_dim)
+        self.b_logvar = nn.Linear(units, thetas_dim)
+        self.f_mu = nn.Linear(units, thetas_dim)
+        self.f_logvar = nn.Linear(units, thetas_dim)
+
+      self.b_decoder = nn.Sequential(
+          nn.Linear(thetas_dim, units),
+          nn.ReLU(),
+          nn.Linear(units, backcast_length),
+      )
+      self.f_decoder = nn.Sequential(
+          nn.Linear(thetas_dim, units),
+          nn.ReLU(),
+          nn.Linear(units, forecast_length),
+      )
+
+      # KL divergence loss stored after each forward pass
+      self.kl_loss = torch.tensor(0.0)
+
+  def _reparameterize(self, mu, logvar):
+      """Reparameterization trick: z = mu + std * eps during training, z = mu during eval."""
+      if self.training:
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + std * eps
+      return mu
+
+  def _kl_divergence(self, mu, logvar, batch_size):
+      """KL divergence: -0.5 * sum(1 + logvar - mu^2 - exp(logvar)) / batch_size."""
+      return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / batch_size
+
+  def forward(self, x):
+      x = super(VAE, self).forward(x)
+      batch_size = x.shape[0]
+
+      # Backcast path
+      b_mu = self.b_mu(x)
+      b_logvar = self.b_logvar(x)
+      b_z = self._reparameterize(b_mu, b_logvar)
+      b = self.b_decoder(b_z)
+
+      # Forecast path
+      f_mu = self.f_mu(x)
+      f_logvar = self.f_logvar(x)
+      f_z = self._reparameterize(f_mu, f_logvar)
+      f = self.f_decoder(f_z)
+
+      # Store combined KL loss from both paths
+      self.kl_loss = (self._kl_divergence(b_mu, b_logvar, batch_size) +
+                      self._kl_divergence(f_mu, f_logvar, batch_size))
+
+      if self.active_g:
+        if self.active_g != 'forecast':
+          b = self.activation(b)
+        if self.active_g != 'backcast':
+          f = self.activation(f)
+
+      return b, f
+
+
 class Generic(RootBlock):
   def __init__(self,
                units:int,
@@ -457,6 +560,102 @@ class AERootBlock(nn.Module):
     x = self.activation(self.fc4(x))
     return x
 
+class AERootBlockLG(nn.Module):
+  def __init__(self, backcast_length, units, activation='ReLU', latent_dim=5):
+    """Learned-Gate AE backbone. Same encoder-decoder structure as AERootBlock
+    but adds a learnable gate vector that applies sigmoid-scaled per-dimension
+    masking at the latent bottleneck, allowing the network to discover the
+    effective latent dimensionality during training.
+
+    Args:
+        backcast_length (int): Length of the historical data.
+        units (int): Width of the fully connected layers.
+        activation (str, optional): Activation function name. Defaults to 'ReLU'.
+        latent_dim (int, optional): Maximum latent dimensionality. Defaults to 5.
+    """
+    super(AERootBlockLG, self).__init__()
+    self.units = units
+    self.backcast_length = backcast_length
+    self.latent_dim = latent_dim
+
+    if activation not in ACTIVATIONS:
+      raise ValueError(f"'{activation}' is not in {ACTIVATIONS}")
+
+    self.activation = getattr(nn, activation)()
+
+    self.fc1 = nn.Linear(backcast_length, units // 2)
+    self.fc2 = nn.Linear(units // 2, latent_dim)
+    self.fc3 = nn.Linear(latent_dim, units // 2)
+    self.fc4 = nn.Linear(units // 2, units)
+
+    # Learned gate: sigmoid(latent_gate) scales each latent dimension
+    self.latent_gate = nn.Parameter(torch.ones(latent_dim))
+
+  def forward(self, x):
+    x = squeeze_last_dim(x)
+    x = self.activation(self.fc1(x))
+    x = self.activation(self.fc2(x))
+    x = x * torch.sigmoid(self.latent_gate)
+    x = self.activation(self.fc3(x))
+    x = self.activation(self.fc4(x))
+    return x
+
+
+class AERootBlockVAE(nn.Module):
+  def __init__(self, backcast_length, units, activation='ReLU', latent_dim=5):
+    """Variational AE backbone. Replaces the deterministic bottleneck with a
+    stochastic latent space using the reparameterization trick. Produces mu and
+    log_var heads, samples z = mu + sigma * epsilon during training, and stores
+    self.kl_loss for collection by the training step.
+
+    Args:
+        backcast_length (int): Length of the historical data.
+        units (int): Width of the fully connected layers.
+        activation (str, optional): Activation function name. Defaults to 'ReLU'.
+        latent_dim (int, optional): Latent space dimensionality. Defaults to 5.
+    """
+    super(AERootBlockVAE, self).__init__()
+    self.units = units
+    self.backcast_length = backcast_length
+    self.latent_dim = latent_dim
+
+    if activation not in ACTIVATIONS:
+      raise ValueError(f"'{activation}' is not in {ACTIVATIONS}")
+
+    self.activation = getattr(nn, activation)()
+
+    self.fc1 = nn.Linear(backcast_length, units // 2)
+    self.fc2_mu = nn.Linear(units // 2, latent_dim)
+    self.fc2_logvar = nn.Linear(units // 2, latent_dim)
+    self.fc3 = nn.Linear(latent_dim, units // 2)
+    self.fc4 = nn.Linear(units // 2, units)
+
+    # KL divergence loss stored after each forward pass
+    self.kl_loss = torch.tensor(0.0)
+
+  def forward(self, x):
+    x = squeeze_last_dim(x)
+    x = self.activation(self.fc1(x))
+
+    mu = self.fc2_mu(x)
+    logvar = self.fc2_logvar(x)
+
+    # Reparameterization trick
+    if self.training:
+      std = torch.exp(0.5 * logvar)
+      eps = torch.randn_like(std)
+      z = mu + std * eps
+    else:
+      z = mu
+
+    # KL divergence: -0.5 * sum(1 + log_var - mu^2 - exp(log_var))
+    self.kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / x.shape[0]
+
+    x = self.activation(self.fc3(z))
+    x = self.activation(self.fc4(x))
+    return x
+
+
 class GenericAEBackcastAE(AERootBlock):
   def __init__(self,
                 units:int,
@@ -774,6 +973,325 @@ class SeasonalityAE(AERootBlock):
     forecast = self.forecast_g(forecast_thetas)
 
     return backcast, forecast
+
+
+# ---------------------------------------------------------------------------
+# Learned-Gate (LG) AE Subclasses — AERootBlockLG backbone
+# ---------------------------------------------------------------------------
+
+class GenericAELG(AERootBlockLG):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim=5,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(GenericAELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.backcast_length = backcast_length
+    self.forecast_length = forecast_length
+    self.active_g = active_g
+    self.theta_b_fc = nn.Linear(units, backcast_length, bias=False)
+    self.theta_f_fc = nn.Linear(units, forecast_length, bias=False)
+
+  def forward(self, x):
+    x = super(GenericAELG, self).forward(x)
+    backcast = self.theta_b_fc(x)
+    forecast = self.theta_f_fc(x)
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+    return backcast, forecast
+
+
+class BottleneckGenericAELG(AERootBlockLG):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim=5,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(BottleneckGenericAELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    if share_weights:
+      self.backcast_linear = self.forecast_linear = nn.Linear(units, thetas_dim)
+    else:
+      self.backcast_linear = nn.Linear(units, thetas_dim)
+      self.forecast_linear = nn.Linear(units, thetas_dim)
+    self.backcast_g = nn.Linear(thetas_dim, backcast_length, bias=False)
+    self.forecast_g = nn.Linear(thetas_dim, forecast_length, bias=False)
+    self.active_g = active_g
+
+  def forward(self, x):
+    x = super(BottleneckGenericAELG, self).forward(x)
+    theta_b = self.backcast_linear(x)
+    theta_f = self.forecast_linear(x)
+    backcast = self.backcast_g(theta_b)
+    forecast = self.forecast_g(theta_f)
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+    return backcast, forecast
+
+
+class TrendAELG(AERootBlockLG):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(TrendAELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    if share_weights:
+      self.backcast_linear = self.forecast_linear = nn.Linear(units, thetas_dim)
+    else:
+      self.backcast_linear = nn.Linear(units, thetas_dim)
+      self.forecast_linear = nn.Linear(units, thetas_dim)
+    self.backcast_g = _TrendGenerator(thetas_dim, backcast_length)
+    self.forecast_g = _TrendGenerator(thetas_dim, forecast_length)
+
+  def forward(self, x):
+    x = super(TrendAELG, self).forward(x)
+    backcast_thetas = self.backcast_linear(x)
+    forecast_thetas = self.forecast_linear(x)
+    backcast = self.backcast_g(backcast_thetas)
+    forecast = self.forecast_g(forecast_thetas)
+    return backcast, forecast
+
+
+class SeasonalityAELG(AERootBlockLG):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim=5,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(SeasonalityAELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.backcast_linear = nn.Linear(units, 2 * int(backcast_length / 2 - 1) + 1, bias=False)
+    self.forecast_linear = nn.Linear(units, 2 * int(forecast_length / 2 - 1) + 1, bias=False)
+    self.backcast_g = _SeasonalityGenerator(backcast_length)
+    self.forecast_g = _SeasonalityGenerator(forecast_length)
+
+  def forward(self, x):
+    x = super(SeasonalityAELG, self).forward(x)
+    backcast_thetas = self.backcast_linear(x)
+    forecast_thetas = self.forecast_linear(x)
+    backcast = self.backcast_g(backcast_thetas)
+    forecast = self.forecast_g(forecast_thetas)
+    return backcast, forecast
+
+
+class AutoEncoderAELG(AERootBlockLG):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(AutoEncoderAELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.units = units
+    self.thetas_dim = thetas_dim
+    self.share_weights = share_weights
+    self.activation = getattr(nn, activation)()
+    self.backcast_length = backcast_length
+    self.forecast_length = forecast_length
+    self.active_g = active_g
+    if share_weights:
+      self.b_encoder = self.f_encoder = nn.Sequential(
+          nn.Linear(units, thetas_dim), getattr(nn, activation)())
+    else:
+      self.b_encoder = nn.Sequential(nn.Linear(units, thetas_dim), getattr(nn, activation)())
+      self.f_encoder = nn.Sequential(nn.Linear(units, thetas_dim), getattr(nn, activation)())
+    self.b_decoder = nn.Sequential(
+        nn.Linear(thetas_dim, units), getattr(nn, activation)(), nn.Linear(units, backcast_length))
+    self.f_decoder = nn.Sequential(
+        nn.Linear(thetas_dim, units), getattr(nn, activation)(), nn.Linear(units, forecast_length))
+
+  def forward(self, x):
+    x = super(AutoEncoderAELG, self).forward(x)
+    b = self.b_encoder(x)
+    b = self.b_decoder(b)
+    f = self.f_encoder(x)
+    f = self.f_decoder(f)
+    if self.active_g:
+      if self.active_g != 'forecast':
+        b = self.activation(b)
+      if self.active_g != 'backcast':
+        f = self.activation(f)
+    return b, f
+
+
+class GenericAEBackcastAELG(AERootBlockLG):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(GenericAEBackcastAELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.units = units
+    self.thetas_dim = thetas_dim
+    self.share_weights = share_weights
+    self.activation = getattr(nn, activation)()
+    self.backcast_length = backcast_length
+    self.forecast_length = forecast_length
+    self.active_g = active_g
+    self.forecast_linear = nn.Linear(units, thetas_dim)
+    self.forecast_g = nn.Linear(thetas_dim, forecast_length, bias=False)
+    self.b_encoder = nn.Sequential(nn.Linear(units, thetas_dim), nn.ReLU())
+    self.b_decoder = nn.Sequential(
+        nn.Linear(thetas_dim, units), nn.ReLU(), nn.Linear(units, backcast_length))
+
+  def forward(self, x):
+    x = super(GenericAEBackcastAELG, self).forward(x)
+    b = self.b_encoder(x)
+    b = self.b_decoder(b)
+    theta_f = self.forecast_linear(x)
+    f = self.forecast_g(theta_f)
+    if self.active_g:
+      if self.active_g != 'forecast':
+        b = self.activation(b)
+      if self.active_g != 'backcast':
+        f = self.activation(f)
+    return b, f
+
+
+# ---------------------------------------------------------------------------
+# Variational AE (VAE) Subclasses — AERootBlockVAE backbone
+# ---------------------------------------------------------------------------
+
+class GenericAEVAE(AERootBlockVAE):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim=5,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(GenericAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.backcast_length = backcast_length
+    self.forecast_length = forecast_length
+    self.active_g = active_g
+    self.theta_b_fc = nn.Linear(units, backcast_length, bias=False)
+    self.theta_f_fc = nn.Linear(units, forecast_length, bias=False)
+
+  def forward(self, x):
+    x = super(GenericAEVAE, self).forward(x)
+    backcast = self.theta_b_fc(x)
+    forecast = self.theta_f_fc(x)
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+    return backcast, forecast
+
+
+class BottleneckGenericAEVAE(AERootBlockVAE):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim=5,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(BottleneckGenericAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    if share_weights:
+      self.backcast_linear = self.forecast_linear = nn.Linear(units, thetas_dim)
+    else:
+      self.backcast_linear = nn.Linear(units, thetas_dim)
+      self.forecast_linear = nn.Linear(units, thetas_dim)
+    self.backcast_g = nn.Linear(thetas_dim, backcast_length, bias=False)
+    self.forecast_g = nn.Linear(thetas_dim, forecast_length, bias=False)
+    self.active_g = active_g
+
+  def forward(self, x):
+    x = super(BottleneckGenericAEVAE, self).forward(x)
+    theta_b = self.backcast_linear(x)
+    theta_f = self.forecast_linear(x)
+    backcast = self.backcast_g(theta_b)
+    forecast = self.forecast_g(theta_f)
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+    return backcast, forecast
+
+
+class TrendAEVAE(AERootBlockVAE):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(TrendAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    if share_weights:
+      self.backcast_linear = self.forecast_linear = nn.Linear(units, thetas_dim)
+    else:
+      self.backcast_linear = nn.Linear(units, thetas_dim)
+      self.forecast_linear = nn.Linear(units, thetas_dim)
+    self.backcast_g = _TrendGenerator(thetas_dim, backcast_length)
+    self.forecast_g = _TrendGenerator(thetas_dim, forecast_length)
+
+  def forward(self, x):
+    x = super(TrendAEVAE, self).forward(x)
+    backcast_thetas = self.backcast_linear(x)
+    forecast_thetas = self.forecast_linear(x)
+    backcast = self.backcast_g(backcast_thetas)
+    forecast = self.forecast_g(forecast_thetas)
+    return backcast, forecast
+
+
+class SeasonalityAEVAE(AERootBlockVAE):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim=5,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(SeasonalityAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.backcast_linear = nn.Linear(units, 2 * int(backcast_length / 2 - 1) + 1, bias=False)
+    self.forecast_linear = nn.Linear(units, 2 * int(forecast_length / 2 - 1) + 1, bias=False)
+    self.backcast_g = _SeasonalityGenerator(backcast_length)
+    self.forecast_g = _SeasonalityGenerator(forecast_length)
+
+  def forward(self, x):
+    x = super(SeasonalityAEVAE, self).forward(x)
+    backcast_thetas = self.backcast_linear(x)
+    forecast_thetas = self.forecast_linear(x)
+    backcast = self.backcast_g(backcast_thetas)
+    forecast = self.forecast_g(forecast_thetas)
+    return backcast, forecast
+
+
+class AutoEncoderAEVAE(AERootBlockVAE):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(AutoEncoderAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.units = units
+    self.thetas_dim = thetas_dim
+    self.share_weights = share_weights
+    self.activation = getattr(nn, activation)()
+    self.backcast_length = backcast_length
+    self.forecast_length = forecast_length
+    self.active_g = active_g
+    if share_weights:
+      self.b_encoder = self.f_encoder = nn.Sequential(
+          nn.Linear(units, thetas_dim), getattr(nn, activation)())
+    else:
+      self.b_encoder = nn.Sequential(nn.Linear(units, thetas_dim), getattr(nn, activation)())
+      self.f_encoder = nn.Sequential(nn.Linear(units, thetas_dim), getattr(nn, activation)())
+    self.b_decoder = nn.Sequential(
+        nn.Linear(thetas_dim, units), getattr(nn, activation)(), nn.Linear(units, backcast_length))
+    self.f_decoder = nn.Sequential(
+        nn.Linear(thetas_dim, units), getattr(nn, activation)(), nn.Linear(units, forecast_length))
+
+  def forward(self, x):
+    x = super(AutoEncoderAEVAE, self).forward(x)
+    b = self.b_encoder(x)
+    b = self.b_decoder(b)
+    f = self.f_encoder(x)
+    f = self.f_decoder(f)
+    if self.active_g:
+      if self.active_g != 'forecast':
+        b = self.activation(b)
+      if self.active_g != 'backcast':
+        f = self.activation(f)
+    return b, f
+
+
+class GenericAEBackcastAEVAE(AERootBlockVAE):
+  def __init__(self, units, backcast_length, forecast_length, thetas_dim,
+               share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
+    super(GenericAEBackcastAEVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.units = units
+    self.thetas_dim = thetas_dim
+    self.share_weights = share_weights
+    self.activation = getattr(nn, activation)()
+    self.backcast_length = backcast_length
+    self.forecast_length = forecast_length
+    self.active_g = active_g
+    self.forecast_linear = nn.Linear(units, thetas_dim)
+    self.forecast_g = nn.Linear(thetas_dim, forecast_length, bias=False)
+    self.b_encoder = nn.Sequential(nn.Linear(units, thetas_dim), nn.ReLU())
+    self.b_decoder = nn.Sequential(
+        nn.Linear(thetas_dim, units), nn.ReLU(), nn.Linear(units, backcast_length))
+
+  def forward(self, x):
+    x = super(GenericAEBackcastAEVAE, self).forward(x)
+    b = self.b_encoder(x)
+    b = self.b_decoder(b)
+    theta_f = self.forecast_linear(x)
+    f = self.forecast_g(theta_f)
+    if self.active_g:
+      if self.active_g != 'forecast':
+        b = self.activation(b)
+      if self.active_g != 'backcast':
+        f = self.activation(f)
+    return b, f
+
 
 # ---------------------------------------------------------------------------
 # V3 Wavelet Blocks — Orthonormal DWT basis via impulse-response synthesis

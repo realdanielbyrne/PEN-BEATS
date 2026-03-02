@@ -46,6 +46,7 @@ python experiments/run_experiments.py --part 8 --max-epochs 100 --convergence-co
 ```
 
 Notes:
+
 - `--dataset`: `m4` (default), `traffic`, or `weather`
 - `--part 1`: Block-type benchmark (paper baselines + novel blocks at 30-stack scale)
 - `--part 2`: Ablation studies (active_g, sum_losses, activations)
@@ -75,8 +76,10 @@ Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loade
 
 - `models.py`: `NBeatsNet(pl.LightningModule)` main model. Accepts `stack_types` list of strings to define architecture. Handles forward pass with backward/forward residual connections, training/validation/test steps, loss configuration, and optimizer setup.
 - `blocks/blocks.py`: all block implementations (largest file). Two parallel inheritance hierarchies:
-  - `RootBlock(nn.Module)`: standard backbone. Parent of `Generic`, `BottleneckGeneric`, `Seasonality`, `Trend`, `AutoEncoder`, `GenericAEBackcast`, `WaveletV2`, `AltWaveletV2`, `WaveletV3`, and concrete wavelet subclasses.
+  - `RootBlock(nn.Module)`: standard backbone. Parent of `Generic`, `BottleneckGeneric`, `Seasonality`, `Trend`, `AutoEncoder`, `VAE`, `GenericAEBackcast`, `WaveletV2`, `AltWaveletV2`, `WaveletV3`, and concrete wavelet subclasses.
   - `AERootBlock(nn.Module)`: autoencoder backbone. Parent of `GenericAE`, `BottleneckGenericAE`, `TrendAE`, `SeasonalityAE`, `AutoEncoderAE`, `GenericAEBackcastAE`.
+  - `AERootBlockLG(nn.Module)`: Learned-Gate AE backbone: same encoder-decoder as `AERootBlock` but adds a learnable `nn.Parameter` gate vector (`latent_gate`) of size `latent_dim`. Applies `sigmoid(gate) * z` after the latent layer. Parent of `GenericAELG`, `BottleneckGenericAELG`, `TrendAELG`, `SeasonalityAELG`, `AutoEncoderAELG`, `GenericAEBackcastAELG`.
+  - `AERootBlockVAE(nn.Module)`: Variational AE backbone: stochastic latent space with `fc2_mu`/`fc2_logvar` heads and reparameterization trick. Stores `self.kl_loss`; collected in `training_step()` with weight 0.001. Parent of `GenericAEVAE`, `BottleneckGenericAEVAE`, `TrendAEVAE`, `SeasonalityAEVAE`, `AutoEncoderAEVAE`, `GenericAEBackcastAEVAE`.
   - Wavelet blocks (`HaarWaveletV2`, `DB2WaveletV2`, `HaarWaveletV3`, etc.) are thin subclasses that set the wavelet type string.
   - Basis generators (`_SeasonalityGenerator`, `_TrendGenerator`, `_WaveletGeneratorV2`, `_AltWaveletGeneratorV2`, `_WaveletGeneratorV3`) produce non-trainable basis matrices registered as buffers.
   - V1 wavelet blocks were removed due to instability. Use V2 or V3 wavelet variants.
@@ -115,7 +118,7 @@ Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loade
 
 ## Adding a New Block Type
 
-1. Create the block class in `src/lightningnbeats/blocks/blocks.py`, inheriting from `RootBlock` or `AERootBlock`. Implement `forward()` returning `(backcast, forecast)`.
+1. Create the block class in `src/lightningnbeats/blocks/blocks.py`, inheriting from `RootBlock`, `AERootBlock`, `AERootBlockLG`, or `AERootBlockVAE`. Implement `forward()` returning `(backcast, forecast)`.
 2. Add the class name string to the `BLOCKS` list in `src/lightningnbeats/constants.py`.
 3. If the block needs a new width parameter, add the mapping in `NBeatsNet.create_stack()` in `src/lightningnbeats/models.py`.
 4. Add a shape test in `tests/test_blocks.py`. The parametrized `TestAllBlocksOutputShapes` will cover it if it's in `BLOCKS`.
