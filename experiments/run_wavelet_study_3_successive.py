@@ -15,14 +15,16 @@ Two-pass design (runs both passes through successive halving independently):
   Pass 1 ("baseline"):      active_g=False,      sum_losses=False
   Pass 2 ("activeG_fcast"):  active_g="forecast", sum_losses=False
 
-Architecture: [Trend, <WaveletV3>] * 5  (10 stacks total)
+Architecture:
+  M4 / Tourism:             [Trend, <WaveletV3>] * 5   (10 stacks total)
+  Traffic-96 / Weather-96:  [Trend, <WaveletV3>] * 10  (20 stacks total)
 
 Successive halving (3 rounds, 3 runs each, keep top 33%):
   Round 1: 7 epochs,  3 runs/config → meta-forecaster ranking → top 33%
   Round 2: 15 epochs, 3 runs/config → median val_loss + early stopping → top 33%
   Round 3: 50 epochs, 3 runs/config → final validation → top 2
 
-Datasets: M4-Yearly (primary), Weather-96 (cross-dataset validation)
+Datasets: M4-Yearly (primary), Weather-96, Traffic-96 (cross-dataset validation)
 
 Results → experiments/results/<dataset>/wavelet_study_3_successive_results.csv
 
@@ -32,6 +34,9 @@ Usage:
 
     # Weather-96 cross-dataset validation
     python experiments/run_wavelet_study_3_successive.py --dataset weather
+
+    # Traffic-96 cross-dataset validation
+    python experiments/run_wavelet_study_3_successive.py --dataset traffic
 
     # Single round
     python experiments/run_wavelet_study_3_successive.py --dataset m4 --round 1
@@ -161,7 +166,11 @@ WAVELET_STUDY3_DATASETS = {
     "m4":      {"periods": ["Yearly"]},
     "tourism": {"periods": ["Tourism-Yearly"]},
     "weather": {"periods": ["Weather-96"]},
+    "traffic": {"periods": ["Traffic-96"]},
 }
+
+# Datasets that use 20 stacks (10 Trend+Wavelet pairs) instead of the default 10
+LARGE_STACK_DATASETS = {"traffic", "weather"}
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +249,8 @@ def generate_wavelet_study3_configs(dataset_name, period, round_num=1,
                 if promoted_configs is not None and config_name not in promoted_configs:
                     continue
 
-                stack_types = ["Trend", wavelet] * 5  # 10 stacks
+                n_stack_pairs = 10 if dataset_name in LARGE_STACK_DATASETS else 5
+                stack_types = ["Trend", wavelet] * n_stack_pairs  # 20 or 10 stacks
 
                 configs[config_name] = {
                     "category": f"wavelet_search_round{round_num}",
@@ -940,6 +950,8 @@ def run_wavelet_study3_search(args):
     print(f"  Config space: {len(full_configs)} total configs")
     print(f"  Wavelets: {len(SEARCH_WAVELETS)} families")
     print(f"  Trend thetas dims: {SEARCH_TREND_THETAS_DIMS}")
+    n_pairs = 10 if dataset_name in LARGE_STACK_DATASETS else 5
+    print(f"  Stack pairs: {n_pairs} ([Trend, WaveletV3] × {n_pairs} = {n_pairs * 2} stacks)")
     if n_gpus >= 2:
         print(f"  GPUs: {n_gpus} (parallel execution)")
     else:
@@ -1038,7 +1050,7 @@ def main():
     parser.add_argument(
         "--dataset", required=True,
         choices=list(WAVELET_STUDY3_DATASETS.keys()),
-        help="Dataset to search (m4, tourism, weather)"
+        help="Dataset to search (m4, tourism, weather, traffic)"
     )
     parser.add_argument(
         "--round", default=None,
