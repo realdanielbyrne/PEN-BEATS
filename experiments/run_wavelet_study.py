@@ -83,7 +83,7 @@ torch.set_float32_matmul_precision("medium")
 # Wavelet Study Constants
 # ---------------------------------------------------------------------------
 
-WAVELET_STUDY_N_RUNS = 5
+WAVELET_STUDY_N_RUNS = 3
 WAVELET_BASIS_DIM = 16    # narrow window — study basis_offset sensitivity
 
 RESULTS_DIR = os.path.join(_EXPERIMENTS_DIR, "results")
@@ -126,78 +126,78 @@ WAVELET_STUDY_CONFIGS = {
     # Single-band homogeneous 30-stack. Establishes which frequency window
     # is most predictive in isolation.
     # -------------------------------------------------------------------
-    "Coif2_off0": {
-        "category": "group_a",
-        "stack_types": ["Coif2WaveletV3"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
-        "basis_dim": 16,
-        "basis_offset": 0,
-        "stack_basis_offsets": None,
-    },
-    "Coif2_off8": {
-        "category": "group_a",
-        "stack_types": ["Coif2WaveletV3"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
-        "basis_dim": 16,
-        "basis_offset": 8,
-        "stack_basis_offsets": None,
-    },
-    "Coif2_off16": {
-        "category": "group_a",
-        "stack_types": ["Coif2WaveletV3"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
-        "basis_dim": 16,
-        "basis_offset": 16,
-        "stack_basis_offsets": None,
-    },
-    "Coif2_off24": {
-        "category": "group_a",
-        "stack_types": ["Coif2WaveletV3"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
-        "basis_dim": 16,
-        "basis_offset": 24,
-        "stack_basis_offsets": None,
-    },
-    "DB3_off0": {
-        "category": "group_a",
-        "stack_types": ["DB3WaveletV3"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
-        "basis_dim": 16,
-        "basis_offset": 0,
-        "stack_basis_offsets": None,
-    },
-    "DB3_off8": {
-        "category": "group_a",
-        "stack_types": ["DB3WaveletV3"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
-        "basis_dim": 16,
-        "basis_offset": 8,
-        "stack_basis_offsets": None,
-    },
-    "DB3_off16": {
-        "category": "group_a",
-        "stack_types": ["DB3WaveletV3"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
-        "basis_dim": 16,
-        "basis_offset": 16,
-        "stack_basis_offsets": None,
-    },
-    "DB3_off24": {
-        "category": "group_a",
-        "stack_types": ["DB3WaveletV3"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
-        "basis_dim": 16,
-        "basis_offset": 24,
-        "stack_basis_offsets": None,
-    },
+    # "Coif2_off0": {
+    #     "category": "group_a",
+    #     "stack_types": ["Coif2WaveletV3"] * 30,
+    #     "n_blocks_per_stack": 1,
+    #     "share_weights": True,
+    #     "basis_dim": 16,
+    #     "basis_offset": 0,
+    #     "stack_basis_offsets": None,
+    # },
+    # "Coif2_off8": {
+    #     "category": "group_a",
+    #     "stack_types": ["Coif2WaveletV3"] * 30,
+    #     "n_blocks_per_stack": 1,
+    #     "share_weights": True,
+    #     "basis_dim": 16,
+    #     "basis_offset": 8,
+    #     "stack_basis_offsets": None,
+    # },
+    # "Coif2_off16": {
+    #     "category": "group_a",
+    #     "stack_types": ["Coif2WaveletV3"] * 30,
+    #     "n_blocks_per_stack": 1,
+    #     "share_weights": True,
+    #     "basis_dim": 16,
+    #     "basis_offset": 16,
+    #     "stack_basis_offsets": None,
+    # },
+    # "Coif2_off24": {
+    #     "category": "group_a",
+    #     "stack_types": ["Coif2WaveletV3"] * 30,
+    #     "n_blocks_per_stack": 1,
+    #     "share_weights": True,
+    #     "basis_dim": 16,
+    #     "basis_offset": 24,
+    #     "stack_basis_offsets": None,
+    # },
+    # "DB3_off0": {
+    #     "category": "group_a",
+    #     "stack_types": ["DB3WaveletV3"] * 30,
+    #     "n_blocks_per_stack": 1,
+    #     "share_weights": True,
+    #     "basis_dim": 16,
+    #     "basis_offset": 0,
+    #     "stack_basis_offsets": None,
+    # },
+    # "DB3_off8": {
+    #     "category": "group_a",
+    #     "stack_types": ["DB3WaveletV3"] * 30,
+    #     "n_blocks_per_stack": 1,
+    #     "share_weights": True,
+    #     "basis_dim": 16,
+    #     "basis_offset": 8,
+    #     "stack_basis_offsets": None,
+    # },
+    # "DB3_off16": {
+    #     "category": "group_a",
+    #     "stack_types": ["DB3WaveletV3"] * 30,
+    #     "n_blocks_per_stack": 1,
+    #     "share_weights": True,
+    #     "basis_dim": 16,
+    #     "basis_offset": 16,
+    #     "stack_basis_offsets": None,
+    # },
+    # "DB3_off24": {
+    #     "category": "group_a",
+    #     "stack_types": ["DB3WaveletV3"] * 30,
+    #     "n_blocks_per_stack": 1,
+    #     "share_weights": True,
+    #     "basis_dim": 16,
+    #     "basis_offset": 24,
+    #     "stack_basis_offsets": None,
+    # },
 
     # -------------------------------------------------------------------
     # Group B — Trend + targeted frequency (4 configs)
@@ -206,7 +206,7 @@ WAVELET_STUDY_CONFIGS = {
     # -------------------------------------------------------------------
     "Trend+Coif2_LF": {
         "category": "group_b",
-        "stack_types": ["Trend", "Coif2WaveletV3"] * 15,
+        "stack_types": ["Trend", "Coif2WaveletV3"] * 10,
         "n_blocks_per_stack": 1,
         "share_weights": True,
         "basis_dim": 16,
@@ -215,7 +215,7 @@ WAVELET_STUDY_CONFIGS = {
     },
     "Trend+Coif2_MF": {
         "category": "group_b",
-        "stack_types": ["Trend", "Coif2WaveletV3"] * 15,
+        "stack_types": ["Trend", "Coif2WaveletV3"] * 10,
         "n_blocks_per_stack": 1,
         "share_weights": True,
         "basis_dim": 16,
@@ -224,7 +224,7 @@ WAVELET_STUDY_CONFIGS = {
     },
     "Trend+DB3_LF": {
         "category": "group_b",
-        "stack_types": ["Trend", "DB3WaveletV3"] * 15,
+        "stack_types": ["Trend", "DB3WaveletV3"] * 10,
         "n_blocks_per_stack": 1,
         "share_weights": True,
         "basis_dim": 16,
@@ -233,7 +233,7 @@ WAVELET_STUDY_CONFIGS = {
     },
     "Trend+DB3_MF": {
         "category": "group_b",
-        "stack_types": ["Trend", "DB3WaveletV3"] * 15,
+        "stack_types": ["Trend", "DB3WaveletV3"] * 10,
         "n_blocks_per_stack": 1,
         "share_weights": True,
         "basis_dim": 16,
@@ -241,32 +241,32 @@ WAVELET_STUDY_CONFIGS = {
         "stack_basis_offsets": None,
     },
 
-    # -------------------------------------------------------------------
-    # Group C — 3-tier hierarchical stacking (4 configs)
-    # N-HiTS-style: LF / MF / HF bands handled by successive tier groups.
-    # Variant 1 (pure): all wavelet, non-overlapping bands.
-    # Variant 2 (stable): one Trend per triplet guards against divergence.
-    # -------------------------------------------------------------------
+    # # -------------------------------------------------------------------
+    # # Group C — 3-tier hierarchical stacking (4 configs)
+    # # N-HiTS-style: LF / MF / HF bands handled by successive tier groups.
+    # # Variant 1 (pure): all wavelet, non-overlapping bands.
+    # # Variant 2 (stable): one Trend per triplet guards against divergence.
+    # # -------------------------------------------------------------------
 
-    # Pure: 30 stacks, 10 per tier
-    "Coif2_3tier_pure": {
-        "category": "group_c",
-        "stack_types": ["Coif2WaveletV3"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
-        "basis_dim": 16,
-        "basis_offset": 0,
-        "stack_basis_offsets": [0] * 10 + [16] * 10 + [32] * 10,
-    },
-    "DB3_3tier_pure": {
-        "category": "group_c",
-        "stack_types": ["DB3WaveletV3"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
-        "basis_dim": 16,
-        "basis_offset": 0,
-        "stack_basis_offsets": [0] * 10 + [16] * 10 + [32] * 10,
-    },
+    # # Pure: 30 stacks, 10 per tier
+    # "Coif2_3tier_pure": {
+    #     "category": "group_c",
+    #     "stack_types": ["Coif2WaveletV3"] * 30,
+    #     "n_blocks_per_stack": 1,
+    #     "share_weights": True,
+    #     "basis_dim": 16,
+    #     "basis_offset": 0,
+    #     "stack_basis_offsets": [0] * 10 + [16] * 10 + [32] * 10,
+    # },
+    # "DB3_3tier_pure": {
+    #     "category": "group_c",
+    #     "stack_types": ["DB3WaveletV3"] * 30,
+    #     "n_blocks_per_stack": 1,
+    #     "share_weights": True,
+    #     "basis_dim": 16,
+    #     "basis_offset": 0,
+    #     "stack_basis_offsets": [0] * 10 + [16] * 10 + [32] * 10,
+    # },
 
     # Stable: 45 stacks (3 × [Trend, Wav, Wav] × 5), Trend slots ignore offset.
     # stack_basis_offsets assigns LF to tier-1 wavelet stacks, MF to tier-2,
@@ -274,28 +274,28 @@ WAVELET_STUDY_CONFIGS = {
     "Coif2_3tier_stable": {
         "category": "group_c",
         "stack_types": (
-            ["Trend", "Coif2WaveletV3", "Coif2WaveletV3"] * 5
-            + ["Trend", "Coif2WaveletV3", "Coif2WaveletV3"] * 5
-            + ["Trend", "Coif2WaveletV3", "Coif2WaveletV3"] * 5
+            ["Trend", "Coif2WaveletV3", "Coif2WaveletV3"] * 3
+            + ["Trend", "Coif2WaveletV3", "Coif2WaveletV3"] * 3
+            + ["Trend", "Coif2WaveletV3", "Coif2WaveletV3"] * 3
         ),
         "n_blocks_per_stack": 1,
         "share_weights": True,
         "basis_dim": 16,
         "basis_offset": 0,
-        "stack_basis_offsets": [0, 0, 0] * 5 + [0, 16, 16] * 5 + [0, 32, 32] * 5,
+        "stack_basis_offsets": [0, 0, 0] * 3 + [0, 16, 16] * 3 + [0, 32, 32] * 3,
     },
     "DB3_3tier_stable": {
         "category": "group_c",
         "stack_types": (
-            ["Trend", "DB3WaveletV3", "DB3WaveletV3"] * 5
-            + ["Trend", "DB3WaveletV3", "DB3WaveletV3"] * 5
-            + ["Trend", "DB3WaveletV3", "DB3WaveletV3"] * 5
+            ["Trend", "DB3WaveletV3", "DB3WaveletV3"] * 3
+            + ["Trend", "DB3WaveletV3", "DB3WaveletV3"] * 3
+            + ["Trend", "DB3WaveletV3", "DB3WaveletV3"] * 3
         ),
         "n_blocks_per_stack": 1,
         "share_weights": True,
         "basis_dim": 16,
         "basis_offset": 0,
-        "stack_basis_offsets": [0, 0, 0] * 5 + [0, 16, 16] * 5 + [0, 32, 32] * 5,
+        "stack_basis_offsets": [0, 0, 0] * 3 + [0, 16, 16] * 3 + [0, 32, 32] * 3,
     },
 }
 

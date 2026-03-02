@@ -19,7 +19,7 @@ Successive halving (3 rounds, keep top 33%):
   Round 2: 15 epochs, 3 runs/config → early stopping + divergence → top 33%
   Round 3: 30 epochs, 3 runs/config → final validation → top 2
 
-Datasets: M4-Yearly (primary), Tourism-Yearly (validation of top configs).
+Datasets: M4-Yearly (primary), Tourism-Yearly, Weather-96.
 
 Success criteria: OWA < 0.85 on M4-Yearly with <5M parameters.
 
@@ -32,6 +32,9 @@ Usage:
 
     # Validate top configs on Tourism
     python experiments/run_trendae_study.py --dataset tourism --round 3
+
+    # Run on Weather-96
+    python experiments/run_trendae_study.py --dataset weather --round 1
 
     # Analyze results
     python experiments/run_trendae_study.py --dataset m4 --round 1 --analyze
@@ -158,6 +161,7 @@ META_CACHE_DIR = os.path.join(RESULTS_DIR, ".meta_cache")
 TRENDAE_DATASETS = {
     "m4":      {"periods": ["Yearly"]},
     "tourism": {"periods": ["Tourism-Yearly"]},
+    "weather": {"periods": ["Weather-96"]},
 }
 
 
@@ -285,7 +289,7 @@ def run_trendae_experiment(
     active_g = cfg.get("active_g", False)
     thetas_dim = cfg.get("thetas_dim", THETAS_DIM)
     latent_dim = cfg.get("latent_dim", LATENT_DIM)
-    trend_td = cfg.get("trend_thetas_dim", 5)
+    trend_td = cfg.get("trend_thetas_dim", 3)
 
     # Cosine annealing LR scheduler: hold constant for 15 epochs, then decay
     warmup_epochs = 15
@@ -880,8 +884,8 @@ def main():
     )
     parser.add_argument(
         "--dataset", required=True,
-        choices=["m4", "tourism"],
-        help="Dataset to search (m4 for M4-Yearly, tourism for Tourism-Yearly)"
+        choices=["m4", "tourism", "weather"],
+        help="Dataset to search (m4=Yearly, tourism=Tourism-Yearly, weather=Weather-96)"
     )
     parser.add_argument(
         "--round", default=None,

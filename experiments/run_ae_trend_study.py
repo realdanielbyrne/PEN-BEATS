@@ -276,7 +276,7 @@ def run_ae_trend_experiment(
     active_g = cfg.get("active_g", False)
     thetas_dim = cfg.get("thetas_dim", THETAS_DIM)
     latent_dim = cfg.get("latent_dim", LATENT_DIM)
-    trend_td = cfg.get("trend_thetas_dim", 5)
+    trend_td = cfg.get("trend_thetas_dim", 3)
 
     extra_row = {
         "search_round": round_num,

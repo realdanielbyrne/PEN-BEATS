@@ -425,7 +425,7 @@ def _run_search_round(round_num, configs, args, csv_path, dataset_name, period):
                 csv_columns=STUDY_CSV_COLUMNS,
                 thetas_dim_override=cfg["thetas_dim"],
                 latent_dim_override=cfg["latent_dim"],
-                trend_thetas_dim=cfg.get("trend_thetas_dim", 5),
+                trend_thetas_dim=cfg.get("trend_thetas_dim", 3),
                 lr_scheduler_config=scheduler_cfg,
             )
 
