@@ -382,7 +382,8 @@ def generate_search_configs(study_cfg: StudyConfig, promoted_config_names: set[s
         forecast_multiplier_override=study_cfg.training.get("forecast_multiplier"),
     )
 
-    block_type = str(study_cfg.architecture.get("block_type", "TrendWaveletAE"))
+    raw_bt = study_cfg.architecture.get("block_type", "TrendWaveletAE")
+    block_types = [raw_bt] if isinstance(raw_bt, str) else list(raw_bt)
     repeats = int(study_cfg.architecture.get("repeats", 10))
 
     wavelet_types = list(study_cfg.search_space.get("wavelet_types") or [])
@@ -391,38 +392,39 @@ def generate_search_configs(study_cfg: StudyConfig, promoted_config_names: set[s
     latent_dims = list(study_cfg.search_space.get("latent_dims") or [])
 
     configs: dict[str, dict] = {}
-    for wavelet_type in wavelet_types:
-        for bd_label in basis_labels:
-            basis_dim = compute_basis_dim(bd_label, forecast_length, backcast_length)
-            for trend_dim in trend_dims:
-                for latent_dim in latent_dims:
-                    cid = canonical_config_id(
-                        block_type,
-                        wavelet_type,
-                        bd_label,
-                        int(trend_dim),
-                        int(latent_dim),
-                    )
-                    config_name = config_name_from_canonical(cid)
+    for block_type in block_types:
+        for wavelet_type in wavelet_types:
+            for bd_label in basis_labels:
+                basis_dim = compute_basis_dim(bd_label, forecast_length, backcast_length)
+                for trend_dim in trend_dims:
+                    for latent_dim in latent_dims:
+                        cid = canonical_config_id(
+                            block_type,
+                            wavelet_type,
+                            bd_label,
+                            int(trend_dim),
+                            int(latent_dim),
+                        )
+                        config_name = config_name_from_canonical(cid)
 
-                    if promoted_config_names is not None and config_name not in promoted_config_names:
-                        continue
+                        if promoted_config_names is not None and config_name not in promoted_config_names:
+                            continue
 
-                    configs[config_name] = {
-                        "config_name": config_name,
-                        "canonical_config_id": cid,
-                        "block_type": block_type,
-                        "wavelet_type": wavelet_type,
-                        "wavelet_family": wavelet_type,
-                        "bd_label": bd_label,
-                        "basis_dim": int(basis_dim),
-                        "basis_offset": int(study_cfg.training.get("basis_offset", 0)),
-                        "trend_dim": int(trend_dim),
-                        "latent_dim": int(latent_dim),
-                        "stack_types": [block_type] * repeats,
-                        "n_blocks_per_stack": int(study_cfg.training.get("n_blocks_per_stack", 1)),
-                        "share_weights": bool(study_cfg.training.get("share_weights", True)),
-                    }
+                        configs[config_name] = {
+                            "config_name": config_name,
+                            "canonical_config_id": cid,
+                            "block_type": block_type,
+                            "wavelet_type": wavelet_type,
+                            "wavelet_family": wavelet_type,
+                            "bd_label": bd_label,
+                            "basis_dim": int(basis_dim),
+                            "basis_offset": int(study_cfg.training.get("basis_offset", 0)),
+                            "trend_dim": int(trend_dim),
+                            "latent_dim": int(latent_dim),
+                            "stack_types": [block_type] * repeats,
+                            "n_blocks_per_stack": int(study_cfg.training.get("n_blocks_per_stack", 1)),
+                            "share_weights": bool(study_cfg.training.get("share_weights", True)),
+                        }
 
     return configs
 
@@ -930,10 +932,11 @@ def run_search_mode(study_cfg: StudyConfig, cli_args) -> None:
     init_csv(search_csv, columns=SEARCH_CSV_COLUMNS)
 
     full_configs = generate_search_configs(study_cfg)
-    block_type = study_cfg.architecture.get("block_type", "TrendWaveletAE")
+    raw_bt = study_cfg.architecture.get("block_type", "TrendWaveletAE")
+    block_type_display = raw_bt if isinstance(raw_bt, str) else ", ".join(raw_bt)
     print(f"\n{'=' * 78}")
     print(f"TrendWaveletAE pure-stack search — dataset={study_cfg.dataset} period={study_cfg.period}")
-    print(f"  Block type:   {block_type}")
+    print(f"  Block type:   {block_type_display}")
     print(f"  Config space: {len(full_configs)}")
     print(f"  Stack length: {len(next(iter(full_configs.values()))['stack_types'])}")
     print(f"  Output CSV:   {search_csv}")
@@ -1038,8 +1041,8 @@ def _canonical_from_row(row: dict) -> str:
     )
 
 
-def _round3_rankings_for_dataset(search_csv: str) -> tuple[list[tuple[str, float]], dict[str, float], set[str]]:
-    rows = _rows_for_round(search_csv, round_num=3)
+def _final_round_rankings_for_dataset(search_csv: str, final_round: int = 3) -> tuple[list[tuple[str, float]], dict[str, float], set[str]]:
+    rows = _rows_for_round(search_csv, round_num=final_round)
     if not rows:
         return [], {}, set()
 
@@ -1209,10 +1212,11 @@ def run_cross_mode(study_cfgs: list[StudyConfig], cli_args) -> None:
     dataset_rankings = {}
     for dataset_name, cfg in sorted(by_dataset.items()):
         search_csv = _search_csv_path(cfg)
-        ranked, percentiles, top10 = _round3_rankings_for_dataset(search_csv)
+        final_round = len(cfg.search_rounds)
+        ranked, percentiles, top10 = _final_round_rankings_for_dataset(search_csv, final_round=final_round)
         dataset_rankings[dataset_name] = (ranked, percentiles, top10)
         print(
-            f"  {dataset_name:<8} round3 ranked={len(ranked):<4} top10={len(top10):<2} csv={search_csv}"
+            f"  {dataset_name:<8} round{final_round} ranked={len(ranked):<4} top10={len(top10):<2} csv={search_csv}"
         )
 
     global_top10 = select_global_top10(dataset_rankings)

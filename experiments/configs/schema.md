@@ -486,6 +486,62 @@ All block types supported in `stack_types` (from `constants.BLOCKS`):
 
 ---
 
+## Compact Grid Study YAML (TrendWaveletAE / TrendWaveletAELG)
+
+`experiments/run_trendwaveletae_study.py` uses a compact grid schema where
+configs are generated at runtime from a search space specification.
+
+### `block_type` — Scalar or List
+
+The `architecture.block_type` field accepts either a single string or a list
+of strings. When a list is provided, the grid is expanded across all block
+types, producing distinct configs for each:
+
+```yaml
+# Scalar (single block type, backward compatible)
+architecture:
+  block_type: TrendWaveletAE
+  repeats: 10
+
+# List (multiple block types in one study)
+architecture:
+  block_type: [TrendWaveletAE, TrendWaveletAELG]
+  repeats: 10
+```
+
+With a list, the total config count is `len(block_types) * len(wavelet_types)
+* len(basis_labels) * len(trend_dims) * len(latent_dims)`. Each config's
+canonical ID encodes the block type as the first field (e.g.,
+`TrendWaveletAE|haar|eq_fcast|td3|ld8`), so AE and AELG configs have
+distinct IDs and can coexist in the same CSV.
+
+### v2 Study Example
+
+The v2 configs (`trendwaveletae_v2_*.yaml`) use a refined search space
+based on empirical findings from the v1 study:
+
+```yaml
+architecture:
+  block_type: [TrendWaveletAE, TrendWaveletAELG]
+  repeats: 10
+
+search_space:
+  wavelet_types: [haar, db3, db20, coif2, sym10]    # 5 (one per family)
+  basis_labels: [eq_fcast, lt_fcast]                  # 2 (bcast eliminated)
+  trend_dims: [3]                                     # 1 (hardcoded winner)
+  latent_dims: [8, 12]                                # 2 (confirm + probe upward)
+
+search:
+  rounds:
+    - {max_epochs: 15, n_runs: 3, keep_fraction: 0.50}
+    - {max_epochs: 50, n_runs: 5, top_k: 10}
+```
+
+This produces 2 x 5 x 2 x 1 x 2 = **40 configs** with 2 rounds of
+successive halving (~220 runs per dataset vs ~2,133 in v1).
+
+---
+
 ## Compact Grid Study YAML (WaveletV3AE)
 
 `experiments/run_wavelet_v3ae_study.py` uses a compact grid schema where
