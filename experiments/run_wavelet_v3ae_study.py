@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import datetime as dt
 import gc
 import json
 import math
@@ -59,7 +60,7 @@ import queue
 import signal
 import sys
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import torch
@@ -161,6 +162,7 @@ class StudyConfig:
     hardware: dict
     runs: dict
     meta_forecaster: dict
+    logging: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +186,54 @@ def _load_yaml(path: str) -> dict:
     if not isinstance(cfg, dict):
         raise ValueError(f"YAML config must be a mapping: {path}")
     return cfg
+
+
+_LOGGING_CONFIGURED = False
+_LOG_PATH = None
+
+
+class _TeeStream:
+    """Write to both the original stream and a log file stream."""
+
+    def __init__(self, primary, secondary):
+        self.primary = primary
+        self.secondary = secondary
+        self.encoding = getattr(primary, "encoding", "utf-8")
+
+    def write(self, data):
+        self.primary.write(data)
+        self.secondary.write(data)
+        return len(data)
+
+    def flush(self):
+        self.primary.flush()
+        self.secondary.flush()
+
+    def isatty(self):
+        return self.primary.isatty()
+
+    def fileno(self):
+        return self.primary.fileno()
+
+
+def _configure_process_logging(log_path: str) -> None:
+    """Mirror stdout/stderr to a shared log file path."""
+    global _LOGGING_CONFIGURED, _LOG_PATH
+    if _LOGGING_CONFIGURED:
+        return
+
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    log_fh = open(log_path, "a", encoding="utf-8", buffering=1)
+    sys.stdout = _TeeStream(sys.stdout, log_fh)
+    sys.stderr = _TeeStream(sys.stderr, log_fh)
+    _LOGGING_CONFIGURED = True
+    _LOG_PATH = log_path
+
+
+def _configure_process_logging_from_env() -> None:
+    log_path = os.environ.get("WAVELET_V3AE_LOG_PATH")
+    if log_path:
+        _configure_process_logging(log_path)
 
 
 def load_study_config(path: str) -> StudyConfig:
@@ -247,6 +297,10 @@ def load_study_config(path: str) -> StudyConfig:
             "n_gpus": None,
             "batch_size": None,
         },
+        "logging": {
+            "wandb": True,
+            "wandb_project": "nbeats-lightning",
+        },
         "runs": {
             "base_seed": 42,
         },
@@ -264,6 +318,7 @@ def load_study_config(path: str) -> StudyConfig:
     search_rounds = list((_deep_merge(defaults["search"], raw.get("search") or {})).get("rounds") or [])
     output = _deep_merge(defaults["output"], raw.get("output") or {})
     hardware = _deep_merge(defaults["hardware"], raw.get("hardware") or {})
+    logging_cfg = _deep_merge(defaults["logging"], raw.get("logging") or {})
     runs = _deep_merge(defaults["runs"], raw.get("runs") or {})
     meta_forecaster = _deep_merge(defaults["meta_forecaster"], raw.get("meta_forecaster") or {})
 
@@ -281,6 +336,7 @@ def load_study_config(path: str) -> StudyConfig:
         search_rounds=search_rounds,
         output=output,
         hardware=hardware,
+        logging=logging_cfg,
         runs=runs,
         meta_forecaster=meta_forecaster,
     )
@@ -304,7 +360,7 @@ def compute_basis_dim(label: str, forecast_length: int, backcast_length: int) ->
 
 
 def wavelet_short_name(wavelet_family: str) -> str:
-    return wavelet_family.replace("WaveletV3AE", "")
+    return wavelet_family.replace("WaveletV3AELG", "").replace("WaveletV3AE", "")
 
 
 def canonical_config_id(wavelet_family: str, bd_label: str, trend_thetas_dim: int, latent_dim: int) -> str:
@@ -404,6 +460,16 @@ def resolve_lr_scheduler(lr_scheduler_cfg: dict, max_epochs: int) -> dict | None
 
 def _resolve_seed(base_seed: int, run_idx: int) -> int:
     return int(base_seed) + int(run_idx)
+
+
+def _resolve_wandb(study_cfg: StudyConfig, cli_args) -> tuple[bool, str]:
+    enabled = bool(study_cfg.logging.get("wandb", True))
+    if getattr(cli_args, "wandb", False):
+        enabled = True
+    if getattr(cli_args, "no_wandb", False):
+        enabled = False
+    project = str(getattr(cli_args, "wandb_project", None) or study_cfg.logging.get("wandb_project", "nbeats-lightning"))
+    return enabled, project
 
 
 def _search_csv_path(study_cfg: StudyConfig) -> str:
@@ -579,6 +645,8 @@ def _run_single_search_job(
     accelerator: str,
     num_workers: int,
     seed: int,
+    wandb_enabled: bool,
+    wandb_project: str,
     gpu_id: int | None = None,
 ):
     lr_scheduler_config = resolve_lr_scheduler(study_cfg.lr_scheduler, max_epochs)
@@ -618,7 +686,8 @@ def _run_single_search_job(
         accelerator_override=accelerator,
         forecast_multiplier=int(study_cfg.training.get("forecast_multiplier") or FORECAST_MULTIPLIERS[study_cfg.dataset]),
         num_workers=num_workers,
-        wandb_enabled=False,
+        wandb_enabled=wandb_enabled,
+        wandb_project=wandb_project,
         save_predictions=False,
         gpu_id=gpu_id,
         basis_dim=int(config["basis_dim"]),
@@ -671,6 +740,7 @@ def _run_search_round_sequential(
     batch_size_override = cli_args.batch_size if cli_args.batch_size is not None else study_cfg.hardware.get("batch_size")
     batch_size = get_batch_size(study_cfg.dataset, study_cfg.period, batch_size_override)
     base_seed = int(study_cfg.runs.get("base_seed", 42))
+    wandb_enabled, wandb_project = _resolve_wandb(study_cfg, cli_args)
 
     total = len(configs) * n_runs
     done = 0
@@ -706,6 +776,8 @@ def _run_search_round_sequential(
                 accelerator=accelerator,
                 num_workers=num_workers,
                 seed=seed,
+                wandb_enabled=wandb_enabled,
+                wandb_project=wandb_project,
             )
 
     gc.collect()
@@ -714,6 +786,7 @@ def _run_search_round_sequential(
 
 
 def _gpu_worker_search(gpu_id: int, job_queue, shutdown_event, worker_args: dict):
+    _configure_process_logging_from_env()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
@@ -726,6 +799,8 @@ def _gpu_worker_search(gpu_id: int, job_queue, shutdown_event, worker_args: dict
     batch_size = worker_args["batch_size"]
     num_workers = worker_args["num_workers"]
     base_seed = worker_args["base_seed"]
+    wandb_enabled = worker_args["wandb_enabled"]
+    wandb_project = worker_args["wandb_project"]
 
     dataset = load_dataset(study_cfg.dataset, study_cfg.period)
     train_series_list = dataset.get_training_series()
@@ -750,6 +825,8 @@ def _gpu_worker_search(gpu_id: int, job_queue, shutdown_event, worker_args: dict
             accelerator="cuda",
             num_workers=num_workers,
             seed=_resolve_seed(base_seed, job["run_idx"]),
+            wandb_enabled=wandb_enabled,
+            wandb_project=wandb_project,
             gpu_id=gpu_id,
         )
 
@@ -770,6 +847,7 @@ def _run_search_round_parallel(
     batch_size_override = cli_args.batch_size if cli_args.batch_size is not None else study_cfg.hardware.get("batch_size")
     batch_size = get_batch_size(study_cfg.dataset, study_cfg.period, batch_size_override)
     base_seed = int(study_cfg.runs.get("base_seed", 42))
+    wandb_enabled, wandb_project = _resolve_wandb(study_cfg, cli_args)
 
     jobs = []
     for config in configs.values():
@@ -803,6 +881,8 @@ def _run_search_round_parallel(
         "batch_size": batch_size,
         "num_workers": num_workers,
         "base_seed": base_seed,
+        "wandb_enabled": wandb_enabled,
+        "wandb_project": wandb_project,
     }
 
     workers = []
@@ -900,7 +980,7 @@ def run_search_mode(study_cfg: StudyConfig, cli_args) -> None:
                     )
             configs = generate_search_configs(study_cfg, promoted_config_names=set(promoted))
 
-        if cli_args.analyze:
+        if getattr(cli_args, "analyze", False):
             print(f"  [ANALYZE] skipping run for round {round_num}")
         else:
             if n_gpus >= 2:
@@ -1041,6 +1121,8 @@ def _run_single_cross_job(
     seed: int,
     max_epochs: int,
     patience: int,
+    wandb_enabled: bool,
+    wandb_project: str,
     gpu_id: int | None = None,
 ):
     parsed = _parse_canonical(candidate["canonical_config_id"])
@@ -1094,7 +1176,8 @@ def _run_single_cross_job(
         accelerator_override=accelerator,
         forecast_multiplier=int(dataset_cfg.training.get("forecast_multiplier") or FORECAST_MULTIPLIERS[dataset_cfg.dataset]),
         num_workers=num_workers,
-        wandb_enabled=False,
+        wandb_enabled=wandb_enabled,
+        wandb_project=wandb_project,
         save_predictions=False,
         gpu_id=gpu_id,
         basis_dim=int(basis_dim),
@@ -1161,6 +1244,7 @@ def run_cross_mode(study_cfgs: list[StudyConfig], cli_args) -> None:
         batch_size_override = cli_args.batch_size if cli_args.batch_size is not None else cfg.hardware.get("batch_size")
         batch_size = get_batch_size(cfg.dataset, cfg.period, batch_size_override)
         base_seed = int(cfg.runs.get("base_seed", 42))
+        wandb_enabled, wandb_project = _resolve_wandb(cfg, cli_args)
 
         print(f"\n  Dataset={dataset_name} period={cfg.period}")
         for candidate in global_top10:
@@ -1191,6 +1275,8 @@ def run_cross_mode(study_cfgs: list[StudyConfig], cli_args) -> None:
                     seed=_resolve_seed(base_seed, run_idx),
                     max_epochs=max_epochs,
                     patience=patience,
+                    wandb_enabled=wandb_enabled,
+                    wandb_project=wandb_project,
                 )
 
             # Keep linter from considering parsed unused if optimizations change.
@@ -1231,12 +1317,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--n-gpus", type=int, default=None)
     p_search.add_argument("--batch-size", type=int, default=None)
     p_search.add_argument("--num-workers", type=int, default=None)
+    p_search.add_argument("--wandb", action="store_true", help="Force-enable W&B logging")
+    p_search.add_argument("--no-wandb", action="store_true", help="Disable W&B logging")
+    p_search.add_argument("--wandb-project", default=None, help="Override W&B project name")
+    p_search.add_argument("--log-path", default=None, help="Optional explicit log file path (default: /tmp/*.log)")
+    p_search.add_argument("--no-tmp-log", action="store_true", help="Disable auto /tmp log teeing")
 
     p_cross = sub.add_parser("cross", help="Run cross-dataset benchmark from 4 dataset configs")
     p_cross.add_argument("--configs", nargs="+", required=True, help="List of dataset YAML configs")
     p_cross.add_argument("--accelerator", default=None, choices=["auto", "cuda", "mps", "cpu"])
     p_cross.add_argument("--batch-size", type=int, default=None)
     p_cross.add_argument("--num-workers", type=int, default=None)
+    p_cross.add_argument("--wandb", action="store_true", help="Force-enable W&B logging")
+    p_cross.add_argument("--no-wandb", action="store_true", help="Disable W&B logging")
+    p_cross.add_argument("--wandb-project", default=None, help="Override W&B project name")
+    p_cross.add_argument("--log-path", default=None, help="Optional explicit log file path (default: /tmp/*.log)")
+    p_cross.add_argument("--no-tmp-log", action="store_true", help="Disable auto /tmp log teeing")
 
     p_all = sub.add_parser("all", help="Run search for all configs then run cross benchmark")
     p_all.add_argument("--configs", nargs="+", required=True, help="List of dataset YAML configs")
@@ -1245,6 +1341,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_all.add_argument("--n-gpus", type=int, default=None)
     p_all.add_argument("--batch-size", type=int, default=None)
     p_all.add_argument("--num-workers", type=int, default=None)
+    p_all.add_argument("--wandb", action="store_true", help="Force-enable W&B logging")
+    p_all.add_argument("--no-wandb", action="store_true", help="Disable W&B logging")
+    p_all.add_argument("--wandb-project", default=None, help="Override W&B project name")
+    p_all.add_argument("--log-path", default=None, help="Optional explicit log file path (default: /tmp/*.log)")
+    p_all.add_argument("--no-tmp-log", action="store_true", help="Disable auto /tmp log teeing")
 
     return parser
 
@@ -1252,6 +1353,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
+
+    if not getattr(args, "no_tmp_log", False):
+        log_path = args.log_path
+        if not log_path:
+            ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_path = f"/tmp/wavelet_v3ae_study_{ts}_{os.getpid()}.log"
+        _configure_process_logging(log_path)
+        os.environ["WAVELET_V3AE_LOG_PATH"] = log_path
+        print(f"[LOG] Writing mirrored run logs to: {log_path}")
 
     if args.mode == "search":
         cfg = load_study_config(args.config)
