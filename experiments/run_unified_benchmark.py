@@ -935,7 +935,7 @@ def run_single_experiment(
         logger=exp_loggers,
         enable_progress_bar=True,
         deterministic=False,
-        log_every_n_steps=10,
+        log_every_n_steps=1,
     )
 
     # Train

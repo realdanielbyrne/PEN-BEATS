@@ -39,7 +39,7 @@ search_space:
     - sym20
   basis_labels: [eq_fcast, lt_fcast, eq_bcast, lt_bcast]
   trend_dims: [3, 5]
-  latent_dims: [2, 5, 8]
+  latent_dims: [8]
 
 search:
   rounds:
