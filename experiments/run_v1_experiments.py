@@ -9,8 +9,8 @@ Part 1: Block-type benchmark — Paper baselines (N-BEATS-G, N-BEATS-I, N-BEATS-
 Part 2: Ablation studies on 30-stack Generic — active_g, sum_losses, activations.
 Part 3: Multi-horizon ensemble — Train G, I, I+G at backcast lengths 2H-7H and
         take median forecast across all models (paper's ensemble strategy).
-Part 4: Wavelet V2 benchmark — Numerically stabilized wavelet blocks with spectral
-        normalization, LayerNorm, Xavier init, and output clamping.
+Part 4: Wavelet V2 benchmark (deprecated) — V2/AltV2 blocks were removed from runtime
+        due to instability; historical CSV results are retained for reference.
 Part 5: Wavelet V3 benchmark — Orthonormal DWT basis via impulse-response synthesis
         + SVD orthogonalization (condition number = 1.0).
 Part 6: Convergence study — Multi-dataset (Tourism-Yearly, M4-Yearly, M4-Weekly),
@@ -29,7 +29,6 @@ Usage:
     python experiments/run_experiments.py --dataset m4 --part all
     python experiments/run_experiments.py --dataset m4 --part 2 --periods Yearly Monthly --max-epochs 100
     python experiments/run_experiments.py --dataset m4 --part 3 --periods Yearly --max-epochs 100
-    python experiments/run_experiments.py --dataset m4 --part 4 --periods Yearly --max-epochs 100
     python experiments/run_experiments.py --dataset m4 --part 5 --periods Yearly --max-epochs 100
     python experiments/run_experiments.py --part 6 --max-epochs 100
     python experiments/run_experiments.py --dataset m4 --part 7 --periods Yearly --max-epochs 100
@@ -233,51 +232,55 @@ MIXED_STACK_CONFIGS = {
 }
 
 # ---------------------------------------------------------------------------
-# Wavelet V2 Benchmark Configs (Part 4) — Numerically stabilized wavelets
+# Removed Wavelet V2 Configs (Part 4) — kept for historical reference only
 # ---------------------------------------------------------------------------
 
-WAVELET_V2_CONFIGS = {
-    # ===== Homogeneous 30-stack (direct comparison with Part 1 wavelet results) =====
+WAVELET_V2_REMOVAL_NOTE = (
+    "WaveletV2/AltWaveletV2 blocks were removed because they were not stable in training. "
+    "Historical benchmark outputs are preserved in experiments/results/*/wavelet_v2_benchmark_results.csv."
+)
+
+REMOVED_WAVELET_V2_CONFIGS = {
+    # NOTE: Historical-only configs; these cannot run because V2 block classes were removed.
     "HaarWaveletV2": {
         "stack_types": ["HaarWaveletV2"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
+        "status": "removed_unstable",
+        "note": WAVELET_V2_REMOVAL_NOTE,
     },
     "DB3WaveletV2": {
         "stack_types": ["DB3WaveletV2"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
+        "status": "removed_unstable",
+        "note": WAVELET_V2_REMOVAL_NOTE,
     },
     "DB3AltWaveletV2": {
         "stack_types": ["DB3AltWaveletV2"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
+        "status": "removed_unstable",
+        "note": WAVELET_V2_REMOVAL_NOTE,
     },
     "Coif2WaveletV2": {
         "stack_types": ["Coif2WaveletV2"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
+        "status": "removed_unstable",
+        "note": WAVELET_V2_REMOVAL_NOTE,
     },
     "Symlet3WaveletV2": {
         "stack_types": ["Symlet3WaveletV2"] * 30,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
+        "status": "removed_unstable",
+        "note": WAVELET_V2_REMOVAL_NOTE,
     },
-    # ===== Mixed Stacks (30 total — direct comparison with Part 1 mixed results) =====
     "Trend+HaarWaveletV2": {
         "stack_types": ["Trend", "HaarWaveletV2"] * 15,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
+        "status": "removed_unstable",
+        "note": WAVELET_V2_REMOVAL_NOTE,
     },
     "Trend+DB3WaveletV2": {
         "stack_types": ["Trend", "DB3WaveletV2"] * 15,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
+        "status": "removed_unstable",
+        "note": WAVELET_V2_REMOVAL_NOTE,
     },
     "Generic+DB3WaveletV2": {
         "stack_types": ["Generic", "DB3WaveletV2"] * 15,
-        "n_blocks_per_stack": 1,
-        "share_weights": True,
+        "status": "removed_unstable",
+        "note": WAVELET_V2_REMOVAL_NOTE,
     },
 }
 
@@ -981,44 +984,17 @@ def run_block_benchmark(dataset_name, periods, max_epochs, batch_size, accelerat
 
 def run_wavelet_v2_benchmark(dataset_name, periods, max_epochs, batch_size, accelerator_override, num_workers=0,
                              wandb_enabled=False, wandb_project="nbeats-lightning"):
-    """Part 4: Numerically stabilized wavelet V2 benchmark."""
-    results_dir = os.path.join(RESULTS_DIR, dataset_name)
-    csv_path = os.path.join(results_dir, "wavelet_v2_benchmark_results.csv")
-    init_csv(csv_path)
-    fm = get_forecast_multiplier(dataset_name)
-
-    for period in periods:
-        print(f"\n{'='*60}")
-        print(f"Wavelet V2 Benchmark — {period}")
-        print(f"{'='*60}")
-
-        dataset = load_dataset(dataset_name, period)
-        train_series_list = dataset.get_training_series()
-
-        for config_name, cfg in WAVELET_V2_CONFIGS.items():
-            for run_idx in range(N_RUNS):
-                run_single_experiment(
-                    experiment_name="wavelet_v2_benchmark",
-                    config_name=config_name,
-                    stack_types=cfg["stack_types"],
-                    period=period,
-                    run_idx=run_idx,
-                    dataset=dataset,
-                    train_series_list=train_series_list,
-                    csv_path=csv_path,
-                    n_blocks_per_stack=cfg["n_blocks_per_stack"],
-                    share_weights=cfg["share_weights"],
-                    active_g=False,
-                    sum_losses=False,
-                    activation="ReLU",
-                    max_epochs=max_epochs,
-                    batch_size=batch_size,
-                    accelerator_override=accelerator_override,
-                    forecast_multiplier=fm,
-                    num_workers=num_workers,
-                    wandb_enabled=wandb_enabled,
-                    wandb_project=wandb_project,
-                )
+    """Part 4 is deprecated: V2 blocks were removed due to instability."""
+    del periods, max_epochs, batch_size, accelerator_override, num_workers, wandb_enabled, wandb_project
+    historical_csv = os.path.join(RESULTS_DIR, dataset_name, "wavelet_v2_benchmark_results.csv")
+    print(f"\n{'='*60}")
+    print("Wavelet V2 Benchmark — REMOVED")
+    print(f"{'='*60}")
+    print(WAVELET_V2_REMOVAL_NOTE)
+    print(f"Historical results path: {historical_csv}")
+    print("Removed V2 configs kept in this script for reference:")
+    for config_name in REMOVED_WAVELET_V2_CONFIGS:
+        print(f"  - {config_name}")
 
 
 def run_wavelet_v3_benchmark(dataset_name, periods, max_epochs, batch_size, accelerator_override, num_workers=0,
@@ -2217,7 +2193,7 @@ def main():
     parser.add_argument(
         "--part", choices=["1", "2", "3", "4", "5", "6", "7", "8", "all"], default="all",
         help=("Which experiments to run: 1=block benchmark, 2=ablation, "
-              "3=multi-horizon ensemble, 4=wavelet V2 benchmark, "
+              "3=multi-horizon ensemble, 4=wavelet V2 benchmark (removed/deprecated), "
               "5=wavelet V3 benchmark, 6=convergence study (multi-dataset), "
               "7=mixed stack benchmark+ensemble, "
               "8=sum_losses convergence study (multi-dataset), "
@@ -2325,9 +2301,8 @@ def main():
               f"({len(ENSEMBLE_CONFIGS)} configs x {len(FORECAST_MULTIPLIERS)} multipliers "
               f"x {len(periods)} periods x {N_RUNS} runs)")
     if args.part == "4":
-        n_wavelet_v2_runs = len(WAVELET_V2_CONFIGS) * len(periods) * N_RUNS
-        print(f"Part 4 — Wavelet V2 benchmark: {n_wavelet_v2_runs} runs "
-              f"({len(WAVELET_V2_CONFIGS)} configs x {len(periods)} periods x {N_RUNS} runs)")
+        print("Part 4 — Wavelet V2 benchmark: REMOVED (unstable V2 blocks).")
+        print(f"Reference configs retained in script: {len(REMOVED_WAVELET_V2_CONFIGS)}")
     if args.part == "5":
         n_wavelet_v3_runs = (len(WAVELET_V3_CONFIGS) + len(V3_ABLATION_CONFIGS)) * len(periods) * N_RUNS
         print(f"Part 5 — Wavelet V3 benchmark: {n_wavelet_v3_runs} runs "
@@ -2414,6 +2389,7 @@ def main():
         print(f"  {os.path.join(results_dir, 'ensemble_summary_results.csv')}")
     if args.part == "4":
         print(f"  {os.path.join(results_dir, 'wavelet_v2_benchmark_results.csv')}")
+        print("  NOTE: V2 blocks were removed due to instability; this file is historical only.")
     if args.part == "5":
         print(f"  {os.path.join(results_dir, 'wavelet_v3_benchmark_results.csv')}")
     if args.part == "6":

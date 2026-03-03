@@ -10,14 +10,26 @@ Oreshkin et al. (2019) answered this question with N-BEATS, a fully deep learnin
 
 This observation motivates the present work: if polynomial and Fourier bases can achieve state-of-the-art results when embedded within the N-BEATS doubly residual framework, what happens when we substitute alternative basis expansions? This repository provides a systematic exploration of alternative block types including:
 
-- **Wavelet basis blocks** (Haar, Daubechies, Coiflets, Symlets) offering multi-resolution time-frequency localization
+- **Wavelet basis expansion blocks** (V3 variants: Haar, Daubechies, Coiflets, Symlets) offering multi-resolution time-frequency localization
 - **Autoencoder blocks** with separated encoder-decoder paths for data-driven compressed representations
-- **Bottleneck generic blocks** with rank-d factorized projections for parameter-efficient basis expansion
-- **AE-backbone variants** of all original block types, replacing the uniform FC-layer backbone with a hourglass encoder-decoder structure that achieves 5-10x parameter reduction
+- **Bottleneck generic blocks** with rank-*d* factorized projections for parameter-efficient basis expansion
+- **AE-backbone variants** (`AERootBlock`, `AERootBlockLG`, `AERootBlockVAE`) replacing the uniform FC-layer backbone with a hourglass encoder-decoder structure that achieves 5–10× parameter reduction
+- **Learned-gate autoencoder blocks** (AELG variants) with an adaptive sigmoid-gated latent bottleneck that learns to selectively suppress or amplify compressed representations
 
-Preliminary results across three M4 periods suggest that among healthy, converging configurations, **block type does not produce statistically significant differences in OWA forecasting accuracy** (Kruskal-Wallis p > 0.09 across all periods tested). Configuration rankings are inconsistent across periods (Spearman rho near zero). This suggests that the doubly residual stacking framework itself -- rather than the specific basis expansion within each block -- is the primary driver of forecasting accuracy. However, block type *does* significantly affect parameter count (5-10x variation), training stability (0-100% convergence rate for wavelets), and convergence speed. The practical recommendation is to choose blocks based on deployment constraints rather than chasing marginal OWA differences.
+A **key finding** from systematic benchmarks is that the original N-BEATS architecture (Oreshkin et al., 2019) was **significantly over-parameterized**. Our novel AE-backbone block types achieve 60–95% parameter reductions compared to the paper's NBEATS-G baseline (24.7M parameters) while matching or improving forecasting accuracy (see [Section 4.1 Table 2 of the research paper](NBEATS-Explorations/paper.md)):
 
-A **convergence study** (Part 6) across M4-Yearly and Weather-96 with 50 random seeds per configuration reveals that `active_g` eliminates catastrophic initialization sensitivity on M4-Yearly (reducing sMAPE coefficient of variation from 31.4% to 0.9%), while `sum_losses` improves mean accuracy but can cause scale-dependent instability on certain datasets. The recommendation is to enable `active_g` by default for robust convergence.
+| Configuration | Parameters | Reduction vs NBEATS-G | M4-Yearly OWA |
+|---|---|---|---|
+| NBEATS-G (paper baseline) | 24.7M | — | 0.820 |
+| GenericAE | 4.8M | **81%** | **0.808** |
+| BottleneckGenericAE | 4.3M | **83%** | **0.806** |
+| NBEATS-I-AE (TrendAE + SeasonalityAE) | 2.2M | **91%** | **0.805** |
+
+These AE-backbone variants match or outperform the 24.7M-parameter NBEATS-G baseline while using a fraction of the parameters, with direct implications for deployment in memory- or latency-constrained environments.
+
+Among healthy, converging configurations, **block type does not produce statistically significant differences in OWA forecasting accuracy** (Kruskal-Wallis p > 0.09 across all periods tested). Configuration rankings are inconsistent across periods (Spearman rho near zero), confirming that the doubly residual stacking framework itself — rather than the specific basis expansion — is the primary driver of accuracy. Block type *does* significantly affect parameter count (5–10× variation), training stability (0–100% convergence rate for wavelets), and convergence speed, making deployment constraints the practical basis for block selection.
+
+A **convergence study** (Part 6) across M4-Yearly and Weather-96 with 50 random seeds per configuration reveals that `active_g` eliminates catastrophic initialization sensitivity on M4-Yearly (reducing sMAPE coefficient of variation from 31.4% to 0.9%). The recommended default is `active_g='forecast'` (forecast-path activation only), which achieves 100% convergence reliability while recovering significant expressiveness compared to full `active_g=True`.
 
 See [NBEATS-Explorations/paper.md](NBEATS-Explorations/paper.md) for the full research paper.
 
@@ -133,30 +145,6 @@ Define the model by defining the architecture in the `stack_types` parameter.  T
 - SeasonalityAE
 - AutoEncoder
 - AutoEncoderAE
-- HaarWaveletV2
-- HaarAltWaveletV2
-- DB2WaveletV2
-- DB2AltWaveletV2
-- DB3WaveletV2
-- DB3AltWaveletV2
-- DB4WaveletV2
-- DB4AltWaveletV2
-- DB10WaveletV2
-- DB10AltWaveletV2
-- DB20AltWaveletV2
-- Coif1WaveletV2
-- Coif1AltWaveletV2
-- Coif2WaveletV2
-- Coif2AltWaveletV2
-- Coif3WaveletV2
-- Coif3AltWaveletV2
-- Coif10WaveletV2
-- Coif10AltWaveletV2
-- Symlet2WaveletV2
-- Symlet2AltWaveletV2
-- Symlet3WaveletV2
-- Symlet10WaveletV2
-- Symlet20WaveletV2
 - HaarWaveletV3
 - DB2WaveletV3
 - DB3WaveletV3
@@ -171,6 +159,8 @@ Define the model by defining the architecture in the `stack_types` parameter.  T
 - Symlet3WaveletV3
 - Symlet10WaveletV3
 - Symlet20WaveletV3
+
+Note: `WaveletV2`/`AltWaveletV2` block families were removed due to instability. Historical experiment results are retained under `experiments/results/` for reference.
 
 This implementation extends the design original paper with several additional block types and by allowing any combination blocks in any order simply by specifying the block types in the stack_types parameter.
 
@@ -308,17 +298,27 @@ pytest tests/test_blocks.py  # run a specific test file
 
 This repository provides an implementation of N-BEATS that has been extended to include extended features which can be used to augment the basic design with more advanced features.
 
-### ActiveG
+### Active G (`active_g`)
 
-This parameter when enabled applies the model's activation function to the linear funtions (gb and gf) which are found by the network in the last layer of each block using the functions' parameters found in the preceding layer. The parameter `active_g` is not a feature found in the original N-Beats paper.
+When enabled, `active_g` applies the block's activation function (default: ReLU) to the basis expansion outputs after the final linear layer of each block — i.e., to `g^b(θ^b)` and `g^f(θ^f)`. This parameter is not in the original N-BEATS paper.
 
-You can enable this feature by setting `active_g` to `True`.  Enabling this activation function helps the Generic model converge.  Generally this results in a comparably accurate model in fewer training cycles.
+The parameter supports four modes:
 
-Also, Generic models as defined in the original paper have a tendency to not converge.  This is likely due to the sucessive linear layers without activation functions in the final two layers of a standard Generic block. The fix or this would typically be to retrain, or add or remove a stack or a layer. However, enabling this parameter usualy fixes the problem without the need to modify any parameters or to adjust the chosen architecture.
+- `active_g=False` — paper-faithful, no post-expansion activation (default)
+- `active_g=True` — activation on both backcast and forecast paths
+- `active_g='forecast'` — activation on forecast path only (**recommended for production**)
+- `active_g='backcast'` — activation on backcast path only (not recommended)
 
-The intuition behind the inclusion of this parameter is that the Generic model as originally designed connects two layers of Linear fully conected layers, the first is ostensibly designed to find the parameters of an expansion polynomial function and the second to find the functions that best fit the forecast and backcast outputs of the block using the parameters found in the prior layer. However, linear layers without activations are not able to learn non-linear functions.  This parameter allows the model to learn non-linear functions by applying the activation function to the linear functions found by the model in the last layer of each block.
+**Convergence study findings** (50–200 random seeds per configuration across M4-Yearly, Tourism-Yearly, Weather-96, and Milk datasets):
 
-This modification to the original specification is however consistent with the original design.  Take for instance the Interpretable arcitecture as defined in the original paper.  The basis functions used in the Trend, Seasonality, and (in this version) the Wavlet blocks are by their nature non-linear functions. In the original design then, leaving activation funcitons off of the final two layers as depicted in the paper, is actually inconsistent with the Interpretible architecture. Therefore, this feature modifies the Generic model to be more similar in structure to the other basis function blocks.
+- **Baseline** (`active_g=False`): best per-seed accuracy, but 7–30% of seeds fail catastrophically on M4-Yearly (sMAPE coefficient of variation: 31.4%). When seeds converge they produce the most accurate models.
+- **Balanced** (`active_g=True`): eliminates convergence failures (100% success rate); sMAPE CV drops to 0.9% on M4-Yearly. Accuracy cost: ~1% on large multi-series benchmarks, up to 76% on small univariate datasets.
+- **Forecast-only** (`active_g='forecast'`): matches the 100% convergence rate of balanced activation while recovering ~13% of the expressiveness gap. **This is the recommended default** for single-run production deployments. It also trains fastest (7.5s vs 9.5s on the Milk benchmark).
+- **Backcast-only** (`active_g='backcast'`): worst mode — reduces convergence rate *below* the unconstrained baseline (63% vs 70%) while constraining expressiveness. Avoid this mode.
+
+The core intuition: ReLU on forecast outputs prevents catastrophic cancellation in the forecast accumulation sum (∑ ŷ_ℓ), smoothing the loss landscape. ReLU on backcast outputs forces monotonically decreasing residuals — removing the ability to produce negative corrective backcasts — which destabilizes the doubly residual decomposition chain. Forecast-only activation captures the stability benefit while preserving residual expressiveness.
+
+On large multi-series benchmarks, the ~1% accuracy gap from `active_g='forecast'` is smaller than the ~3% gain from median ensembling across seeds, making it a net positive in production pipelines. On small univariate datasets, prefer `active_g=False` with multiple seeds and best-run selection.
 
 ### BottleneckGeneric Block
 
@@ -338,41 +338,17 @@ This repository contains a number of experimental Wavelet Basis Expansion Blocks
 
 This method is particularly useful for analyzing functions or signals that contain features at multiple scales.  The multi-resolution analysis capability of wavelets is particularly suited to capturing the essence of time series data then, which can have complex, hierarchical structures due to the presence of trends, seasonal effects, cycles, and irregular fluctuations.
 
-Wavelet blocks can be used in isolation or in combination with other blocks freely. V1 wavelet blocks were removed due to instability (NaN failures and MASE explosion). Use V2 (numerically stabilized) or V3 (orthonormal DWT) variants. For instance:
+Wavelet blocks can be used in isolation or in combination with other blocks freely. V1 and V2 wavelet blocks were removed due to instability (NaN failures and MASE explosion). Use V3 variants. Historical V2 benchmark results are kept in `experiments/results/` for reference. For instance:
 
 ```python
 n_stacks = 5
-stack_types = ['DB3WaveletV2'] * n_stacks # 5 stacks of DB3WaveletV2 blocks
+stack_types = ['DB3WaveletV3'] * n_stacks # 5 stacks of DB3WaveletV3 blocks
 stack_types = ['Trend','DB3WaveletV3'] * n_stacks # 5 stacks of 1 Trend and 1 DB3WaveletV3
-stack_types = ['DB3WaveletV2','Generic'] # 5 stacks of 1 DB3WaveletV2 followed by 1 Generic
+stack_types = ['DB3WaveletV3','Generic'] # 5 stacks of 1 DB3WaveletV3 followed by 1 Generic
 ```
 
 The Wavelet blocks available in this repository are as follows:
 
-- HaarWaveletV2
-- HaarAltWaveletV2
-- DB2WaveletV2
-- DB2AltWaveletV2
-- DB3WaveletV2
-- DB3AltWaveletV2
-- DB4WaveletV2
-- DB4AltWaveletV2
-- DB10WaveletV2
-- DB10AltWaveletV2
-- DB20AltWaveletV2
-- Coif1WaveletV2
-- Coif1AltWaveletV2
-- Coif2WaveletV2
-- Coif2AltWaveletV2
-- Coif3WaveletV2
-- Coif3AltWaveletV2
-- Coif10WaveletV2
-- Coif10AltWaveletV2
-- Symlet2WaveletV2
-- Symlet2AltWaveletV2
-- Symlet3WaveletV2
-- Symlet10WaveletV2
-- Symlet20WaveletV2
 - HaarWaveletV3
 - DB2WaveletV3
 - DB3WaveletV3
@@ -412,40 +388,57 @@ stack_types = ['Trend','GenericAEBackcast'] * n_stacks # 5 stacks of 1 Trend and
 
 ### AERootBlock and its Variations
 
-The base N-Beats model consists of a stack of fully connected layers at the head of every block before the signal is spilt into backcast and forecast branches.The AERootBlock is a variation of the root block that uses an AutoEncoder structure as opposed to a uniform stack of fully connected layers.  The AERootBlock is useful for noisey time series data like Electric generation or in highly varied datasets like the M4.
+The standard N-BEATS backbone uses four equal-width fully connected layers before the signal splits into backcast and forecast branches. `AERootBlock` replaces this with a hourglass encoder-decoder structure: input → `units/2` → `latent_dim` → `units/2` → `units`. With `latent_dim=4` and `units=512`, the bottleneck compresses the representation to just 4 dimensions, delivering 5–10× parameter reduction compared to the standard backbone.
 
-The AERootblock is the parent class of the following blocks:
+Three AE backbone variants are available:
 
-- GenericAE
-- GenericAEBackcastAE
-- TrendAE
-- SeasonalityAE
-- AutoEncoderAE
+**`AERootBlock`** — Standard hourglass encoder-decoder:
 
-The AERootBlock cannot be used in isolation since it is oly the first half of the blocks that are derived from it.
-However, it's children blocks can be used in isolation or in combination with other blocks freely. For instance
+- `GenericAE`, `BottleneckGenericAE`, `GenericAEBackcastAE`
+- `TrendAE`, `SeasonalityAE`, `AutoEncoderAE`
+
+**`AERootBlockLG`** — Learned-gate backbone: adds a learnable `nn.Parameter` gate vector of size `latent_dim`. Applies `sigmoid(gate) × z` after the latent layer, enabling adaptive suppression or amplification of individual latent dimensions:
+
+- `GenericAELG`, `BottleneckGenericAELG`, `GenericAEBackcastAELG`
+- `TrendAELG`, `SeasonalityAELG`, `AutoEncoderAELG`
+
+**`AERootBlockVAE`** — Variational AE backbone: stochastic latent space with `fc2_mu`/`fc2_logvar` heads and reparameterization trick. KL divergence loss (weight 0.001) is accumulated and added during `training_step()`:
+
+- `GenericVAE`, `BottleneckGenericVAE`, `GenericAEBackcastVAE`
+- `TrendVAE`, `SeasonalityVAE`, `AutoEncoderVAE`
+
+All three backbone variants can be used in isolation or freely mixed:
 
 ```python
 n_stacks = 5
-stack_types = ['GenericAE'] * n_stacks # 5 stacks of GenericAE blocks
-stack_types = ['TrendAE','GenericAE'] * n_stacks # 5 stacks of 1 TrendAE and 1 GenericAE block
+stack_types = ['GenericAE'] * n_stacks                       # 5 stacks of GenericAE blocks
+stack_types = ['TrendAE', 'GenericAE'] * n_stacks            # alternating TrendAE and GenericAE
+stack_types = ['TrendAELG', 'Coif2WaveletV3'] * n_stacks     # learned-gate + wavelet (V3)
 ```
 
-### Sum Losses
+### Parameter Efficiency
 
-The sum_losses experimental feature is an experimental feature which takes in consideration the sum of the losses of the forecast branch and reconstruction loss in the backcast branch of the model. The original implementation only considers the loss in the forecast branch.  If enabled, the total loss is defined as the sum of the forecast loss and a 1/4 of the backcast loss.
+A central finding from our systematic benchmarks is that the original N-BEATS architecture (Oreshkin et al., 2019) was significantly **over-parameterized**. AE-backbone block types deliver 60–95% parameter reductions while matching or improving M4-Yearly OWA (full results in [Section 4.1 Table 2 of the research paper](NBEATS-Explorations/paper.md)):
 
-This feature is not included in the original N-Beats paper.  However, it is included in this implementation as an experimental feature.  It is not clear if this feature improves the performance of the model since more experimentation is needed.  To enable this feature set `sum_losses` to `True` in the model definition.
+| Configuration | Parameters | Reduction | M4-Yearly OWA | Notes |
+|---|---|---|---|---|
+| NBEATS-G (paper baseline) | 24.7M | — | 0.820 | 30-stack Generic |
+| GenericAE | 4.8M | 81% | 0.808 | 30-stack AE-backbone Generic |
+| BottleneckGenericAE | 4.3M | 83% | 0.806 | Best cross-period stability |
+| NBEATS-I-AE | 2.2M | 91% | 0.805 | TrendAE + SeasonalityAE (2×3 stacks) |
+| TrendWaveletAE / TrendWaveletAELG | ~8–9M | ~65% | Competitive | Mixed interpretable-wavelet |
+
+`BottleneckGenericAE` offers the best balance of efficiency and cross-period generalization, never ranking below 5th across Yearly, Quarterly, and Monthly M4 periods. `NBEATS-I-AE` achieves the highest parameter efficiency (91% reduction) but its extreme 4-dimensional latent bottleneck becomes limiting for higher-frequency series with more complex seasonal patterns.
 
 ```python
-n_stacks = 5
-TrendAutoEncoder_milkmodel = NBeatsNet(
-  stack_types=['Trend', 'AutoEncoder']*n_stacks,
-  backcast_length = backcast_length,
-  forecast_length = forecast_length,
-  n_blocks_per_stack = 1,
-  share_weights = True,
-  sum_losses = True
+# Parameter-efficient 30-stack model: 83% fewer parameters than NBEATS-G, matching OWA
+model = NBeatsNet(
+    stack_types=['BottleneckGenericAE'] * 30,
+    backcast_length=30,
+    forecast_length=6,
+    n_blocks_per_stack=1,
+    share_weights=True,
+    latent_dim=4,
 )
 ```
 
@@ -468,3 +461,22 @@ model = NBeatsNet(
   loss='SMAPELoss'  # or 'MAPELoss', 'MASELoss', 'NormalizedDeviationLoss', 'MSELoss', etc.
 )
 ```
+
+## Upcoming Work
+
+NHiTS-architecture benchmarks using the same parameter-efficient AE-backbone block types are in progress. These experiments evaluate both `NBeatsNet` (10-stack) and `NHiTSNet` (3-stack with hierarchical pooling and multi-rate signal sampling) configurations with AELG block variants against NHiTS published baselines on the Weather and Traffic datasets across four forecast horizons (96, 192, 336, 720 steps), using the NHiTS evaluation protocol (Z-score normalization, 70/10/20 train/val/test split, MSE loss). Configuration files:
+
+- [`experiments/configs/nhits_benchmark_weather.yaml`](experiments/configs/nhits_benchmark_weather.yaml)
+- [`experiments/configs/nhits_benchmark_traffic.yaml`](experiments/configs/nhits_benchmark_traffic.yaml)
+
+## Architecture Naming
+
+The parameter-efficient AE-backbone block family represents a substantive departure from the original N-BEATS formulation — 60–95% parameter reduction while matching accuracy across diverse benchmarks — and warrants a distinctive name for publication and community reference. The following candidates apply to both N-BEATS and NHiTS base architectures:
+
+| Name | Rationale |
+|---|---|
+| **N-BEATS-AE** / **NHiTS-AE** | Directly maps to the architectural contribution (`AERootBlock`). Short, technically precise, and cleanly namespaces within the existing N-BEATS/NHiTS family while signaling the encoder-decoder innovation. Works well as a paper identifier: *N-BEATS-AE: Parameter-Efficient Neural Basis Expansion via Autoencoder Backbones*. |
+| **LeanBeats** | A standalone portmanteau emphasizing parameter leanness and the N-BEATS foundation. Works across variants (`LeanBeats-G`, `LeanBeats-I`, `LeanNHiTS`) without relying on the original trademark-adjacent capitalization. Memorable and distinctive in literature search. |
+| **N-BEATS-Compact** / **NHiTS-Compact** | Signals the compression insight unambiguously. Natural as a paper title suffix: *N-BEATS-Compact: 90% Parameter Reduction with Matched Forecasting Accuracy*. Immediately communicates practical value to deployment-focused practitioners. |
+| **N-BEATS v2** / **NHiTS v2** | Simplest versioning approach, making lineage explicit while signaling a systematic improvement. Most appropriate if the work is framed as a direct successor to Oreshkin et al. (2019) / Challu et al. (2023) rather than a novel architectural family. |
+| **AE-BEATS** | Foregrounds the autoencoder innovation first, signaling a broader architectural rethinking rather than a minor variant. Most distinctive in literature search. Best suited if the backbone redesign — rather than forecasting accuracy per se — is the primary contribution being claimed. |

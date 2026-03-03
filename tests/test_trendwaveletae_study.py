@@ -145,6 +145,76 @@ def test_trendwaveletaelg_config_generation():
     assert sample["block_type"] == "TrendWaveletAELG"
 
 
+def test_generate_search_configs_list_block_type():
+    """block_type as a list should produce configs for each type."""
+    cfg = study.StudyConfig(
+        path="/tmp/v2.yaml",
+        dataset="m4",
+        period="Yearly",
+        architecture={"block_type": ["TrendWaveletAE", "TrendWaveletAELG"], "repeats": 10},
+        training={
+            "active_g": False,
+            "sum_losses": False,
+            "activation": "ReLU",
+            "n_blocks_per_stack": 1,
+            "share_weights": True,
+            "loss": "SMAPELoss",
+            "optimizer": "Adam",
+            "learning_rate": 0.001,
+        },
+        lr_scheduler={"warmup_epochs": 15, "eta_min": 1e-6},
+        search_space={
+            "wavelet_types": ["haar", "db3", "db20", "coif2", "sym10"],
+            "basis_labels": ["eq_fcast", "lt_fcast"],
+            "trend_dims": [3],
+            "latent_dims": [8, 12],
+        },
+        search_rounds=[
+            {"max_epochs": 15, "n_runs": 3, "keep_fraction": 0.50},
+            {"max_epochs": 50, "n_runs": 5, "top_k": 10},
+        ],
+        output={
+            "results_dir": "experiments/results",
+            "search_csv_filename": "trendwaveletae_v2_study_results.csv",
+            "cross_csv_path": "experiments/results/trendwaveletae_v2_cross_dataset_results.csv",
+        },
+        hardware={"accelerator": "auto", "num_workers": 0},
+        runs={"base_seed": 42},
+        meta_forecaster={"enabled": False},
+    )
+    configs = study.generate_search_configs(cfg)
+
+    # 2 block_types * 5 wavelets * 2 basis_labels * 1 trend_dim * 2 latent_dims = 40
+    assert len(configs) == 40
+
+    ae_configs = [c for c in configs.values() if c["block_type"] == "TrendWaveletAE"]
+    lg_configs = [c for c in configs.values() if c["block_type"] == "TrendWaveletAELG"]
+    assert len(ae_configs) == 20
+    assert len(lg_configs) == 20
+
+    # Verify stack types match block type
+    for config in ae_configs:
+        assert all(s == "TrendWaveletAE" for s in config["stack_types"])
+    for config in lg_configs:
+        assert all(s == "TrendWaveletAELG" for s in config["stack_types"])
+
+
+def test_generate_search_configs_scalar_block_type_backward_compat():
+    """Scalar block_type should still work (backward compatibility)."""
+    cfg = _build_cfg("m4", "Yearly", 10, block_type="TrendWaveletAE")
+    configs = study.generate_search_configs(cfg)
+
+    # 14 wavelet_types * 4 basis_labels * 2 trend_dims * 3 latent_dims = 336
+    assert len(configs) == 336
+
+    for config in configs.values():
+        assert config["block_type"] == "TrendWaveletAE"
+
+
+def test_compute_keep_n_v2_50pct():
+    assert study.compute_keep_n(40, 0.50) == 20
+
+
 def test_select_global_top10_penalizes_missing():
     ds_rankings = {
         "m4": (
