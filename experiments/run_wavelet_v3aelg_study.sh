@@ -5,19 +5,17 @@ set -euo pipefail
 # WaveletV3AELG Successive-Halving Study Orchestrator
 #
 # Phases:
-#   1  TrendAELG search   — 3-round successive halving (m4, tourism, traffic, weather)
-#   2  TrendAE search     — same with TrendAE trend blocks
-#   3  TrendAELG cross    — cross-dataset benchmark from round-3 results
-#   4  TrendAE cross      — same for TrendAE
-#   5  Analysis           — execute Jupyter notebook, emit markdown report
+#   1  Search     — 3-round successive halving (m4, tourism, traffic, weather)
+#   2  Cross      — cross-dataset benchmark from round-3 results
+#   3  Analysis   — execute Jupyter notebook, emit markdown report
 #
 # Usage:
 #   ./experiments/run_wavelet_v3aelg_study.sh                          # all phases
 #   ./experiments/run_wavelet_v3aelg_study.sh --phase 1                # single phase
 #   ./experiments/run_wavelet_v3aelg_study.sh --phase 1,2              # multiple
-#   ./experiments/run_wavelet_v3aelg_study.sh --phase search           # alias for 1,2
-#   ./experiments/run_wavelet_v3aelg_study.sh --phase cross            # alias for 3,4
-#   ./experiments/run_wavelet_v3aelg_study.sh --phase analysis         # alias for 5
+#   ./experiments/run_wavelet_v3aelg_study.sh --phase search           # alias for 1
+#   ./experiments/run_wavelet_v3aelg_study.sh --phase cross            # alias for 2
+#   ./experiments/run_wavelet_v3aelg_study.sh --phase analysis         # alias for 3
 #   ./experiments/run_wavelet_v3aelg_study.sh --dry-run                # print commands
 #   ./experiments/run_wavelet_v3aelg_study.sh --accelerator cuda --no-wandb
 # =============================================================================
@@ -29,12 +27,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIGS_DIR="$SCRIPT_DIR/configs"
 RESULTS_DIR="$SCRIPT_DIR/results"
-RUNNER="$SCRIPT_DIR/run_wavelet_v3ae_study.py"
+RUNNER="$SCRIPT_DIR/run_wavelet_v3aelg_study.py"
 NOTEBOOK="$SCRIPT_DIR/analysis/wavelet_v3aelg_study_analysis.ipynb"
 
-# Python / Jupyter resolution
+# Python / Jupyter resolution (check both Unix and Windows venv paths)
 if [[ -x "$PROJECT_ROOT/.venv/bin/python" ]]; then
     PYTHON="$PROJECT_ROOT/.venv/bin/python"
+elif [[ -x "$PROJECT_ROOT/.venv/Scripts/python" ]]; then
+    PYTHON="$PROJECT_ROOT/.venv/Scripts/python"
 elif command -v python3 &>/dev/null; then
     PYTHON="python3"
 elif command -v python &>/dev/null; then
@@ -46,6 +46,8 @@ fi
 
 if [[ -x "$PROJECT_ROOT/.venv/bin/jupyter" ]]; then
     JUPYTER="$PROJECT_ROOT/.venv/bin/jupyter"
+elif [[ -x "$PROJECT_ROOT/.venv/Scripts/jupyter" ]]; then
+    JUPYTER="$PROJECT_ROOT/.venv/Scripts/jupyter"
 elif command -v jupyter &>/dev/null; then
     JUPYTER="jupyter"
 else
@@ -67,12 +69,6 @@ TRENDAELG_CONFIGS=(
     "$CONFIGS_DIR/wavelet_v3aelg_trendaelg_traffic.yaml"
     "$CONFIGS_DIR/wavelet_v3aelg_trendaelg_weather.yaml"
 )
-TRENDAE_CONFIGS=(
-    "$CONFIGS_DIR/wavelet_v3aelg_trendae_m4.yaml"
-    "$CONFIGS_DIR/wavelet_v3aelg_trendae_tourism.yaml"
-    "$CONFIGS_DIR/wavelet_v3aelg_trendae_traffic.yaml"
-    "$CONFIGS_DIR/wavelet_v3aelg_trendae_weather.yaml"
-)
 
 # ---------------------------------------------------------------------------
 # 3. Argument parsing
@@ -87,11 +83,11 @@ usage() {
 Usage: run_wavelet_v3aelg_study.sh [OPTIONS]
 
 Options:
-  --phase SPEC        Phase(s) to run. Comma-separated numbers (1-5) or aliases:
-                        search   = 1,2   (successive-halving search)
-                        cross    = 3,4   (cross-dataset benchmark)
-                        analysis = 5     (Jupyter notebook)
-                        all      = 1-5   (default)
+  --phase SPEC        Phase(s) to run. Comma-separated numbers (1-3) or aliases:
+                        search   = 1     (successive-halving search)
+                        cross    = 2     (cross-dataset benchmark)
+                        analysis = 3     (Jupyter notebook)
+                        all      = 1-3   (default)
   --dry-run           Print commands without executing
   --help              Show this help message
 
@@ -120,10 +116,10 @@ while [[ $# -gt 0 ]]; do
             PHASE_SPECIFIED=1
             shift
             case "$1" in
-                search)   enable_phases "1,2" ;;
-                cross)    enable_phases "3,4" ;;
-                analysis) enable_phases "5" ;;
-                all)      enable_phases "1,2,3,4,5" ;;
+                search)   enable_phases "1" ;;
+                cross)    enable_phases "2" ;;
+                analysis) enable_phases "3" ;;
+                all)      enable_phases "1,2,3" ;;
                 *)        enable_phases "$1" ;;
             esac
             shift
@@ -153,7 +149,7 @@ done
 
 # Default: all phases
 if [[ $PHASE_SPECIFIED -eq 0 ]]; then
-    enable_phases "1,2,3,4,5"
+    enable_phases "1,2,3"
 fi
 
 # ---------------------------------------------------------------------------
@@ -260,36 +256,22 @@ if [[ $DRY_RUN -eq 1 ]]; then
 fi
 log "============================================================"
 
-# Phase 1: TrendAELG search
+# Phase 1: Search
 if phase_enabled 1; then
     if ! run_search_phase "TrendAELG" TRENDAELG_CONFIGS; then
         ((TOTAL_ERRORS += $?)) || true
     fi
 fi
 
-# Phase 2: TrendAE search
+# Phase 2: Cross-dataset
 if phase_enabled 2; then
-    if ! run_search_phase "TrendAE" TRENDAE_CONFIGS; then
-        ((TOTAL_ERRORS += $?)) || true
-    fi
-fi
-
-# Phase 3: TrendAELG cross-dataset
-if phase_enabled 3; then
     if ! run_cross_phase "TrendAELG" TRENDAELG_CONFIGS; then
         ((TOTAL_ERRORS++)) || true
     fi
 fi
 
-# Phase 4: TrendAE cross-dataset
-if phase_enabled 4; then
-    if ! run_cross_phase "TrendAE" TRENDAE_CONFIGS; then
-        ((TOTAL_ERRORS++)) || true
-    fi
-fi
-
-# Phase 5: Analysis
-if phase_enabled 5; then
+# Phase 3: Analysis
+if phase_enabled 3; then
     if ! run_analysis; then
         ((TOTAL_ERRORS++)) || true
     fi

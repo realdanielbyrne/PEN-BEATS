@@ -39,7 +39,7 @@ search_space:
     - Symlet20WaveletV3AELG
   basis_labels: [eq_fcast, lt_fcast, eq_bcast, lt_bcast]
   trend_thetas_dims: [3, 5]
-  latent_dims: [2, 5, 8]
+  latent_dim: 16
 
 search:
   rounds:
