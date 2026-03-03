@@ -29,11 +29,14 @@ class WeatherDataset(BenchmarkDataset):
     train_ratio : float
         Fraction of data used for training (default 0.8). The DataModule
         will internally split this into train+val.
+    include_target : bool
+        If True, keep the OT column (21 columns total). Default False
+        drops OT (20 columns), matching previous behavior.
     """
 
     supports_owa = False
 
-    def __init__(self, horizon, train_ratio=0.8):
+    def __init__(self, horizon, train_ratio=0.8, include_target=False):
         self.horizon = horizon
         self.forecast_length = horizon
         self.frequency = 144  # 10-min intervals, daily seasonality = 6*24 = 144
@@ -43,8 +46,8 @@ class WeatherDataset(BenchmarkDataset):
         # Drop the date column — keep only numeric indicator columns
         if "date" in df.columns:
             df = df.drop(columns=["date"])
-        # Drop the OT target column if present
-        if "OT" in df.columns:
+        # Drop the OT target column unless include_target is set
+        if not include_target and "OT" in df.columns:
             df = df.drop(columns=["OT"])
 
         n_total = len(df)

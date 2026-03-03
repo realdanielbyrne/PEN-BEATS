@@ -289,17 +289,25 @@ class ForecastingDataset(Dataset):
     return self.historical_data[idx]
 
 class ColumnarTimeSeriesDataset(Dataset):
-  def __init__(self, dataframe, backcast_length, forecast_length):
+  def __init__(self, dataframe, backcast_length, forecast_length,
+               col_means=None, col_stds=None):
     self.backcast_length = backcast_length
     self.forecast_length = forecast_length
     self.min_length = backcast_length + forecast_length
+    self.col_means = col_means
+    self.col_stds = col_stds
 
     # Drop columns with insufficient data and convert to dictionary of NumPy arrays
-    self.data_dict = {col: self.pad_series(dataframe[col].dropna().values).astype(np.float32) for col in dataframe.columns }
+    self.data_dict = {}
+    for col in dataframe.columns:
+      series = self.pad_series(dataframe[col].dropna().values).astype(np.float32)
+      if self.col_means is not None and col in self.col_means:
+        series = (series - self.col_means[col]) / self.col_stds[col]
+      self.data_dict[col] = series
 
     # Precompute column indices and starting positions
     self.col_indices = [(col, idx) for col, series in self.data_dict.items() for idx in range(len(series) - self.min_length + 1)]
-  
+
   def pad_series(self, series):
     valid_entries = len(series)
     if valid_entries < self.min_length:
@@ -307,11 +315,11 @@ class ColumnarTimeSeriesDataset(Dataset):
       pad_size = self.min_length - valid_entries
       # Create a padding array of zeros
       padding = np.zeros(pad_size)
-            
+
       # Pad the series with zeros at the beginning
       series = np.concatenate((padding, series), axis=0)
     return series
-    
+
   def __len__(self):
     return len(self.col_indices)
 
@@ -323,14 +331,16 @@ class ColumnarTimeSeriesDataset(Dataset):
     return x, y
     
 class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
-  def __init__(self, 
+  def __init__(self,
                dataframe,
                backcast_length,
                forecast_length,
                batch_size=1024,
                no_val = False,
                num_workers=0,
-               pin_memory=False):
+               pin_memory=False,
+               normalize=False,
+               val_ratio=None):
     """
     The ColumnarCollectionTimeSeriesDataModule class is a PyTorch Datamodule that takes a
     collection of time series as input and returns a single sample of the time
@@ -340,9 +350,13 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
 
     Args:
         dataframe (Pandas): Pandas dataframe with columns representing time series and rows representing time steps.
-        backcast_length (int, optional):  Number of past observations to use for predictio. Defaults to 10.
+        backcast_length (int, optional):  Number of past observations to use for prediction. Defaults to 10.
         forecast_length (int, optional): Number of future observations to predict. Defaults to 4.
         batch_size (int, optional): The batch size. Defaults to 32.
+        normalize (bool, optional): If True, apply per-column z-score normalization using
+            training-split statistics. Defaults to False.
+        val_ratio (float, optional): Fraction of training data to use as validation set.
+            When None (default), validation is the last backcast+forecast rows.
     """
     super().__init__()
     self.backcast_length = backcast_length
@@ -351,20 +365,47 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
     self.no_val = no_val
     self.num_workers = num_workers
     self.pin_memory = pin_memory
+    self.normalize = normalize
+    self.val_ratio = val_ratio
 
     self.total_length = backcast_length + forecast_length
     self.dataframe = dataframe
+    self.col_means = None
+    self.col_stds = None
 
   def setup(self, stage=None):
     if self.no_val:
       train_data = self.dataframe
       val_data = pd.DataFrame()
+    elif self.val_ratio is not None:
+      n_total = len(self.dataframe)
+      n_val = int(n_total * self.val_ratio)
+      train_data = self.dataframe.iloc[:-n_val]
+      val_data = self.dataframe.iloc[-n_val:]
     else:
       train_data = self.dataframe.iloc[:-self.forecast_length]
       val_data = self.dataframe.iloc[-self.forecast_length-self.backcast_length:]
 
-    self.val_dataset = ColumnarTimeSeriesDataset(val_data, self.backcast_length, self.forecast_length)
-    self.train_dataset = ColumnarTimeSeriesDataset(train_data, self.backcast_length, self.forecast_length)
+    # Compute per-column normalization stats from training split
+    if self.normalize:
+      eps = 1e-8
+      self.col_means = {}
+      self.col_stds = {}
+      for col in train_data.columns:
+        vals = train_data[col].dropna().values.astype(np.float32)
+        mu = float(np.mean(vals)) if len(vals) > 0 else 0.0
+        sigma = float(np.std(vals)) if len(vals) > 0 else 1.0
+        if sigma < eps:
+          sigma = 1.0
+        self.col_means[col] = mu
+        self.col_stds[col] = sigma
+
+    self.val_dataset = ColumnarTimeSeriesDataset(
+        val_data, self.backcast_length, self.forecast_length,
+        col_means=self.col_means, col_stds=self.col_stds)
+    self.train_dataset = ColumnarTimeSeriesDataset(
+        train_data, self.backcast_length, self.forecast_length,
+        col_means=self.col_means, col_stds=self.col_stds)
 
   def train_dataloader(self):
     return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True,
@@ -377,14 +418,16 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
                       persistent_workers=self.num_workers > 0)
 
 class ColumnarCollectionTimeSeriesTestDataModule(pl.LightningDataModule):
-  def __init__(self, 
+  def __init__(self,
                 train_data,
                 test_data,
                 backcast_length,
                 forecast_length,
                 batch_size=1024,
                 num_workers=0,
-                pin_memory=False):
+                pin_memory=False,
+                col_means=None,
+                col_stds=None):
     """Takes two collections of time series organized into columns
     where each row represents a time step and each column represents
     an individual time series. The module combines the training data
@@ -396,6 +439,8 @@ class ColumnarCollectionTimeSeriesTestDataModule(pl.LightningDataModule):
         backcast_length (_type_): The length of the historical data.
         forecast_length (_type_): The length of the future data to predict.
         batch_size (int, optional): The batch size. Defaults to 1024.
+        col_means (dict, optional): Per-column means from training data for normalization.
+        col_stds (dict, optional): Per-column stds from training data for normalization.
     """
     super(ColumnarCollectionTimeSeriesTestDataModule, self).__init__()
 
@@ -408,9 +453,13 @@ class ColumnarCollectionTimeSeriesTestDataModule(pl.LightningDataModule):
     self.batch_size = batch_size
     self.num_workers = num_workers
     self.pin_memory = pin_memory
+    self.col_means = col_means
+    self.col_stds = col_stds
 
   def setup(self, stage:str=None):
-    self.test_dataset = ColumnarTimeSeriesDataset(self.test_data, self.backcast_length, self.forecast_length) 
+    self.test_dataset = ColumnarTimeSeriesDataset(
+        self.test_data, self.backcast_length, self.forecast_length,
+        col_means=self.col_means, col_stds=self.col_stds)
 
   def test_dataloader(self):
     return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False,
