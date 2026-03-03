@@ -795,6 +795,7 @@ def run_single_experiment(
     learning_rate=None,      # None → uses module-level LEARNING_RATE constant
     loss_override=None,      # None → uses module-level LOSS constant
     seed=None,               # None → BASE_SEED + run_idx
+    wavelet_type="db3",      # Wavelet family for TrendWaveletAE/TrendWaveletAELG blocks
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -845,6 +846,7 @@ def run_single_experiment(
         stack_basis_offsets=stack_basis_offsets,
         forecast_basis_dim=forecast_basis_dim,
         trend_thetas_dim=trend_thetas_dim,
+        wavelet_type=wavelet_type,
         learning_rate=learning_rate if learning_rate is not None else LEARNING_RATE,
         optimizer_name=optimizer_name,
         no_val=False,

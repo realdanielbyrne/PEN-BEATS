@@ -169,6 +169,7 @@ block_params:
   basis_dim: 128           # WaveletV3 basis dimension
   forecast_basis_dim: null # WaveletV3 asymmetric forecast basis (null = same as basis_dim)
   trend_thetas_dim: null   # Trend polynomial degree override (null = use thetas_dim)
+  wavelet_type: null       # Wavelet family for TrendWaveletAE/TrendWaveletAELG blocks (null = 'db3')
 ```
 
 ---
@@ -469,11 +470,19 @@ All block types supported in `stack_types` (from `constants.BLOCKS`):
 `Coif2WaveletV3`, `Coif3WaveletV3`, `Coif10WaveletV3`, `Symlet2WaveletV3`,
 `Symlet3WaveletV3`, `Symlet10WaveletV3`, `Symlet20WaveletV3`
 
+**Trend+Wavelet AE (combined polynomial + DWT):** `TrendWaveletAE`, `TrendWaveletAELG`
+
 **Wavelet V3AE (DWT + AE bottleneck):** `HaarWaveletV3AE`, `DB2WaveletV3AE`,
 `DB3WaveletV3AE`, `DB4WaveletV3AE`, `DB10WaveletV3AE`, `DB20WaveletV3AE`,
 `Coif1WaveletV3AE`, `Coif2WaveletV3AE`, `Coif3WaveletV3AE`, `Coif10WaveletV3AE`,
 `Symlet2WaveletV3AE`, `Symlet3WaveletV3AE`, `Symlet10WaveletV3AE`,
 `Symlet20WaveletV3AE`
+
+**Wavelet V3AELG (DWT + Learned-Gate AE bottleneck):** `HaarWaveletV3AELG`,
+`DB2WaveletV3AELG`, `DB3WaveletV3AELG`, `DB4WaveletV3AELG`, `DB10WaveletV3AELG`,
+`DB20WaveletV3AELG`, `Coif1WaveletV3AELG`, `Coif2WaveletV3AELG`,
+`Coif3WaveletV3AELG`, `Coif10WaveletV3AELG`, `Symlet2WaveletV3AELG`,
+`Symlet3WaveletV3AELG`, `Symlet10WaveletV3AELG`, `Symlet20WaveletV3AELG`
 
 ---
 

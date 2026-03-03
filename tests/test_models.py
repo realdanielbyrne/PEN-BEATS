@@ -384,3 +384,35 @@ class TestTrendThetasDim:
         backcast, forecast = model(x)
         assert backcast.shape == (4, 20)
         assert forecast.shape == (4, 5)
+
+
+# --- wavelet_type forwarding tests ---
+
+class TestWaveletTypeForwarding:
+    """Verify wavelet_type is forwarded to TrendWaveletAE/TrendWaveletAELG blocks."""
+
+    def test_wavelet_type_forwarded_to_trendwaveletae(self):
+        """TrendWaveletAE blocks should receive the wavelet_type parameter."""
+        model = _make_model(["TrendWaveletAE"], g_width=64, wavelet_type='haar')
+        block = model.stacks[0][0]
+        assert block.wavelet_type == 'haar'
+
+    def test_wavelet_type_forwarded_to_trendwaveletaelg(self):
+        """TrendWaveletAELG blocks should receive the wavelet_type parameter."""
+        model = _make_model(["TrendWaveletAELG"], g_width=64, wavelet_type='haar')
+        block = model.stacks[0][0]
+        assert block.wavelet_type == 'haar'
+
+    def test_wavelet_type_default_is_db3(self):
+        """Default wavelet_type should be 'db3'."""
+        model = _make_model(["TrendWaveletAE"], g_width=64)
+        block = model.stacks[0][0]
+        assert block.wavelet_type == 'db3'
+
+    def test_wavelet_type_forward_pass(self):
+        """Forward pass works with non-default wavelet_type."""
+        model = _make_model(["TrendWaveletAE"] * 2, g_width=64, wavelet_type='haar')
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)

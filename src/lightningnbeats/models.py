@@ -42,6 +42,7 @@ class NBeatsNet(pl.LightningModule):
       basis_offset:int = 0,
       stack_basis_offsets:list = None,
       forecast_basis_dim:int = None,
+      wavelet_type:str = 'db3',
       trend_thetas_dim:int | None = 3,
       lr_scheduler_config:dict = None
     ):
@@ -188,6 +189,7 @@ class NBeatsNet(pl.LightningModule):
     self.basis_offset = basis_offset
     self.stack_basis_offsets = stack_basis_offsets
     self.forecast_basis_dim = forecast_basis_dim
+    self.wavelet_type = wavelet_type
     if trend_thetas_dim is not None and (not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1):
       raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
     self.trend_thetas_dim = self.thetas_dim if trend_thetas_dim is None else trend_thetas_dim
@@ -258,7 +260,8 @@ class NBeatsNet(pl.LightningModule):
                 basis_offset=effective_offset,
                 share_weights=self.share_weights, activation=self.activation,
                 active_g=self.active_g, latent_dim=self.latent_dim,
-                forecast_basis_dim=self.forecast_basis_dim)
+                forecast_basis_dim=self.forecast_basis_dim,
+                wavelet_type=self.wavelet_type)
           elif stack_type in ae_latent_blocks:
             block = getattr(b,stack_type)(
                 units, self.backcast_length, self.forecast_length, effective_td,

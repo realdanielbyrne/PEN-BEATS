@@ -976,6 +976,7 @@ class TrendWaveletAE(AERootBlock):
     super(TrendWaveletAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.trend_dim = trend_dim
     self.active_g = active_g
+    self.wavelet_type = wavelet_type
 
     # Effective wavelet dimension for each path (clamped to available rows after offset)
     eff_back_wave = min(wavelet_dim, backcast_length - min(basis_offset, backcast_length - 1))
@@ -1068,6 +1069,7 @@ class TrendWaveletAELG(AERootBlockLG):
     super(TrendWaveletAELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.trend_dim = trend_dim
     self.active_g = active_g
+    self.wavelet_type = wavelet_type
 
     # Effective wavelet dimension for each path (clamped to available rows after offset)
     eff_back_wave = min(wavelet_dim, backcast_length - min(basis_offset, backcast_length - 1))
