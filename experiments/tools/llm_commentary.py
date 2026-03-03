@@ -7,17 +7,22 @@ Responses are cached to disk using SHA-256(section_type + sorted JSON of context
 so repeated analysis runs do not incur extra API costs.
 
 Authentication (in priority order):
-  1. ANTHROPIC_API_KEY env var → Anthropic API key auth
-  2. OPENAI_API_KEY env var with NBEATS_LLM_PROVIDER=openai → OpenAI
-  3. Claude Code OAuth token (~/.claude/.credentials.json) → auto-detected when
-     no API key is set and NBEATS_LLM_PROVIDER is "anthropic" or "claude_code"
+  1. ANTHROPIC_API_KEY env var → Anthropic API key auth (per-call billing)
+  2. ANTHROPIC_OAUTH_TOKEN env var → OAuth token auth (subscription billing)
+  3. Claude Code credentials file (~/.claude/.credentials.json) → OAuth token
+     auth (subscription billing), auto-detected when NBEATS_LLM_PROVIDER is
+     "anthropic" or "claude_code"
+  4. OPENAI_API_KEY env var with NBEATS_LLM_PROVIDER=openai → OpenAI
+
+OAuth tokens can be generated via `claude setup-token` in Claude Code.
 
 Environment variables:
-    NBEATS_LLM_PROVIDER   anthropic (default), openai, or claude_code
-    ANTHROPIC_API_KEY     Anthropic API key (overrides OAuth auto-detect)
-    OPENAI_API_KEY        required for OpenAI provider
-    NBEATS_LLM_MODEL      override model (defaults per provider below)
-    NBEATS_LLM_CACHE_DIR  override cache directory
+    NBEATS_LLM_PROVIDER      anthropic (default), openai, or claude_code
+    ANTHROPIC_API_KEY        Anthropic API key (highest priority)
+    ANTHROPIC_OAUTH_TOKEN    OAuth token from `claude setup-token` (subscription billing)
+    OPENAI_API_KEY           required for OpenAI provider
+    NBEATS_LLM_MODEL         override model (defaults per provider below)
+    NBEATS_LLM_CACHE_DIR     override cache directory
 
 Default models:
     Anthropic/Claude Code: claude-haiku-4-5-20251001
@@ -38,6 +43,7 @@ from typing import Any
 
 _PROVIDER = os.environ.get("NBEATS_LLM_PROVIDER", "anthropic").lower()
 _ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+_OAUTH_TOKEN = os.environ.get("ANTHROPIC_OAUTH_TOKEN", "")
 _OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
 
 _DEFAULT_MODELS = {
@@ -77,11 +83,6 @@ _SYSTEM_PROMPT = (
 
 def _load_claude_code_token() -> str | None:
     """Read the Claude Code OAuth access token from ~/.claude/.credentials.json.
-
-    NOTE: The Anthropic Messages API currently only supports API key authentication
-    (ANTHROPIC_API_KEY). Claude Code OAuth tokens (sk-ant-oat01-...) are issued for
-    the claude.ai product and are NOT accepted by api.anthropic.com. This function is
-    provided for future use when the API adds OAuth support.
 
     Returns the token string if valid and not expired, or None.
     """
@@ -264,9 +265,10 @@ def generate_commentary(
     """Generate LLM commentary for the given section type and context.
 
     Authentication is resolved in this order:
-      1. ANTHROPIC_API_KEY env var
-      2. OPENAI_API_KEY with NBEATS_LLM_PROVIDER=openai
-      3. Claude Code OAuth token from ~/.claude/.credentials.json
+      1. ANTHROPIC_API_KEY env var → API key auth (per-call billing)
+      2. ANTHROPIC_OAUTH_TOKEN env var → OAuth token auth (subscription billing)
+      3. Claude Code credentials file (~/.claude/.credentials.json) → OAuth token
+      4. OPENAI_API_KEY with NBEATS_LLM_PROVIDER=openai → OpenAI
 
     Returns:
         str:  Markdown-formatted commentary from the LLM.
@@ -280,17 +282,11 @@ def generate_commentary(
     if effective_provider in ("anthropic", "claude_code"):
         if _ANTHROPIC_KEY:
             api_key = _ANTHROPIC_KEY
-        elif effective_provider == "claude_code":
-            # claude_code provider: attempt OAuth (reserved for future API support)
+        elif _OAUTH_TOKEN:
+            auth_token = _OAUTH_TOKEN
+        else:
             auth_token = _load_claude_code_token() or ""
-            if auth_token:
-                print(
-                    "[llm_commentary] claude_code OAuth tokens are not yet supported by "
-                    "api.anthropic.com. Set ANTHROPIC_API_KEY instead.",
-                    file=sys.stderr,
-                )
-            return None  # OAuth not supported by API; fall back
-        if not api_key:
+        if not api_key and not auth_token:
             return None
     elif effective_provider == "openai":
         if not _OPENAI_KEY:
