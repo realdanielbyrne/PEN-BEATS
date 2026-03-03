@@ -53,6 +53,12 @@ Usage:
     # Run all datasets in succession
     python experiments/run_lg_vae_study.py --all
     python experiments/run_lg_vae_study.py --all --round 1
+
+    # Meet-in-the-middle split across two processes (safe disjoint halves)
+    python experiments/run_lg_vae_study.py --dataset traffic --round 3 \
+        --meet-middle --meet-side front --job-order forward --n-gpus 1
+    python experiments/run_lg_vae_study.py --dataset traffic --round 3 \
+        --meet-middle --meet-side back --job-order reverse --n-gpus 1
 """
 
 import argparse
@@ -579,81 +585,6 @@ def _resolve_passes(args):
     return [(name, ag) for name, ag in SEARCH_PASSES if name == pass_filter]
 
 
-def _run_search_round_sequential(dataset_name, periods, round_num, configs, args,
-                                 forecast_multiplier, csv_path):
-    """Run a single search round sequentially on one device."""
-    schedule = ROUND_SCHEDULE[round_num]
-    max_epochs = args.search_max_epochs or schedule["max_epochs"]
-    n_runs = schedule["n_runs"]
-    passes = _resolve_passes(args)
-
-    # Early stopping only in rounds 2+
-    if round_num >= 2:
-        patience = min(max_epochs, EARLY_STOPPING_PATIENCE)
-    else:
-        patience = max_epochs  # No early stopping in round 1
-
-    n_configs = len(configs)
-    n_passes = len(passes)
-
-    print(f"\n  {'─'*60}")
-    print(f"  ROUND {round_num}: {n_configs} configs × {n_passes} passes × "
-          f"{n_runs} runs × {max_epochs} epochs")
-    for pass_name, active_g in passes:
-        print(f"    Pass: {pass_name} (active_g={active_g})")
-    print(f"  {'─'*60}")
-
-    if n_configs == 0:
-        print("  No configs to run!")
-        return
-
-    for period in periods:
-        dataset = load_dataset(dataset_name, period)
-        train_series_list = dataset.get_training_series()
-        batch_size = get_batch_size(dataset_name, period, args.batch_size)
-
-        for pass_name, active_g in passes:
-            if _shutdown_requested:
-                print("[SHUTDOWN] Exiting search round.")
-                return
-
-            print(f"\n    --- Pass: {pass_name} (active_g={active_g}) ---")
-
-            for config_name, cfg in configs.items():
-                if _shutdown_requested:
-                    print("[SHUTDOWN] Exiting search round.")
-                    return
-
-                experiment_tag = f"lg_vae_search_r{round_num}_{pass_name}"
-                for run_idx in range(n_runs):
-                    if result_exists(csv_path, experiment_tag,
-                                     config_name, period, run_idx):
-                        continue
-
-                    run_lg_vae_experiment(
-                        config_name=config_name,
-                        cfg=cfg,
-                        period=period,
-                        run_idx=run_idx,
-                        dataset=dataset,
-                        train_series_list=train_series_list,
-                        csv_path=csv_path,
-                        round_num=round_num,
-                        max_epochs=max_epochs,
-                        patience=patience,
-                        batch_size=batch_size,
-                        accelerator_override=args.accelerator,
-                        forecast_multiplier=forecast_multiplier,
-                        num_workers=args.num_workers,
-                        active_g=active_g,
-                        pass_name=pass_name,
-                    )
-
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-
 # ---------------------------------------------------------------------------
 # Multi-GPU Parallel Round Runner
 # ---------------------------------------------------------------------------
@@ -678,6 +609,36 @@ def _build_search_jobs(periods, round_num, configs, passes, dataset_name,
                         "pass_name": pass_name,
                         "active_g": active_g,
                     })
+    return jobs
+
+
+def _partition_jobs_for_meet_middle(all_jobs, args):
+    """Return selected jobs for this process (optionally front/back split)."""
+    if not getattr(args, "meet_middle", False):
+        return all_jobs
+
+    side = getattr(args, "meet_side", None)
+    if side not in ("front", "back"):
+        raise ValueError("--meet-middle requires --meet-side {front,back}.")
+
+    split = len(all_jobs) // 2
+    if side == "front":
+        selected = all_jobs[:split]
+    else:
+        selected = all_jobs[split:]
+
+    print(
+        f"  Meet-middle partition: side={side}, "
+        f"selected={len(selected)}/{len(all_jobs)} jobs"
+    )
+    return selected
+
+
+def _order_jobs(jobs, args):
+    """Apply explicit execution order for selected jobs."""
+    order = getattr(args, "job_order", "forward")
+    if order == "reverse":
+        return list(reversed(jobs))
     return jobs
 
 
@@ -706,6 +667,17 @@ def _gpu_worker(gpu_id, job_queue, shutdown_event, worker_args):
             job = job_queue.get_nowait()
         except queue.Empty:
             break
+
+        # Re-check at execution time so concurrent split workers can skip
+        # jobs already completed by another process.
+        if result_exists(
+            worker_args["csv_path"],
+            f"lg_vae_search_r{round_num}_{job['pass_name']}",
+            job["config_name"],
+            job["period"],
+            job["run_idx"],
+        ):
+            continue
 
         period = job["period"]
         if period not in dataset_cache:
@@ -765,8 +737,10 @@ def _run_search_round_parallel(dataset_name, periods, round_num, configs, args,
     # Build flat job list and filter completed
     all_jobs = _build_search_jobs(periods, round_num, configs, passes,
                                   dataset_name, args.batch_size)
+    selected_jobs = _partition_jobs_for_meet_middle(all_jobs, args)
+    selected_jobs = _order_jobs(selected_jobs, args)
     pending_jobs = [
-        job for job in all_jobs
+        job for job in selected_jobs
         if not result_exists(
             csv_path,
             f"lg_vae_search_r{round_num}_{job['pass_name']}",
@@ -774,9 +748,11 @@ def _run_search_round_parallel(dataset_name, periods, round_num, configs, args,
         )
     ]
 
-    n_complete = len(all_jobs) - len(pending_jobs)
-    print(f"  Jobs: {len(all_jobs)} total, {len(pending_jobs)} pending, "
-          f"{n_complete} already complete")
+    n_complete = len(selected_jobs) - len(pending_jobs)
+    print(
+        f"  Jobs: {len(selected_jobs)} selected (from {len(all_jobs)} total), "
+        f"{len(pending_jobs)} pending, {n_complete} already complete"
+    )
 
     if not pending_jobs:
         print("  All jobs already complete!")
@@ -840,6 +816,105 @@ def _run_search_round(dataset_name, periods, round_num, configs, args,
             dataset_name, periods, round_num, configs, args,
             forecast_multiplier, csv_path,
         )
+
+
+def _run_search_round_sequential(dataset_name, periods, round_num, configs, args,
+                                 forecast_multiplier, csv_path):
+    """Run a single search round sequentially on one device."""
+    schedule = ROUND_SCHEDULE[round_num]
+    max_epochs = args.search_max_epochs or schedule["max_epochs"]
+    n_runs = schedule["n_runs"]
+    passes = _resolve_passes(args)
+
+    # Early stopping only in rounds 2+
+    if round_num >= 2:
+        patience = min(max_epochs, EARLY_STOPPING_PATIENCE)
+    else:
+        patience = max_epochs  # No early stopping in round 1
+
+    n_configs = len(configs)
+    n_passes = len(passes)
+
+    print(f"\n  {'─'*60}")
+    print(f"  ROUND {round_num}: {n_configs} configs × {n_passes} passes × "
+          f"{n_runs} runs × {max_epochs} epochs")
+    for pass_name, active_g in passes:
+        print(f"    Pass: {pass_name} (active_g={active_g})")
+    print(f"  {'─'*60}")
+
+    if n_configs == 0:
+        print("  No configs to run!")
+        return
+
+    # Build the same flat job list used by parallel mode so split/order
+    # behavior is identical.
+    all_jobs = _build_search_jobs(
+        periods, round_num, configs, passes, dataset_name, args.batch_size
+    )
+    selected_jobs = _partition_jobs_for_meet_middle(all_jobs, args)
+    selected_jobs = _order_jobs(selected_jobs, args)
+    pending_jobs = [
+        job for job in selected_jobs
+        if not result_exists(
+            csv_path,
+            f"lg_vae_search_r{round_num}_{job['pass_name']}",
+            job["config_name"], job["period"], job["run_idx"],
+        )
+    ]
+    n_complete = len(selected_jobs) - len(pending_jobs)
+    print(
+        f"  Jobs: {len(selected_jobs)} selected (from {len(all_jobs)} total), "
+        f"{len(pending_jobs)} pending, {n_complete} already complete"
+    )
+    if not pending_jobs:
+        print("  All selected jobs already complete!")
+        return
+
+    dataset_cache = {}
+    series_cache = {}
+    for job in pending_jobs:
+        if _shutdown_requested:
+            print("[SHUTDOWN] Exiting search round.")
+            return
+
+        # Re-check at execution time so concurrent split workers can skip
+        # jobs already completed by another process.
+        if result_exists(
+            csv_path,
+            f"lg_vae_search_r{round_num}_{job['pass_name']}",
+            job["config_name"],
+            job["period"],
+            job["run_idx"],
+        ):
+            continue
+
+        period = job["period"]
+        if period not in dataset_cache:
+            dataset_cache[period] = load_dataset(dataset_name, period)
+            series_cache[period] = dataset_cache[period].get_training_series()
+
+        run_lg_vae_experiment(
+            config_name=job["config_name"],
+            cfg=job["cfg"],
+            period=period,
+            run_idx=job["run_idx"],
+            dataset=dataset_cache[period],
+            train_series_list=series_cache[period],
+            csv_path=csv_path,
+            round_num=round_num,
+            max_epochs=max_epochs,
+            patience=patience,
+            batch_size=job["batch_size"],
+            accelerator_override=args.accelerator,
+            forecast_multiplier=forecast_multiplier,
+            num_workers=args.num_workers,
+            active_g=job["active_g"],
+            pass_name=job["pass_name"],
+        )
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -913,6 +988,11 @@ def run_lg_vae_search(args):
     print(f"  Config space: {len(full_configs)} configs × {len(passes)} passes")
     print(f"  Stacks/config: {n_stacks}")
     print(f"  Categories: pure_lg_vae (9), trend_wavelet (8), nbeats_i_style (2)")
+    if getattr(args, "meet_middle", False):
+        print(
+            f"  Split mode: meet-middle side={args.meet_side}, "
+            f"order={args.job_order}"
+        )
     if n_gpus >= 2:
         print(f"  GPUs: {n_gpus} (parallel execution)")
     else:
@@ -1048,11 +1128,28 @@ def main():
         help="Number of GPUs for parallel execution (default: auto-detect)."
     )
     parser.add_argument(
+        "--meet-middle", action="store_true",
+        help="Split each round's full job list into disjoint front/back halves."
+    )
+    parser.add_argument(
+        "--meet-side", default=None, choices=["front", "back"],
+        help="Which half to run when --meet-middle is enabled."
+    )
+    parser.add_argument(
+        "--job-order", default="forward", choices=["forward", "reverse"],
+        help="Execution order within selected jobs."
+    )
+    parser.add_argument(
         "--num-workers", type=int, default=0,
         help="DataLoader num_workers."
     )
 
     args = parser.parse_args()
+
+    if args.meet_side is not None and not args.meet_middle:
+        args.meet_middle = True
+    if args.meet_middle and args.meet_side is None:
+        parser.error("--meet-middle requires --meet-side {front,back}.")
 
     if args.run_all:
         datasets = list(LG_VAE_STUDY_DATASETS.keys())
