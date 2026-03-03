@@ -251,8 +251,8 @@ class NBeatsNet(pl.LightningModule):
               "GenericVAE", "BottleneckGenericVAE", "SeasonalityVAE",
               "AutoEncoderVAE", "TrendVAE", "GenericAEBackcastVAE",
           )
-          if stack_type == "TrendWaveletAE":
-            block = b.TrendWaveletAE(
+          if stack_type in ("TrendWaveletAE", "TrendWaveletAELG"):
+            block = getattr(b, stack_type)(
                 units, self.backcast_length, self.forecast_length,
                 trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
                 basis_offset=effective_offset,

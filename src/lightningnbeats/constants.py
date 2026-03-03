@@ -88,8 +88,9 @@ BLOCKS = [
   "Symlet3WaveletV3",
   "Symlet10WaveletV3",
   "Symlet20WaveletV3",
-  # TrendWaveletAE — merged polynomial + DWT basis block with AE backbone (Option A)
+  # TrendWaveletAE family — merged polynomial + DWT basis block with AE backbone (Option A)
   "TrendWaveletAE",
+  "TrendWaveletAELG",
   # V3AE Wavelet blocks (orthonormal DWT basis, AE bottleneck backbone) (Option B)
   "HaarWaveletV3AE",
   "DB2WaveletV3AE",
@@ -105,4 +106,19 @@ BLOCKS = [
   "Symlet3WaveletV3AE",
   "Symlet10WaveletV3AE",
   "Symlet20WaveletV3AE",
+  # V3AELG Wavelet blocks (orthonormal DWT basis, Learned-Gate AE backbone)
+  "HaarWaveletV3AELG",
+  "DB2WaveletV3AELG",
+  "DB3WaveletV3AELG",
+  "DB4WaveletV3AELG",
+  "DB10WaveletV3AELG",
+  "DB20WaveletV3AELG",
+  "Coif1WaveletV3AELG",
+  "Coif2WaveletV3AELG",
+  "Coif3WaveletV3AELG",
+  "Coif10WaveletV3AELG",
+  "Symlet2WaveletV3AELG",
+  "Symlet3WaveletV3AELG",
+  "Symlet10WaveletV3AELG",
+  "Symlet20WaveletV3AELG",
 ]

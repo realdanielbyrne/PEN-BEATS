@@ -1028,6 +1028,98 @@ class TrendWaveletAE(AERootBlock):
     return backcast, forecast
 
 
+class TrendWaveletAELG(AERootBlockLG):
+  def __init__(self, units, backcast_length, forecast_length,
+               trend_dim=4, wavelet_dim=16, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g=False,
+               wavelet_type='db3', latent_dim=5, forecast_basis_dim=None):
+    """TrendWaveletAELG extends TrendWaveletAE with the Learned-Gate AE backbone.
+
+    Identical to TrendWaveletAE in its projection heads and frozen basis expansions
+    (parallel Vandermonde polynomial + orthonormal DWT, additive output), but replaces
+    the plain AERootBlock backbone with AERootBlockLG.  The LG backbone adds a learnable
+    ``nn.Parameter`` gate vector of size ``latent_dim``; each forward pass applies
+    ``sigmoid(latent_gate) * z`` after the bottleneck, allowing the network to
+    discover the effective latent dimensionality during training and selectively suppress
+    uninformative latent dimensions.
+
+    Args:
+        units (int): Width of the fully connected layers in the AE backbone.
+        backcast_length (int): Length of the historical input sequence.
+        forecast_length (int): Length of the forecast horizon.
+        trend_dim (int, optional): Polynomial degree (number of Vandermonde basis vectors).
+            Defaults to 4.
+        wavelet_dim (int, optional): Number of DWT basis rows. Defaults to 16.
+        basis_offset (int, optional): Row offset into SVD-ordered DWT basis for
+            frequency-band selection.  0 = lowest/smoothest.  Defaults to 0.
+        share_weights (bool, optional): Share the projection head between backcast and
+            forecast paths when their total coefficient dimensions match. Defaults to False.
+        activation (str, optional): Activation function for the AE backbone. Defaults to 'ReLU'.
+        active_g (bool or str, optional): Apply activation after basis expansion.
+            False = no activation.  True = both paths.
+            'backcast'/'forecast' = single path.  Defaults to False.
+        wavelet_type (str, optional): PyWavelets wavelet family string. Defaults to 'db3'.
+        latent_dim (int, optional): Dimensionality of the AE bottleneck. Defaults to 5.
+        forecast_basis_dim (int, optional): Override for wavelet basis dim on the forecast
+            path.  When set the forecast wavelet head uses this value (clamped to
+            forecast_length) while the backcast path continues to use wavelet_dim.
+            Defaults to None (both paths use wavelet_dim).
+    """
+    super(TrendWaveletAELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.trend_dim = trend_dim
+    self.active_g = active_g
+
+    # Effective wavelet dimension for each path (clamped to available rows after offset)
+    eff_back_wave = min(wavelet_dim, backcast_length - min(basis_offset, backcast_length - 1))
+    fore_wavelet_dim = forecast_basis_dim if forecast_basis_dim is not None else wavelet_dim
+    eff_fore_wave = min(fore_wavelet_dim, forecast_length - min(basis_offset, forecast_length - 1))
+
+    # Total coefficient dims: trend + wavelet for each path
+    total_backcast_dim = trend_dim + eff_back_wave
+    total_forecast_dim = trend_dim + eff_fore_wave
+
+    if share_weights and total_backcast_dim == total_forecast_dim:
+      self.backcast_linear = self.forecast_linear = nn.Linear(units, total_backcast_dim)
+    else:
+      self.backcast_linear = nn.Linear(units, total_backcast_dim)
+      self.forecast_linear = nn.Linear(units, total_forecast_dim)
+
+    # Frozen polynomial (Vandermonde) basis generators
+    self.backcast_trend_g = _TrendGenerator(trend_dim, backcast_length)
+    self.forecast_trend_g = _TrendGenerator(trend_dim, forecast_length)
+
+    # Frozen orthonormal DWT basis generators
+    self.backcast_wavelet_g = _WaveletGeneratorV3(backcast_length, wavelet_type=wavelet_type,
+                                                   basis_dim=eff_back_wave, basis_offset=basis_offset)
+    self.forecast_wavelet_g = _WaveletGeneratorV3(forecast_length, wavelet_type=wavelet_type,
+                                                   basis_dim=eff_fore_wave, basis_offset=basis_offset)
+
+  def forward(self, x):
+    x = super(TrendWaveletAELG, self).forward(x)
+
+    # Project LG-AE output to concatenated trend + wavelet coefficient vectors
+    backcast_coeffs = self.backcast_linear(x)
+    forecast_coeffs = self.forecast_linear(x)
+
+    # Split coefficient vectors into trend and wavelet parts
+    backcast_trend_theta = backcast_coeffs[:, :self.trend_dim]
+    backcast_wavelet_theta = backcast_coeffs[:, self.trend_dim:]
+    forecast_trend_theta = forecast_coeffs[:, :self.trend_dim]
+    forecast_wavelet_theta = forecast_coeffs[:, self.trend_dim:]
+
+    # Expand each through its frozen basis and sum (parallel basis, additive output)
+    backcast = self.backcast_trend_g(backcast_trend_theta) + self.backcast_wavelet_g(backcast_wavelet_theta)
+    forecast = self.forecast_trend_g(forecast_trend_theta) + self.forecast_wavelet_g(forecast_wavelet_theta)
+
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+
+    return backcast, forecast
+
+
 class SeasonalityAE(AERootBlock):
   def __init__(self, units, backcast_length, forecast_length,  thetas_dim=5,
                share_weights = False, activation='ReLU', active_g:bool = False, latent_dim = 5):
@@ -1880,3 +1972,226 @@ class Symlet20WaveletV3AE(WaveletV3AE):
                                              forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
   def forward(self, x):
     return super(Symlet20WaveletV3AE, self).forward(x)
+
+
+# ---------------------------------------------------------------------------
+# WaveletV3AELG — V3 wavelet blocks with Learned-Gate AE backbone
+# ---------------------------------------------------------------------------
+
+class WaveletV3AELG(AERootBlockLG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False, wavelet_type='db3',
+               forecast_basis_dim=None, latent_dim=5):
+    """WaveletV3AELG: orthonormal DWT basis block with Learned-Gate AE backbone.
+
+    Structurally identical to WaveletV3AE but inherits from AERootBlockLG instead of
+    AERootBlock, adding a learnable sigmoid gate vector at the latent bottleneck that
+    allows the network to discover effective latent dimensionality during training.
+
+    Args:
+        units (int): Width of the fully connected layers in the LG-AE backbone.
+        backcast_length (int): Length of the historical input sequence.
+        forecast_length (int): Length of the forecast horizon.
+        basis_dim (int, optional): Number of DWT basis rows. Defaults to 32.
+        basis_offset (int, optional): Row offset into SVD-ordered basis. Defaults to 0.
+        share_weights (bool, optional): Share projection heads when dimensions match.
+            Defaults to False.
+        activation (str, optional): Activation for the LG-AE backbone. Defaults to 'ReLU'.
+        active_g (bool or str, optional): Apply activation after basis expansion.
+            Defaults to False.
+        wavelet_type (str, optional): PyWavelets wavelet family string. Defaults to 'db3'.
+        forecast_basis_dim (int, optional): Override basis_dim for forecast path only.
+            Defaults to None (both paths use basis_dim).
+        latent_dim (int, optional): Dimensionality of the LG-AE bottleneck. Defaults to 5.
+    """
+    super(WaveletV3AELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.wavelet_type = wavelet_type
+    self.share_weights = share_weights
+    self.active_g = active_g
+
+    eff_back_dim = (backcast_length - min(basis_offset, backcast_length - 1)
+                    if basis_dim is None
+                    else min(basis_dim, backcast_length - min(basis_offset, backcast_length - 1)))
+    fore_dim = forecast_basis_dim if forecast_basis_dim is not None else basis_dim
+    eff_fore_dim = (forecast_length - min(basis_offset, forecast_length - 1)
+                    if fore_dim is None
+                    else min(fore_dim, forecast_length - min(basis_offset, forecast_length - 1)))
+
+    self.backcast_linear = nn.Linear(units, eff_back_dim, bias=False)
+    self.forecast_linear = nn.Linear(units, eff_fore_dim, bias=False)
+
+    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=wavelet_type,
+                                          basis_dim=eff_back_dim, basis_offset=basis_offset)
+    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=wavelet_type,
+                                          basis_dim=eff_fore_dim, basis_offset=basis_offset)
+
+  def forward(self, x):
+    x = super(WaveletV3AELG, self).forward(x)
+    backcast_thetas = self.backcast_linear(x)
+    forecast_thetas = self.forecast_linear(x)
+    backcast = self.backcast_g(backcast_thetas)
+    forecast = self.forecast_g(forecast_thetas)
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+    return backcast, forecast
+
+
+# --- V3AELG Wavelet subclasses (thin wrappers setting wavelet_type) ---
+
+class HaarWaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(HaarWaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                            basis_offset, share_weights, activation, active_g,
+                                            wavelet_type='haar',
+                                            forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(HaarWaveletV3AELG, self).forward(x)
+
+class DB2WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(DB2WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                           basis_offset, share_weights, activation, active_g,
+                                           wavelet_type='db2',
+                                           forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(DB2WaveletV3AELG, self).forward(x)
+
+class DB3WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(DB3WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                           basis_offset, share_weights, activation, active_g,
+                                           wavelet_type='db3',
+                                           forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(DB3WaveletV3AELG, self).forward(x)
+
+class DB4WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(DB4WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                           basis_offset, share_weights, activation, active_g,
+                                           wavelet_type='db4',
+                                           forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(DB4WaveletV3AELG, self).forward(x)
+
+class DB10WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(DB10WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                            basis_offset, share_weights, activation, active_g,
+                                            wavelet_type='db10',
+                                            forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(DB10WaveletV3AELG, self).forward(x)
+
+class DB20WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(DB20WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                            basis_offset, share_weights, activation, active_g,
+                                            wavelet_type='db20',
+                                            forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(DB20WaveletV3AELG, self).forward(x)
+
+
+class Coif1WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Coif1WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                             basis_offset, share_weights, activation, active_g,
+                                             wavelet_type='coif1',
+                                             forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Coif1WaveletV3AELG, self).forward(x)
+
+class Coif2WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Coif2WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                             basis_offset, share_weights, activation, active_g,
+                                             wavelet_type='coif2',
+                                             forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Coif2WaveletV3AELG, self).forward(x)
+
+class Coif3WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Coif3WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                             basis_offset, share_weights, activation, active_g,
+                                             wavelet_type='coif3',
+                                             forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Coif3WaveletV3AELG, self).forward(x)
+
+class Coif10WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Coif10WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                              basis_offset, share_weights, activation, active_g,
+                                              wavelet_type='coif10',
+                                              forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Coif10WaveletV3AELG, self).forward(x)
+
+class Symlet2WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Symlet2WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                               basis_offset, share_weights, activation, active_g,
+                                               wavelet_type='sym2',
+                                               forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Symlet2WaveletV3AELG, self).forward(x)
+
+class Symlet3WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Symlet3WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                               basis_offset, share_weights, activation, active_g,
+                                               wavelet_type='sym3',
+                                               forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Symlet3WaveletV3AELG, self).forward(x)
+
+class Symlet10WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Symlet10WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                                basis_offset, share_weights, activation, active_g,
+                                                wavelet_type='sym10',
+                                                forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Symlet10WaveletV3AELG, self).forward(x)
+
+class Symlet20WaveletV3AELG(WaveletV3AELG):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Symlet20WaveletV3AELG, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                                basis_offset, share_weights, activation, active_g,
+                                                wavelet_type='sym20',
+                                                forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Symlet20WaveletV3AELG, self).forward(x)
