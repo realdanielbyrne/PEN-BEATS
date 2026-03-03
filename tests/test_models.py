@@ -1,9 +1,9 @@
-"""Tests for NBeatsNet model — width selection logic and optimizer dispatch."""
+"""Tests for NBeatsNet and NHiTSNet models — width selection, optimizer dispatch, NHiTS semantics."""
 import pytest
 import torch
 from torch import optim
 
-from lightningnbeats.models import NBeatsNet
+from lightningnbeats.models import NBeatsNet, NHiTSNet
 
 
 def _make_model(stack_types, **kwargs):
@@ -416,3 +416,240 @@ class TestWaveletTypeForwarding:
         backcast, forecast = model(x)
         assert backcast.shape == (4, 20)
         assert forecast.shape == (4, 5)
+
+
+
+# ---------------------------------------------------------------------------
+# NHiTSNet tests
+# ---------------------------------------------------------------------------
+
+def _make_nhits(stack_types, **kwargs):
+    """Helper to create a minimal NHiTSNet model."""
+    defaults = dict(
+        backcast_length=24,
+        forecast_length=6,
+        stack_types=stack_types,
+        n_blocks_per_stack=1,
+        share_weights=False,
+        thetas_dim=4,
+        active_g=False,
+        latent_dim=4,
+        basis_dim=16,
+        g_width=32,
+    )
+    defaults.update(kwargs)
+    return NHiTSNet(**defaults)
+
+
+class TestNHiTSNetConstruction:
+    """Verify NHiTSNet instantiates correctly and stores parameters."""
+
+    def test_basic_construction(self):
+        model = _make_nhits(["Generic", "Generic", "Generic"])
+        assert model.n_stacks == 3
+        assert len(model.stacks) == 3
+
+    def test_stack_types_none_raises(self):
+        with pytest.raises(ValueError, match="Stack architecture must be specified"):
+            NHiTSNet(backcast_length=24, forecast_length=6, stack_types=None)
+
+    def test_invalid_active_g_raises(self):
+        with pytest.raises(ValueError, match="active_g must be"):
+            _make_nhits(["Generic"], active_g='invalid')
+
+    def test_invalid_trend_thetas_dim_raises(self):
+        with pytest.raises(ValueError, match="trend_thetas_dim must be a positive integer"):
+            _make_nhits(["Trend"], trend_thetas_dim=0)
+
+    def test_n_pools_kernel_size_length_mismatch_raises(self):
+        with pytest.raises(ValueError, match="n_pools_kernel_size length"):
+            _make_nhits(["Generic", "Generic"], n_pools_kernel_size=[2])
+
+    def test_n_freq_downsample_length_mismatch_raises(self):
+        with pytest.raises(ValueError, match="n_freq_downsample length"):
+            _make_nhits(["Generic", "Generic"], n_freq_downsample=[2])
+
+    def test_default_pools_and_downsample_filled_in(self):
+        model = _make_nhits(["Generic", "Generic"])
+        assert model.n_pools_kernel_size == [2, 2]
+        assert model.n_freq_downsample == [1, 1]
+
+    def test_custom_pools_stored(self):
+        model = _make_nhits(
+            ["Generic", "Generic", "Generic"],
+            n_pools_kernel_size=[1, 2, 4],
+            n_freq_downsample=[1, 2, 6],
+        )
+        assert model.n_pools_kernel_size == [1, 2, 4]
+        assert model.n_freq_downsample == [1, 2, 6]
+
+    def test_pooled_backcast_lengths_computed(self):
+        model = _make_nhits(
+            ["Generic", "Generic", "Generic"],
+            backcast_length=24,
+            n_pools_kernel_size=[1, 2, 4],
+        )
+        # 24//1=24, 24//2=12, 24//4=6
+        assert model.pooled_backcast_lengths == [24, 12, 6]
+
+    def test_reduced_forecast_lengths_computed(self):
+        model = _make_nhits(
+            ["Generic", "Generic", "Generic"],
+            forecast_length=6,
+            n_freq_downsample=[1, 2, 6],
+        )
+        # 6//1=6, 6//2=3, 6//6=1
+        assert model.reduced_forecast_lengths == [6, 3, 1]
+
+    def test_blocks_use_effective_forecast_length(self):
+        """Each block's forecast output should match its reduced_forecast_length."""
+        model = _make_nhits(
+            ["Generic", "Generic", "Generic"],
+            backcast_length=24, forecast_length=6,
+            n_pools_kernel_size=[1, 2, 4],
+            n_freq_downsample=[1, 2, 6],
+        )
+        expected_fl = [6, 3, 1]
+        for stack_id, stack in enumerate(model.stacks):
+            block = stack[0]
+            assert block.forecast_length == expected_fl[stack_id], (
+                f"stack {stack_id}: expected forecast_length={expected_fl[stack_id]}, "
+                f"got {block.forecast_length}"
+            )
+
+    def test_blocks_use_effective_backcast_length(self):
+        """Each block's backcast length should match its pooled_backcast_length."""
+        model = _make_nhits(
+            ["Generic", "Generic", "Generic"],
+            backcast_length=24, forecast_length=6,
+            n_pools_kernel_size=[1, 2, 4],
+            n_freq_downsample=[1, 2, 6],
+        )
+        expected_bl = [24, 12, 6]
+        for stack_id, stack in enumerate(model.stacks):
+            block = stack[0]
+            assert block.backcast_length == expected_bl[stack_id], (
+                f"stack {stack_id}: expected backcast_length={expected_bl[stack_id]}, "
+                f"got {block.backcast_length}"
+            )
+
+
+class TestNHiTSNetForwardShape:
+    """Verify NHiTSNet forward pass produces correct output shapes."""
+
+    def test_no_pooling_forward_shape(self):
+        """With pool=1 and freq_down=1 the output is identical to N-BEATS."""
+        model = _make_nhits(
+            ["Generic", "Generic"],
+            backcast_length=20, forecast_length=5,
+            n_pools_kernel_size=[1, 1],
+            n_freq_downsample=[1, 1],
+        )
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)
+
+    def test_multirate_forward_shape(self):
+        """Multi-rate pooling + interpolation must still produce correct shapes."""
+        model = _make_nhits(
+            ["Generic", "Generic", "Generic"],
+            backcast_length=24, forecast_length=6,
+            n_pools_kernel_size=[1, 2, 4],
+            n_freq_downsample=[1, 2, 6],
+        )
+        x = torch.randn(4, 24)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 24)
+        assert forecast.shape == (4, 6)
+
+    def test_single_stack_forward_shape(self):
+        model = _make_nhits(
+            ["Generic"],
+            backcast_length=16, forecast_length=4,
+            n_pools_kernel_size=[2],
+            n_freq_downsample=[2],
+        )
+        x = torch.randn(2, 16)
+        backcast, forecast = model(x)
+        assert backcast.shape == (2, 16)
+        assert forecast.shape == (2, 4)
+
+    def test_trend_seasonality_generic_forward_shape(self):
+        model = _make_nhits(
+            ["Trend", "Seasonality", "Generic"],
+            backcast_length=24, forecast_length=6,
+            t_width=32, s_width=64,
+            n_pools_kernel_size=[1, 1, 2],
+            n_freq_downsample=[1, 1, 2],
+        )
+        x = torch.randn(4, 24)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 24)
+        assert forecast.shape == (4, 6)
+
+    def test_ae_block_forward_shape(self):
+        model = _make_nhits(
+            ["GenericAE", "GenericAE"],
+            backcast_length=20, forecast_length=5,
+            n_pools_kernel_size=[1, 2],
+            n_freq_downsample=[1, 5],
+        )
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)
+
+
+class TestNHiTSNetParameters:
+    """Verify NHiTS-specific parameters are stored and passed correctly."""
+
+    def test_active_g_forecast_passthrough(self):
+        model = _make_nhits(["Generic"], active_g='forecast')
+        assert model.active_g == 'forecast'
+        assert model.stacks[0][0].active_g == 'forecast'
+
+    def test_active_g_backcast_passthrough(self):
+        model = _make_nhits(["Generic"], active_g='backcast')
+        assert model.active_g == 'backcast'
+        assert model.stacks[0][0].active_g == 'backcast'
+
+    def test_interpolation_mode_stored(self):
+        model = _make_nhits(["Generic"], interpolation_mode='nearest')
+        assert model.interpolation_mode == 'nearest'
+
+    def test_nearest_interpolation_forward_shape(self):
+        model = _make_nhits(
+            ["Generic", "Generic"],
+            backcast_length=20, forecast_length=4,
+            n_pools_kernel_size=[1, 2],
+            n_freq_downsample=[1, 2],
+            interpolation_mode='nearest',
+        )
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 4)
+
+    def test_sum_losses_training_step(self):
+        model = _make_nhits(["Generic", "Generic"], sum_losses=True)
+        x = torch.randn(4, 24)
+        y = torch.randn(4, 6)
+        loss = model.training_step((x, y), 0)
+        assert isinstance(loss, torch.Tensor)
+        assert loss.ndim == 0
+
+    def test_optimizer_dispatch(self):
+        model = _make_nhits(["Generic"], optimizer_name='AdamW')
+        opt = model.configure_optimizers()
+        assert isinstance(opt, optim.AdamW)
+
+    def test_trend_thetas_dim_routing(self):
+        """Trend blocks in NHiTSNet should respect trend_thetas_dim."""
+        model = _make_nhits(
+            ["Trend"], t_width=32, thetas_dim=8, trend_thetas_dim=3,
+            n_pools_kernel_size=[1], n_freq_downsample=[1],
+        )
+        block = model.stacks[0][0]
+        assert block.backcast_linear.out_features == 3
+        assert block.forecast_linear.out_features == 3

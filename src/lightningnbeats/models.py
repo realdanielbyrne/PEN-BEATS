@@ -11,7 +11,124 @@ from .blocks import blocks as b
 from .constants import LOSSES, OPTIMIZERS, BLOCKS
 
 
-class NBeatsNet(pl.LightningModule):
+class _NBeatsBase(pl.LightningModule):
+  """Shared training infrastructure for NBeatsNet and NHiTSNet.
+
+  Provides configure_loss, configure_optimizers, and all Lightning step
+  methods. Subclasses must implement forward() and set self.stacks before
+  or during their own __init__.
+  """
+
+  def __init__(
+      self,
+      loss: str = 'SMAPELoss',
+      frequency: int = 1,
+      no_val: bool = False,
+      optimizer_name: str = 'Adam',
+      learning_rate: float = 1e-3,
+      sum_losses: bool = False,
+      lr_scheduler_config: dict = None,
+  ):
+    super(_NBeatsBase, self).__init__()
+    self.loss = loss
+    self.frequency = frequency
+    self.no_val = no_val
+    self.optimizer_name = optimizer_name
+    self.learning_rate = learning_rate
+    self.sum_losses = sum_losses
+    self.lr_scheduler_config = lr_scheduler_config
+    self.loss_fn = self.configure_loss()
+
+  def configure_loss(self):
+    if self.loss not in LOSSES:
+        raise ValueError(f"Unknown loss function name: {self.loss}. Please select one of {LOSSES}")
+    if self.loss == 'MASELoss':
+        return MASELoss(self.frequency)
+    if self.loss == 'MAPELoss':
+        return MAPELoss()
+    if self.loss == 'SMAPELoss':
+        return SMAPELoss()
+    if self.loss == 'NormalizedDeviationLoss':
+        return NormalizedDeviationLoss()
+    else:
+        return getattr(nn, self.loss)()
+
+  def configure_optimizers(self):
+    if self.optimizer_name not in OPTIMIZERS:
+        raise ValueError(f"Unknown optimizer name: {self.optimizer_name}. Please select one of {OPTIMIZERS}")
+
+    optimizer = getattr(optim, self.optimizer_name)(self.parameters(), lr=self.learning_rate)
+
+    if self.lr_scheduler_config is not None:
+        cfg = self.lr_scheduler_config
+        warmup_epochs = cfg.get("warmup_epochs", 15)
+        t_max = cfg.get("T_max", 35)
+        eta_min = cfg.get("eta_min", 1e-6)
+
+        warmup_scheduler = ConstantLR(optimizer, factor=1.0, total_iters=warmup_epochs)
+        cosine_scheduler = CosineAnnealingLR(optimizer, T_max=t_max, eta_min=eta_min)
+        scheduler = SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_epochs],
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"},
+        }
+
+    return optimizer
+
+  def training_step(self, batch, batch_idx):
+    x, y = batch
+    backcast, forecast = self(x)
+    loss = self.loss_fn(forecast, y)
+
+    if self.sum_losses:
+      backcast_loss = self.loss_fn(backcast, torch.zeros_like(backcast))
+      loss = loss + backcast_loss * 0.25
+
+    # Collect KL divergence loss from any VAE blocks
+    kl_loss = torch.tensor(0.0, device=x.device)
+    for stack in self.stacks:
+      for block in stack:
+        if isinstance(block, b.AERootBlockVAE) or isinstance(block, b.VAE):
+          kl_loss = kl_loss + block.kl_loss
+    if kl_loss.item() > 0:
+      loss = loss + kl_loss * 0.001
+
+    self.log('train_loss', loss, prog_bar=True)
+    return loss
+
+  def validation_step(self, batch, batch_idx):
+    if self.no_val:
+      return None
+    x, y = batch
+    backcast, forecast = self(x)
+    loss = self.loss_fn(forecast, y)
+    if self.sum_losses:
+      backcast_loss = self.loss_fn(backcast, torch.zeros_like(backcast))
+      loss = loss + backcast_loss * 0.25
+    self.log('val_loss', loss, prog_bar=True)
+    return loss
+
+  def test_step(self, batch, batch_idx):
+    x, y = batch
+    backcast, forecast = self(x)
+    loss = self.loss_fn(forecast, y)
+    if self.sum_losses:
+      backcast_loss = self.loss_fn(backcast, torch.zeros_like(backcast))
+      loss = loss + backcast_loss * 0.25
+    self.log('test_loss', loss)
+    return loss
+
+  def predict_step(self, batch, batch_idx, dataloader_idx=None):
+    self.eval()
+    _, forecast = self(batch)
+    return forecast.detach().cpu().numpy()
+
+
+class NBeatsNet(_NBeatsBase):
   SEASONALITY = 'seasonality'
   TREND = 'trend'
   GENERIC = 'generic'
@@ -164,7 +281,17 @@ class NBeatsNet(pl.LightningModule):
         Tensor containing the forward forecast of the stacks.
     """    
   
-    super(NBeatsNet, self).__init__()
+    if isinstance(active_g, str) and active_g not in ('backcast', 'forecast'):
+      raise ValueError(f"active_g must be True, False, 'backcast', or 'forecast', got '{active_g}'")
+    if trend_thetas_dim is not None and (not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1):
+      raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
+
+    super(NBeatsNet, self).__init__(
+        loss=loss, frequency=frequency, no_val=no_val,
+        optimizer_name=optimizer_name, learning_rate=learning_rate,
+        sum_losses=sum_losses, lr_scheduler_config=lr_scheduler_config,
+    )
+
     self.backcast_length = backcast_length
     self.forecast_length = forecast_length
     self.n_blocks_per_stack = n_blocks_per_stack
@@ -174,37 +301,24 @@ class NBeatsNet(pl.LightningModule):
     self.t_width = t_width
     self.ae_width = ae_width
     self.thetas_dim = thetas_dim
-    self.learning_rate = learning_rate
-    self.no_val = no_val
-    self.optimizer_name = optimizer_name
-    self.frequency = frequency
-    self.loss = loss
     self.activation = activation
     self.active_g = active_g
-    if isinstance(active_g, str) and active_g not in ('backcast', 'forecast'):
-      raise ValueError(f"active_g must be True, False, 'backcast', or 'forecast', got '{active_g}'")
-    self.sum_losses = sum_losses
     self.latent_dim = latent_dim
     self.basis_dim = basis_dim
     self.basis_offset = basis_offset
     self.stack_basis_offsets = stack_basis_offsets
     self.forecast_basis_dim = forecast_basis_dim
     self.wavelet_type = wavelet_type
-    if trend_thetas_dim is not None and (not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1):
-      raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
     self.trend_thetas_dim = self.thetas_dim if trend_thetas_dim is None else trend_thetas_dim
-    self.lr_scheduler_config = lr_scheduler_config
-    self.loss_fn = self.configure_loss()
 
+    self.save_hyperparameters()
 
-    self.save_hyperparameters()   
-      
     if stack_types is not None:
       self.stack_types = stack_types
-      self.n_stacks = len(stack_types)                              
+      self.n_stacks = len(stack_types)
     else:
       raise ValueError("Stack architecture must be specified.")
-          
+
     self.stacks = nn.ModuleList()
     for stack_idx, stack_type in enumerate(self.stack_types):
       self.stacks.append(self.create_stack(stack_type, stack_idx))
@@ -307,108 +421,376 @@ class NBeatsNet(pl.LightningModule):
     stack_forecast = y
     return stack_residual, stack_forecast
 
-  
-  def training_step(self, batch, batch_idx):
-    """Training step for the NBeatsNet model.
 
-    Args:
-        batch (Tensor): Batch of training data.
-        batch_idx (Tensor): Index of training batch.
+class NHiTSNet(_NBeatsBase):
+  """PyTorch Lightning module implementing the NHiTS architecture.
 
-    Returns:
-        Tensor: Loss for the training step.
+  NHiTS (Neural Hierarchical Interpolation for Time Series) extends N-BEATS
+  with two key innovations applied at the model-level forward loop:
+
+  1. **Multi-rate input pooling**: each stack receives a MaxPool1d-downsampled
+     version of the current residual, controlled by ``n_pools_kernel_size``.
+  2. **Hierarchical forecast interpolation**: each stack produces a forecast at
+     a reduced resolution (``forecast_length // n_freq_downsample[i]`` steps),
+     which is then interpolated back to the full forecast length before
+     accumulation.
+
+  All existing block types from ``blocks.py`` (Generic, AE, LG, VAE, Wavelet,
+  TrendWavelet…) plug in unchanged because the pooling and interpolation are
+  entirely outside the block interface.
+
+  Based on: Challu, C., Olivares, K. G., Oreshkin, B. N., et al. (2022).
+  NHITS: Neural Hierarchical Interpolation for Time Series Forecasting.
+  arXiv:2201.12886. https://arxiv.org/abs/2201.12886
+
+  Parameters
+  ----------
+  backcast_length : int
+      Length of the input (lookback) window.
+  forecast_length : int
+      Length of the forecast horizon.
+  stack_types : list[str]
+      Ordered list of block type names, one entry per stack.
+  n_pools_kernel_size : list[int], optional
+      MaxPool1d kernel size per stack. Length must match ``stack_types``.
+      Default: ``[2] * n_stacks`` (halves the input at every stack).
+  n_freq_downsample : list[int], optional
+      Forecast downsampling ratio per stack. Each stack produces
+      ``max(1, forecast_length // ratio)`` output steps before interpolation.
+      Length must match ``stack_types``.
+      Default: ``[1] * n_stacks`` (no downsampling — same as N-BEATS).
+  interpolation_mode : str, optional
+      Mode passed to ``torch.nn.functional.interpolate`` for both backcast
+      and forecast upsampling. ``'linear'`` (default), ``'nearest'``, or
+      ``'area'``.
+  n_blocks_per_stack : int, optional
+      Number of blocks per stack. Default 1.
+  g_width, s_width, t_width, ae_width : int, optional
+      Hidden layer widths per block family (same mapping as NBeatsNet).
+  share_weights : bool, optional
+      Reuse first block parameters across blocks in the same stack.
+  thetas_dim : int, optional
+      Basis expansion dimension for Generic / Trend blocks. Default 5.
+  learning_rate : float, optional
+      Optimizer learning rate. Default 1e-3.
+  loss : str, optional
+      Loss function name (see LOSSES). Default ``'SMAPELoss'``.
+  no_val : bool, optional
+      Skip validation steps when True. Default False.
+  optimizer_name : str, optional
+      Optimizer name (see OPTIMIZERS). Default ``'Adam'``.
+  activation : str, optional
+      Activation function name (see ACTIVATIONS). Default ``'ReLU'``.
+  frequency : int, optional
+      Series frequency; used only with ``MASELoss``. Default 1.
+  active_g : bool or str, optional
+      Activation on basis-expansion output. False / True / ``'backcast'`` /
+      ``'forecast'``. Default False.
+  latent_dim : int, optional
+      Latent bottleneck size for AE-family blocks. Default 5.
+  sum_losses : bool, optional
+      Add 0.25 × backcast-reconstruction loss to forecast loss. Default False.
+  basis_dim : int, optional
+      Wavelet basis dimensionality. Default 32.
+  basis_offset : int, optional
+      Row offset into the SVD-ordered WaveletV3 basis. Default 0.
+  stack_basis_offsets : list[int], optional
+      Per-stack override of ``basis_offset``. Default None.
+  forecast_basis_dim : int, optional
+      Override basis dim for WaveletV3 forecast path. Default None.
+  wavelet_type : str, optional
+      PyWavelets wavelet name for TrendWavelet blocks. Default ``'db3'``.
+  trend_thetas_dim : int or None, optional
+      Polynomial degree for Trend/TrendAE blocks. Default 3.
+  lr_scheduler_config : dict, optional
+      Warmup + cosine annealing config (keys: ``warmup_epochs``, ``T_max``,
+      ``eta_min``). Default None.
+  """
+
+  def __init__(
+      self,
+      backcast_length: int,
+      forecast_length: int,
+      stack_types: list = None,
+      n_pools_kernel_size: list = None,
+      n_freq_downsample: list = None,
+      interpolation_mode: str = 'linear',
+      n_blocks_per_stack: int = 1,
+      g_width: int = 512,
+      s_width: int = 2048,
+      t_width: int = 256,
+      ae_width: int = 512,
+      share_weights: bool = False,
+      thetas_dim: int = 5,
+      learning_rate: float = 1e-3,
+      loss: str = 'SMAPELoss',
+      no_val: bool = False,
+      optimizer_name: str = 'Adam',
+      activation: str = 'ReLU',
+      frequency: int = 1,
+      active_g = False,
+      latent_dim: int = 5,
+      sum_losses: bool = False,
+      basis_dim: int = 32,
+      basis_offset: int = 0,
+      stack_basis_offsets: list = None,
+      forecast_basis_dim: int = None,
+      wavelet_type: str = 'db3',
+      trend_thetas_dim: int | None = 3,
+      lr_scheduler_config: dict = None,
+  ):
+    if stack_types is None:
+      raise ValueError("Stack architecture must be specified.")
+    if isinstance(active_g, str) and active_g not in ('backcast', 'forecast'):
+      raise ValueError(f"active_g must be True, False, 'backcast', or 'forecast', got '{active_g}'")
+    if trend_thetas_dim is not None and (not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1):
+      raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
+
+    n_stacks = len(stack_types)
+
+    # Default pool / downsample lists when not supplied
+    if n_pools_kernel_size is None:
+      n_pools_kernel_size = [2] * n_stacks
+    if n_freq_downsample is None:
+      n_freq_downsample = [1] * n_stacks
+
+    if len(n_pools_kernel_size) != n_stacks:
+      raise ValueError(
+          f"n_pools_kernel_size length {len(n_pools_kernel_size)} must equal "
+          f"the number of stacks ({n_stacks})."
+      )
+    if len(n_freq_downsample) != n_stacks:
+      raise ValueError(
+          f"n_freq_downsample length {len(n_freq_downsample)} must equal "
+          f"the number of stacks ({n_stacks})."
+      )
+
+    super(NHiTSNet, self).__init__(
+        loss=loss, frequency=frequency, no_val=no_val,
+        optimizer_name=optimizer_name, learning_rate=learning_rate,
+        sum_losses=sum_losses, lr_scheduler_config=lr_scheduler_config,
+    )
+
+    self.backcast_length = backcast_length
+    self.forecast_length = forecast_length
+    self.stack_types = stack_types
+    self.n_stacks = n_stacks
+    self.n_pools_kernel_size = n_pools_kernel_size
+    self.n_freq_downsample = n_freq_downsample
+    self.interpolation_mode = interpolation_mode
+    self.n_blocks_per_stack = n_blocks_per_stack
+    self.g_width = g_width
+    self.s_width = s_width
+    self.t_width = t_width
+    self.ae_width = ae_width
+    self.share_weights = share_weights
+    self.thetas_dim = thetas_dim
+    self.activation = activation
+    self.active_g = active_g
+    self.latent_dim = latent_dim
+    self.basis_dim = basis_dim
+    self.basis_offset = basis_offset
+    self.stack_basis_offsets = stack_basis_offsets
+    self.forecast_basis_dim = forecast_basis_dim
+    self.wavelet_type = wavelet_type
+    self.trend_thetas_dim = self.thetas_dim if trend_thetas_dim is None else trend_thetas_dim
+
+    # Precompute per-stack effective block lengths
+    self.pooled_backcast_lengths = [
+        max(1, backcast_length // pool_size)
+        for pool_size in n_pools_kernel_size
+    ]
+    self.reduced_forecast_lengths = [
+        max(1, forecast_length // freq_down)
+        for freq_down in n_freq_downsample
+    ]
+
+    self.save_hyperparameters()
+
+    self.stacks = nn.ModuleList()
+    for stack_idx, stack_type in enumerate(self.stack_types):
+      pooled_bl = self.pooled_backcast_lengths[stack_idx]
+      reduced_fl = self.reduced_forecast_lengths[stack_idx]
+      self.stacks.append(
+          self._create_nhits_stack(stack_type, stack_idx, pooled_bl, reduced_fl)
+      )
+
+  # ------------------------------------------------------------------
+  # Stack construction
+  # ------------------------------------------------------------------
+
+  def _create_nhits_stack(
+      self,
+      stack_type: str,
+      stack_idx: int,
+      effective_backcast_length: int,
+      effective_forecast_length: int,
+  ) -> nn.ModuleList:
+    """Create blocks for one NHiTS stack with per-stack effective lengths.
+
+    Mirrors NBeatsNet.create_stack() but uses ``effective_backcast_length``
+    and ``effective_forecast_length`` (after pooling / downsampling) so the
+    blocks operate on the correct input/output dimensions.
     """
-    # run forward pass
-    x, y = batch
-    backcast, forecast = self(x)
-    
-    # calculate loss
-    loss = self.loss_fn(forecast, y)
+    blocks = nn.ModuleList()
+    if stack_type not in BLOCKS:
+      raise ValueError(
+          f"Unknown stack type: {stack_type}. Please select one of {BLOCKS}"
+      )
 
-    if self.sum_losses:
-      backcast_loss = self.loss_fn(backcast, torch.zeros_like(backcast))
-      loss = loss + backcast_loss * 0.25
-
-    # Collect KL divergence loss from any VAE blocks
-    kl_loss = torch.tensor(0.0, device=x.device)
-    for stack in self.stacks:
-      for block in stack:
-        if isinstance(block, b.AERootBlockVAE) or isinstance(block, b.VAE):
-          kl_loss = kl_loss + block.kl_loss
-    if kl_loss.item() > 0:
-      loss = loss + kl_loss * 0.001
-
-    self.log('train_loss', loss, prog_bar=True)
-    return loss
-
-  def validation_step(self, batch, batch_idx):
-    if self.no_val:
-      return None
-    
-    x, y = batch
-    backcast, forecast = self(x)
-    loss = self.loss_fn(forecast, y)
-    
-    if self.sum_losses:
-      backcast_loss = self.loss_fn(backcast, torch.zeros_like(backcast))
-      loss = loss + backcast_loss * 0.25
-
-    self.log('val_loss', loss, prog_bar=True)
-    return loss
-  
-  def test_step(self, batch, batch_idx):
-    x, y = batch
-    backcast, forecast = self(x)
-    loss = self.loss_fn(forecast, y)
-    
-    if self.sum_losses:
-      backcast_loss = self.loss_fn(backcast, torch.zeros_like(backcast))
-      loss = loss + backcast_loss * 0.25
-
-    self.log('test_loss', loss)
-    return loss
-
-  def predict_step(self, batch, batch_idx, dataloader_idx=None):
-      self.eval()
-      _, forecast = self(batch)
-      return forecast.detach().cpu().numpy()
-    
-  def configure_loss(self):
-    if self.loss not in LOSSES:
-        raise ValueError(f"Unknown loss function name: {self.loss}. Please select one of {LOSSES}")
-    if self.loss == 'MASELoss':
-        return MASELoss(self.frequency)
-    if self.loss == 'MAPELoss':
-        return MAPELoss()
-    if self.loss == 'SMAPELoss':
-        return SMAPELoss()
-    if self.loss == 'NormalizedDeviationLoss':
-        return NormalizedDeviationLoss()
+    if self.stack_basis_offsets and stack_idx < len(self.stack_basis_offsets):
+      effective_offset = self.stack_basis_offsets[stack_idx]
     else:
-        return getattr(nn, self.loss)()
-    
-  def configure_optimizers(self):
-    if self.optimizer_name not in OPTIMIZERS:
-        raise ValueError(f"Unknown optimizer name: {self.optimizer_name}. Please select one of {OPTIMIZERS}")
+      effective_offset = self.basis_offset
 
-    optimizer = getattr(optim, self.optimizer_name)(self.parameters(), lr=self.learning_rate)
+    ae_latent_blocks = (
+        "GenericAE", "BottleneckGenericAE", "SeasonalityAE",
+        "AutoEncoderAE", "TrendAE",
+        "GenericAELG", "BottleneckGenericAELG", "SeasonalityAELG",
+        "AutoEncoderAELG", "TrendAELG", "GenericAEBackcastAELG",
+        "GenericVAE", "BottleneckGenericVAE", "SeasonalityVAE",
+        "AutoEncoderVAE", "TrendVAE", "GenericAEBackcastVAE",
+    )
 
-    if self.lr_scheduler_config is not None:
-        cfg = self.lr_scheduler_config
-        warmup_epochs = cfg.get("warmup_epochs", 15)
-        t_max = cfg.get("T_max", 35)
-        eta_min = cfg.get("eta_min", 1e-6)
+    for block_id in range(self.n_blocks_per_stack):
+      if self.share_weights and block_id != 0:
+        block = blocks[-1]
+      else:
+        # --- Width selection (identical mapping to NBeatsNet) ---
+        if stack_type in [
+            "Generic", "BottleneckGeneric", "GenericAE", "BottleneckGenericAE",
+            "GenericAEBackcast", "GenericAEBackcastAE",
+            "GenericAELG", "BottleneckGenericAELG", "GenericAEBackcastAELG",
+            "GenericVAE", "BottleneckGenericVAE", "GenericAEBackcastVAE",
+        ]:
+          units = self.g_width
+        elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityVAE"]:
+          units = self.s_width
+        elif stack_type in ["Trend", "TrendAE", "TrendAELG", "TrendVAE"]:
+          units = self.t_width
+        elif stack_type in ["AutoEncoder", "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderVAE", "VAE"]:
+          units = self.ae_width
+        else:
+          units = self.g_width
 
-        warmup_scheduler = ConstantLR(optimizer, factor=1.0, total_iters=warmup_epochs)
-        cosine_scheduler = CosineAnnealingLR(optimizer, T_max=t_max, eta_min=eta_min)
-        scheduler = SequentialLR(
-            optimizer,
-            schedulers=[warmup_scheduler, cosine_scheduler],
-            milestones=[warmup_epochs],
-        )
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {"scheduler": scheduler, "interval": "epoch"},
-        }
+        # Trend blocks use trend_thetas_dim; all others use thetas_dim
+        if stack_type in ("Trend", "TrendAE", "TrendAELG", "TrendVAE"):
+          effective_td = self.trend_thetas_dim
+        else:
+          effective_td = self.thetas_dim
 
-    return optimizer
+        # --- Block instantiation (same dispatch as NBeatsNet.create_stack) ---
+        if stack_type in ("TrendWaveletAE", "TrendWaveletAELG"):
+          block = getattr(b, stack_type)(
+              units, effective_backcast_length, effective_forecast_length,
+              trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
+              basis_offset=effective_offset,
+              share_weights=self.share_weights, activation=self.activation,
+              active_g=self.active_g, latent_dim=self.latent_dim,
+              forecast_basis_dim=self.forecast_basis_dim,
+              wavelet_type=self.wavelet_type,
+          )
+        elif stack_type in ae_latent_blocks:
+          block = getattr(b, stack_type)(
+              units, effective_backcast_length, effective_forecast_length,
+              effective_td, self.share_weights, self.activation,
+              self.active_g, self.latent_dim,
+          )
+        elif "Wavelet" in stack_type:
+          if "V3AE" in stack_type:
+            block = getattr(b, stack_type)(
+                units, effective_backcast_length, effective_forecast_length,
+                self.basis_dim, effective_offset,
+                self.share_weights, self.activation, self.active_g,
+                forecast_basis_dim=self.forecast_basis_dim,
+                latent_dim=self.latent_dim,
+            )
+          elif "V3" in stack_type:
+            block = getattr(b, stack_type)(
+                units, effective_backcast_length, effective_forecast_length,
+                self.basis_dim, effective_offset,
+                self.share_weights, self.activation, self.active_g,
+                forecast_basis_dim=self.forecast_basis_dim,
+            )
+          else:
+            block = getattr(b, stack_type)(
+                units, effective_backcast_length, effective_forecast_length,
+                self.basis_dim, self.share_weights, self.activation,
+                self.active_g,
+            )
+        else:
+          block = getattr(b, stack_type)(
+              units, effective_backcast_length, effective_forecast_length,
+              effective_td, self.share_weights, self.activation, self.active_g,
+          )
+
+      blocks.append(block)
+
+    return blocks
+
+  # ------------------------------------------------------------------
+  # Interpolation helper
+  # ------------------------------------------------------------------
+
+  def _interpolate(self, tensor: torch.Tensor, target_size: int) -> torch.Tensor:
+    """Upsample a (batch, time) tensor to ``target_size`` time steps."""
+    interp_kwargs = {'mode': self.interpolation_mode}
+    if self.interpolation_mode not in ('nearest', 'area'):
+      interp_kwargs['align_corners'] = False
+    return F.interpolate(
+        tensor.unsqueeze(1), size=target_size, **interp_kwargs
+    ).squeeze(1)
+
+  # ------------------------------------------------------------------
+  # Forward pass
+  # ------------------------------------------------------------------
+
+  def forward(self, x: torch.Tensor):
+    """NHiTS forward pass with multi-rate pooling and hierarchical interpolation.
+
+    For each stack ``i``:
+      1. Downsample the residual with ``MaxPool1d(kernel=n_pools_kernel_size[i])``.
+      2. Pass the pooled signal through each block to get ``(x_hat, y_hat)``.
+      3. Interpolate ``x_hat`` back to ``backcast_length`` and subtract from residual.
+      4. Interpolate ``y_hat`` up to ``forecast_length`` and add to forecast.
+
+    Returns
+    -------
+    (residual, forecast) : tuple[Tensor, Tensor]
+        Shapes ``(batch, backcast_length)`` and ``(batch, forecast_length)``.
+    """
+    x = torch.squeeze(x, -1)
+    y = torch.zeros(
+        x.shape[0], self.forecast_length, device=x.device, dtype=x.dtype
+    )
+
+    for stack_id in range(len(self.stacks)):
+      pool_size = self.n_pools_kernel_size[stack_id]
+
+      # Multi-rate input pooling
+      if pool_size > 1:
+        x_pooled = F.max_pool1d(
+            x.unsqueeze(1), kernel_size=pool_size, stride=pool_size, ceil_mode=True
+        ).squeeze(1)
+      else:
+        x_pooled = x
+
+      for block_id in range(len(self.stacks[stack_id])):
+        x_hat, y_hat = self.stacks[stack_id][block_id](x_pooled)
+
+        # Backcast: interpolate from pooled length back to original length
+        if x_hat.shape[-1] != self.backcast_length:
+          x_hat_full = self._interpolate(x_hat, self.backcast_length)
+        else:
+          x_hat_full = x_hat
+
+        # Forecast: interpolate from reduced length up to full forecast length
+        if y_hat.shape[-1] != self.forecast_length:
+          y_hat_full = self._interpolate(y_hat, self.forecast_length)
+        else:
+          y_hat_full = y_hat
+
+        x = x - x_hat_full
+        y = y + y_hat_full
+
+    return x, y
