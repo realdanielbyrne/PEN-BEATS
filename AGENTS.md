@@ -76,13 +76,13 @@ Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loade
 
 - `models.py`: `NBeatsNet(pl.LightningModule)` main model. Accepts `stack_types` list of strings to define architecture. Handles forward pass with backward/forward residual connections, training/validation/test steps, loss configuration, and optimizer setup.
 - `blocks/blocks.py`: all block implementations (largest file). Two parallel inheritance hierarchies:
-  - `RootBlock(nn.Module)`: standard backbone. Parent of `Generic`, `BottleneckGeneric`, `Seasonality`, `Trend`, `AutoEncoder`, `VAE`, `GenericAEBackcast`, `WaveletV2`, `AltWaveletV2`, `WaveletV3`, and concrete wavelet subclasses.
+  - `RootBlock(nn.Module)`: standard backbone. Parent of `Generic`, `BottleneckGeneric`, `Seasonality`, `Trend`, `AutoEncoder`, `VAE`, `GenericAEBackcast`, `WaveletV3`, and concrete wavelet subclasses.
   - `AERootBlock(nn.Module)`: autoencoder backbone. Parent of `GenericAE`, `BottleneckGenericAE`, `TrendAE`, `SeasonalityAE`, `AutoEncoderAE`, `GenericAEBackcastAE`.
   - `AERootBlockLG(nn.Module)`: Learned-Gate AE backbone: same encoder-decoder as `AERootBlock` but adds a learnable `nn.Parameter` gate vector (`latent_gate`) of size `latent_dim`. Applies `sigmoid(gate) * z` after the latent layer. Parent of `GenericAELG`, `BottleneckGenericAELG`, `TrendAELG`, `SeasonalityAELG`, `AutoEncoderAELG`, `GenericAEBackcastAELG`.
   - `AERootBlockVAE(nn.Module)`: Variational AE backbone: stochastic latent space with `fc2_mu`/`fc2_logvar` heads and reparameterization trick. Stores `self.kl_loss`; collected in `training_step()` with weight 0.001. Parent of `GenericVAE`, `BottleneckGenericVAE`, `TrendVAE`, `SeasonalityVAE`, `AutoEncoderVAE`, `GenericAEBackcastVAE`.
-  - Wavelet blocks (`HaarWaveletV2`, `DB2WaveletV2`, `HaarWaveletV3`, etc.) are thin subclasses that set the wavelet type string.
-  - Basis generators (`_SeasonalityGenerator`, `_TrendGenerator`, `_WaveletGeneratorV2`, `_AltWaveletGeneratorV2`, `_WaveletGeneratorV3`) produce non-trainable basis matrices registered as buffers.
-  - V1 wavelet blocks were removed due to instability. Use V2 or V3 wavelet variants.
+  - Wavelet blocks (`HaarWaveletV3`, `DB2WaveletV3`, etc.) are thin subclasses that set the wavelet type string.
+  - Basis generators (`_SeasonalityGenerator`, `_TrendGenerator`, `_WaveletGeneratorV3`) produce non-trainable basis matrices registered as buffers.
+  - V1 and V2 wavelet blocks were removed due to instability. Use V3 wavelet variants.
 - `loaders.py`: Lightning DataModules and Datasets. Two data layout conventions:
   - Row-oriented (M4 format): rows = series, cols = time observations. Validation = last `backcast + forecast` columns.
   - Columnar (Tourism format): cols = series, rows = time observations. Supports `no_val` mode. Short series are padded with zeros.
