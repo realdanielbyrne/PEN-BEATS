@@ -469,6 +469,74 @@ All block types supported in `stack_types` (from `constants.BLOCKS`):
 `Coif2WaveletV3`, `Coif3WaveletV3`, `Coif10WaveletV3`, `Symlet2WaveletV3`,
 `Symlet3WaveletV3`, `Symlet10WaveletV3`, `Symlet20WaveletV3`
 
+**Wavelet V3AE (DWT + AE bottleneck):** `HaarWaveletV3AE`, `DB2WaveletV3AE`,
+`DB3WaveletV3AE`, `DB4WaveletV3AE`, `DB10WaveletV3AE`, `DB20WaveletV3AE`,
+`Coif1WaveletV3AE`, `Coif2WaveletV3AE`, `Coif3WaveletV3AE`, `Coif10WaveletV3AE`,
+`Symlet2WaveletV3AE`, `Symlet3WaveletV3AE`, `Symlet10WaveletV3AE`,
+`Symlet20WaveletV3AE`
+
+---
+
+## Compact Grid Study YAML (WaveletV3AE)
+
+`experiments/run_wavelet_v3ae_study.py` uses a compact grid schema where
+configs are generated at runtime (instead of listing 336 entries explicitly).
+
+```yaml
+study_name: wavelet_v3ae_study_m4
+dataset: m4
+period: Yearly
+
+architecture:
+  trend_block: TrendAE
+  repeats: 5            # m4/tourism=5, traffic/weather=10
+
+training:
+  active_g: false
+  sum_losses: false
+  activation: ReLU
+  n_blocks_per_stack: 1
+  share_weights: true
+  loss: SMAPELoss
+  optimizer: Adam
+  learning_rate: 0.001
+
+lr_scheduler:
+  warmup_epochs: 15
+  eta_min: 0.000001
+
+search_space:
+  wavelets: [HaarWaveletV3AE, DB2WaveletV3AE, ... Symlet20WaveletV3AE]
+  basis_labels: [eq_fcast, lt_fcast, eq_bcast, lt_bcast]
+  trend_thetas_dims: [3, 5]
+  latent_dims: [2, 5, 8]
+
+search:
+  rounds:
+    - {max_epochs: 10, n_runs: 3, keep_fraction: 0.67}
+    - {max_epochs: 15, n_runs: 3, keep_fraction: 0.67}
+    - {max_epochs: 50, n_runs: 3, top_k: 10}
+
+output:
+  results_dir: experiments/results
+  search_csv_filename: wavelet_v3ae_study_results.csv
+  cross_csv_path: experiments/results/wavelet_v3ae_cross_dataset_results.csv
+```
+
+### Notes
+
+- Basis labels are mapped at runtime per dataset/period:
+  - `eq_fcast = forecast_length`
+  - `lt_fcast = max(forecast_length//2, forecast_length-2)`
+  - `eq_bcast = backcast_length`
+  - `lt_bcast = backcast_length//2`
+- Colliding basis values are **not** deduplicated; all labels remain in the
+  grid so each dataset keeps `14 * 4 * 2 * 3 = 336` configs.
+- Search CSV includes:
+  `search_round`, `basis_dim`, `basis_offset`, `trend_thetas_dim_cfg`,
+  `wavelet_family`, `bd_label`, `latent_dim_cfg`,
+  `meta_predicted_best`, `meta_convergence_score`.
+
 ---
 
 ## Valid Dataset Periods
