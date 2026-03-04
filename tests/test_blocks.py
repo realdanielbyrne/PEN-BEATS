@@ -399,6 +399,13 @@ class TestAllBlocksOutputShapes:
         "DB10WaveletV3AELG", "DB20WaveletV3AELG",
         "Coif1WaveletV3AELG", "Coif2WaveletV3AELG", "Coif3WaveletV3AELG", "Coif10WaveletV3AELG",
         "Symlet2WaveletV3AELG", "Symlet3WaveletV3AELG", "Symlet10WaveletV3AELG", "Symlet20WaveletV3AELG",
+        # VAE2 blocks (compact VAE backbone)
+        "GenericVAE2", "TrendVAE2", "SeasonalityVAE2", "VAE2",
+        # V3VAE2 Wavelet blocks (orthonormal DWT basis, compact VAE2 backbone)
+        "HaarWaveletV3VAE2", "DB2WaveletV3VAE2", "DB3WaveletV3VAE2", "DB4WaveletV3VAE2",
+        "DB10WaveletV3VAE2", "DB20WaveletV3VAE2",
+        "Coif1WaveletV3VAE2", "Coif2WaveletV3VAE2", "Coif3WaveletV3VAE2", "Coif10WaveletV3VAE2",
+        "Symlet2WaveletV3VAE2", "Symlet3WaveletV3VAE2", "Symlet10WaveletV3VAE2", "Symlet20WaveletV3VAE2",
     ])
     def test_block_output_shape(self, block_name):
         block_class = getattr(b, block_name)
@@ -427,7 +434,14 @@ class TestAllBlocksOutputShapes:
                           "HaarWaveletV3AELG", "DB2WaveletV3AELG", "DB3WaveletV3AELG", "DB4WaveletV3AELG",
                           "DB10WaveletV3AELG", "DB20WaveletV3AELG",
                           "Coif1WaveletV3AELG", "Coif2WaveletV3AELG", "Coif3WaveletV3AELG", "Coif10WaveletV3AELG",
-                          "Symlet2WaveletV3AELG", "Symlet3WaveletV3AELG", "Symlet10WaveletV3AELG", "Symlet20WaveletV3AELG"]
+                          "Symlet2WaveletV3AELG", "Symlet3WaveletV3AELG", "Symlet10WaveletV3AELG", "Symlet20WaveletV3AELG",
+                          # VAE2 blocks (compact VAE backbone)
+                          "GenericVAE2", "TrendVAE2", "SeasonalityVAE2", "VAE2",
+                          # V3VAE2 variants (compact VAE2 backbone)
+                          "HaarWaveletV3VAE2", "DB2WaveletV3VAE2", "DB3WaveletV3VAE2", "DB4WaveletV3VAE2",
+                          "DB10WaveletV3VAE2", "DB20WaveletV3VAE2",
+                          "Coif1WaveletV3VAE2", "Coif2WaveletV3VAE2", "Coif3WaveletV3VAE2", "Coif10WaveletV3VAE2",
+                          "Symlet2WaveletV3VAE2", "Symlet3WaveletV3VAE2", "Symlet10WaveletV3VAE2", "Symlet20WaveletV3VAE2"]
         if block_name in ae_root_blocks:
             kwargs["latent_dim"] = LATENT_DIM
 
@@ -443,9 +457,10 @@ class TestAllBlocksOutputShapes:
         if block_name in ["AutoEncoder", "AutoEncoderAE", "GenericAEBackcast", "GenericAEBackcastAE",
                          "AutoEncoderAELG", "AutoEncoderVAE",
                          "GenericAEBackcastAELG", "GenericAEBackcastVAE",
-                         "VAE"]:
+                         "VAE", "VAE2"]:
             kwargs["share_weights"] = False
-        elif block_name in ["Trend", "TrendAE", "TrendAELG", "TrendVAE", "TrendWaveletAE", "TrendWaveletAELG"]:
+        elif block_name in ["Trend", "TrendAE", "TrendAELG", "TrendVAE", "TrendVAE2",
+                            "TrendWaveletAE", "TrendWaveletAELG"]:
             kwargs["share_weights"] = False
 
         block = block_class(**kwargs)
@@ -593,6 +608,11 @@ V3_WAVELET_BLOCKS = [
     "DB10WaveletV3AELG", "DB20WaveletV3AELG",
     "Coif1WaveletV3AELG", "Coif2WaveletV3AELG", "Coif3WaveletV3AELG", "Coif10WaveletV3AELG",
     "Symlet2WaveletV3AELG", "Symlet3WaveletV3AELG", "Symlet10WaveletV3AELG", "Symlet20WaveletV3AELG",
+    # V3VAE2 variants (same orthonormal basis, compact VAE2 backbone)
+    "HaarWaveletV3VAE2", "DB2WaveletV3VAE2", "DB3WaveletV3VAE2", "DB4WaveletV3VAE2",
+    "DB10WaveletV3VAE2", "DB20WaveletV3VAE2",
+    "Coif1WaveletV3VAE2", "Coif2WaveletV3VAE2", "Coif3WaveletV3VAE2", "Coif10WaveletV3VAE2",
+    "Symlet2WaveletV3VAE2", "Symlet3WaveletV3VAE2", "Symlet10WaveletV3VAE2", "Symlet20WaveletV3VAE2",
 ]
 
 class TestWaveletV3Properties:
@@ -838,3 +858,87 @@ class TestActiveGSplitModes:
                 f"{block_name} backcast shape wrong with active_g={mode}"
             assert forecast.shape == (4, FORECAST_LENGTH), \
                 f"{block_name} forecast shape wrong with active_g={mode}"
+
+
+# --- VAE2RootBlock property tests ---
+
+class TestVAE2RootBlockProperties:
+    """Verify VAE2-family blocks store kl_loss and have correct stochastic behaviour."""
+
+    @pytest.mark.parametrize("block_name", [
+        "GenericVAE2", "TrendVAE2", "SeasonalityVAE2", "VAE2",
+    ])
+    def test_kl_loss_stored_after_forward(self, block_name):
+        block_class = getattr(b, block_name)
+        kwargs = {"units": UNITS, "backcast_length": BACKCAST_LENGTH,
+                  "forecast_length": FORECAST_LENGTH, "thetas_dim": THETAS_DIM,
+                  "latent_dim": LATENT_DIM, "share_weights": False}
+        block = block_class(**kwargs)
+        block.train()
+        x = torch.randn(4, BACKCAST_LENGTH)
+        backcast, forecast = block(x)
+        assert hasattr(block, 'kl_loss'), f"{block_name} missing kl_loss"
+        assert isinstance(block.kl_loss, torch.Tensor)
+        assert block.kl_loss.item() >= 0, f"{block_name} kl_loss should be non-negative"
+
+    @pytest.mark.parametrize("block_name", [
+        "GenericVAE2", "TrendVAE2", "SeasonalityVAE2", "VAE2",
+    ])
+    def test_eval_mode_is_deterministic(self, block_name):
+        block_class = getattr(b, block_name)
+        kwargs = {"units": UNITS, "backcast_length": BACKCAST_LENGTH,
+                  "forecast_length": FORECAST_LENGTH, "thetas_dim": THETAS_DIM,
+                  "latent_dim": LATENT_DIM, "share_weights": False}
+        block = block_class(**kwargs)
+        block.eval()
+        x = torch.randn(4, BACKCAST_LENGTH)
+        b1, f1 = block(x)
+        b2, f2 = block(x)
+        assert torch.allclose(b1, b2), f"{block_name} eval mode is stochastic"
+        assert torch.allclose(f1, f2), f"{block_name} eval mode is stochastic"
+
+    @pytest.mark.parametrize("block_name", [
+        "HaarWaveletV3VAE2", "DB2WaveletV3VAE2", "Coif1WaveletV3VAE2", "Symlet2WaveletV3VAE2",
+    ])
+    def test_wavelet_vae2_kl_loss_stored_after_forward(self, block_name):
+        block_class = getattr(b, block_name)
+        block = block_class(
+            units=UNITS, backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH, basis_dim=BASIS_DIM,
+            latent_dim=LATENT_DIM)
+        block.train()
+        x = torch.randn(4, BACKCAST_LENGTH)
+        backcast, forecast = block(x)
+        assert hasattr(block, 'kl_loss'), f"{block_name} missing kl_loss"
+        assert isinstance(block.kl_loss, torch.Tensor)
+        assert block.kl_loss.item() >= 0, f"{block_name} kl_loss should be non-negative"
+
+    @pytest.mark.parametrize("block_name", [
+        "HaarWaveletV3VAE2", "DB2WaveletV3VAE2", "Coif1WaveletV3VAE2", "Symlet2WaveletV3VAE2",
+    ])
+    def test_wavelet_vae2_eval_mode_is_deterministic(self, block_name):
+        block_class = getattr(b, block_name)
+        block = block_class(
+            units=UNITS, backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH, basis_dim=BASIS_DIM,
+            latent_dim=LATENT_DIM)
+        block.eval()
+        x = torch.randn(4, BACKCAST_LENGTH)
+        b1, f1 = block(x)
+        b2, f2 = block(x)
+        assert torch.allclose(b1, b2), f"{block_name} eval mode is stochastic"
+        assert torch.allclose(f1, f2), f"{block_name} eval mode is stochastic"
+
+    def test_vae2_compact_vs_vaerootblock_parameter_count(self):
+        """VAE2RootBlock should have fewer parameters than AERootBlockVAE at same latent_dim."""
+        vae2_block = b.GenericVAE2(
+            units=UNITS, backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH, latent_dim=LATENT_DIM)
+        vae_block = b.GenericVAE(
+            units=UNITS, backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH, latent_dim=LATENT_DIM)
+        vae2_params = sum(p.numel() for p in vae2_block.parameters())
+        vae_params = sum(p.numel() for p in vae_block.parameters())
+        assert vae2_params < vae_params, (
+            f"VAE2 ({vae2_params}) should have fewer params than VAE ({vae_params})"
+        )

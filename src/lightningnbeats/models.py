@@ -92,7 +92,7 @@ class _NBeatsBase(pl.LightningModule):
     kl_loss = torch.tensor(0.0, device=x.device)
     for stack in self.stacks:
       for block in stack:
-        if isinstance(block, b.AERootBlockVAE) or isinstance(block, b.VAE):
+        if isinstance(block, (b.AERootBlockVAE, b.VAE, b.VAE2RootBlock)):
           kl_loss = kl_loss + block.kl_loss
     if kl_loss.item() > 0:
       loss = loss + kl_loss * 0.001
@@ -342,19 +342,22 @@ class NBeatsNet(_NBeatsBase):
         else:           
           if stack_type in ["Generic", "BottleneckGeneric", "GenericAE", "BottleneckGenericAE", "GenericAEBackcast", "GenericAEBackcastAE",
                            "GenericAELG", "BottleneckGenericAELG", "GenericAEBackcastAELG",
-                           "GenericVAE", "BottleneckGenericVAE", "GenericAEBackcastVAE"]:
+                           "GenericVAE", "BottleneckGenericVAE", "GenericAEBackcastVAE",
+                           "GenericVAE2"]:
             units = self.g_width
-          elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityVAE"]:
+          elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityVAE",
+                              "SeasonalityVAE2"]:
             units = self.s_width
-          elif stack_type in ["Trend", "TrendAE", "TrendAELG", "TrendVAE"]:
+          elif stack_type in ["Trend", "TrendAE", "TrendAELG", "TrendVAE", "TrendVAE2"]:
             units = self.t_width
-          elif stack_type in ["AutoEncoder", "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderVAE", "VAE"]:
+          elif stack_type in ["AutoEncoder", "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderVAE",
+                              "VAE", "VAE2"]:
             units = self.ae_width
           else:
             units = self.g_width
 
           # Use trend_thetas_dim for Trend/TrendAE when set, else global thetas_dim
-          if stack_type in ("Trend", "TrendAE", "TrendAELG", "TrendVAE"):
+          if stack_type in ("Trend", "TrendAE", "TrendAELG", "TrendVAE", "TrendVAE2"):
             effective_td = self.trend_thetas_dim
           else:
             effective_td = self.thetas_dim
@@ -366,6 +369,8 @@ class NBeatsNet(_NBeatsBase):
               "AutoEncoderAELG", "TrendAELG", "GenericAEBackcastAELG",
               "GenericVAE", "BottleneckGenericVAE", "SeasonalityVAE",
               "AutoEncoderVAE", "TrendVAE", "GenericAEBackcastVAE",
+              # VAE2 derivative (non-wavelet) blocks
+              "GenericVAE2", "TrendVAE2", "SeasonalityVAE2", "VAE2",
           )
           if stack_type in ("TrendWaveletAE", "TrendWaveletAELG"):
             block = getattr(b, stack_type)(
@@ -381,7 +386,12 @@ class NBeatsNet(_NBeatsBase):
                 units, self.backcast_length, self.forecast_length, effective_td,
                 self.share_weights, self.activation, self.active_g, self.latent_dim)
           elif "Wavelet" in stack_type:
-            if "V3AE" in stack_type:
+            if "V3VAE2" in stack_type:
+              block = getattr(b, stack_type)(
+                  units, self.backcast_length, self.forecast_length, self.basis_dim,
+                  effective_offset, self.share_weights, self.activation, self.active_g,
+                  forecast_basis_dim=self.forecast_basis_dim, latent_dim=self.latent_dim)
+            elif "V3AE" in stack_type:
               block = getattr(b, stack_type)(
                   units, self.backcast_length, self.forecast_length, self.basis_dim,
                   effective_offset, self.share_weights, self.activation, self.active_g,

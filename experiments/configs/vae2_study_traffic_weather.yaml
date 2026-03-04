@@ -1,0 +1,354 @@
+# ============================================================
+# VAE2 Block Study — Traffic-96 & Weather-96
+# Successive Halving across VAE2-family architectures
+#
+# Goal: Assess general performance of VAE2-derived block types
+# on intrinsically hard datasets (Traffic, Weather) that expose
+# divergent behaviour in weaker block families.  Includes a
+# GenericVAE baseline (known strong on Traffic) for direct
+# comparison with GenericVAE2.
+#
+# Block families covered
+# -----------------------
+# pure_vae2          : GenericVAE2, TrendVAE2, SeasonalityVAE2, VAE2
+# vae_baseline       : GenericVAE (direct VAE1 vs VAE2 comparison)
+# trend_wavelet_vae2 : TrendVAE2 alternating with standard V3 wavelets
+# wavelet_vae2_pure  : Homogeneous stacks of WaveletV3VAE2 block families
+# trend_waveletvae2  : TrendVAE2 alternating with WaveletV3VAE2 blocks
+#
+# Architecture defaults
+# ----------------------
+# 16 stacks (homogeneous) / 8 alternating repeats = 16 stacks
+# latent_dim: 8   (compact VAE2 bottleneck)
+# thetas_dim: 5   (VAE2 per-path AE bottleneck; GenericVAE2 ignores it)
+# trend_thetas_dim: 3  (polynomial degree for TrendVAE2)
+# basis_dim: 128  (WaveletV3VAE2 basis)
+# Wavelet representatives: Haar, DB4, Coif2, Symlet3
+#   (chosen from prior studies showing these are the most robust families)
+#
+# Successive halving
+# -------------------
+# Round 1 : 10 epochs, n_runs=3, keep 50% → ~9 configs survive
+# Round 2 : 20 epochs, n_runs=3, keep 50% → ~4-5 configs survive
+# Round 3 : 50 epochs, n_runs=3, top_k=3  → final winners
+#
+# Two passes: baseline (active_g=false) and activeG_fcast (active_g=forecast)
+# active_g meaningfully affects Generic/VAE2/VAE-class blocks only;
+# Trend/Seasonality/Wavelet basis-expansion blocks are unaffected.
+#
+# Usage:
+#   python experiments/run_from_yaml.py experiments/configs/vae2_study_traffic_weather.yaml
+#   python experiments/run_from_yaml.py experiments/configs/vae2_study_traffic_weather.yaml --dry-run
+#   python experiments/run_from_yaml.py experiments/configs/vae2_study_traffic_weather.yaml --dataset traffic --periods Traffic-96
+#   python experiments/run_from_yaml.py experiments/configs/vae2_study_traffic_weather.yaml --dataset weather --periods Weather-96
+#   python experiments/run_from_yaml.py experiments/configs/vae2_study_traffic_weather.yaml --analyze-only
+# ============================================================
+
+experiment_name: vae2_study
+category: vae2_study
+description: >
+  VAE2 block family general-performance study on Traffic-96 and Weather-96.
+  Covers pure VAE2 stacks, TrendVAE2 + standard wavelet hybrids, pure
+  WaveletV3VAE2 stacks, and TrendVAE2 + WaveletV3VAE2 hybrids.  Uses
+  3-round successive halving to identify winners/losers.  Includes GenericVAE
+  as a known-good Traffic baseline for direct VAE1-vs-VAE2 comparison.
+output_csv: vae2_study_results.csv
+
+dataset: [traffic, weather]
+periods:
+  - Traffic-96
+  - Weather-96
+
+runs:
+  n_runs: 3
+  base_seed: 42
+
+# Global training defaults
+training:
+  max_epochs: 50
+  patience: 10
+  learning_rate: 0.001
+  loss: SMAPELoss
+  optimizer: Adam
+  n_blocks_per_stack: 1
+  share_weights: true
+  sum_losses: false
+  activation: ReLU
+
+# Global block parameter defaults
+# trend_thetas_dim: 3 → polynomial degree for TrendVAE2 (overrides thetas_dim for trend blocks)
+# thetas_dim: 5       → per-path bottleneck for VAE2 AE-style block
+# latent_dim: 8       → compact VAE2 latent space
+# basis_dim: 128      → WaveletV3VAE2 DWT basis dimension
+block_params:
+  thetas_dim: 5
+  trend_thetas_dim: 3
+  latent_dim: 8
+  basis_dim: 128
+
+lr_scheduler:
+  warmup_epochs: 15
+  eta_min: 0.000001
+
+# Successive halving: 3 rounds
+# Round 1 → keep ~50% (~9 of 17)
+# Round 2 → keep ~50% of survivors (~4-5)
+# Round 3 → top 3 final winners
+search:
+  enabled: true
+  rounds:
+    - {max_epochs: 10,  n_runs: 3, keep_fraction: 0.5,  top_k: null}
+    - {max_epochs: 20,  n_runs: 3, keep_fraction: 0.5,  top_k: null}
+    - {max_epochs: 50,  n_runs: 3, keep_fraction: null,  top_k: 3}
+
+extra_csv_columns:
+  - search_round
+  - block_type
+  - backbone_family
+  - wavelet_family
+  - category_label
+  - active_g_cfg
+
+# ============================================================
+# Two-pass design: baseline (active_g=false) vs activeG_fcast
+# ============================================================
+passes:
+
+  # ----------------------------------------------------------
+  # Pass 1 — Baseline: no activation on output projections
+  # ----------------------------------------------------------
+  - pass_name: baseline
+    pass_params:
+      active_g: false
+    configs:
+
+      # ── Pure VAE2 stacks ──────────────────────────────────
+      - name: GenericVAE2
+        category: pure_vae2
+        stacks: {type: homogeneous, block: GenericVAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: GenericVAE2, backbone_family: VAE2, wavelet_family: '', category_label: pure_vae2, active_g_cfg: false}
+
+      - name: TrendVAE2
+        category: pure_vae2
+        stacks: {type: homogeneous, block: TrendVAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: '', category_label: pure_vae2, active_g_cfg: false}
+
+      - name: SeasonalityVAE2
+        category: pure_vae2
+        stacks: {type: homogeneous, block: SeasonalityVAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: SeasonalityVAE2, backbone_family: VAE2, wavelet_family: '', category_label: pure_vae2, active_g_cfg: false}
+
+      - name: VAE2
+        category: pure_vae2
+        stacks: {type: homogeneous, block: VAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: VAE2, backbone_family: VAE2, wavelet_family: '', category_label: pure_vae2, active_g_cfg: false}
+
+      # ── VAE1 comparison baseline ──────────────────────────
+      - name: GenericVAE
+        category: vae_baseline
+        stacks: {type: homogeneous, block: GenericVAE, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: GenericVAE, backbone_family: VAE1, wavelet_family: '', category_label: vae_baseline, active_g_cfg: false}
+
+      # ── TrendVAE2 + standard V3 wavelets (alternating) ───
+      - name: TrendVAE2+Haar
+        category: trend_wavelet_vae2
+        stacks: {type: alternating, blocks: [TrendVAE2, HaarWaveletV3], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Haar, category_label: trend_wavelet_vae2, active_g_cfg: false}
+
+      - name: TrendVAE2+DB4
+        category: trend_wavelet_vae2
+        stacks: {type: alternating, blocks: [TrendVAE2, DB4WaveletV3], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: DB4, category_label: trend_wavelet_vae2, active_g_cfg: false}
+
+      - name: TrendVAE2+Coif2
+        category: trend_wavelet_vae2
+        stacks: {type: alternating, blocks: [TrendVAE2, Coif2WaveletV3], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Coif2, category_label: trend_wavelet_vae2, active_g_cfg: false}
+
+      - name: TrendVAE2+Symlet3
+        category: trend_wavelet_vae2
+        stacks: {type: alternating, blocks: [TrendVAE2, Symlet3WaveletV3], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Symlet3, category_label: trend_wavelet_vae2, active_g_cfg: false}
+
+      # ── Pure WaveletV3VAE2 stacks ─────────────────────────
+      # Representative wavelet families: Haar (simplest), DB4 (smooth),
+      # Coif2 (near-symmetric), Symlet3 (near-symmetric, asymmetric support)
+      - name: HaarWaveletV3VAE2
+        category: wavelet_vae2_pure
+        stacks: {type: homogeneous, block: HaarWaveletV3VAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: HaarWaveletV3VAE2, backbone_family: VAE2, wavelet_family: Haar, category_label: wavelet_vae2_pure, active_g_cfg: false}
+
+      - name: DB4WaveletV3VAE2
+        category: wavelet_vae2_pure
+        stacks: {type: homogeneous, block: DB4WaveletV3VAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: DB4WaveletV3VAE2, backbone_family: VAE2, wavelet_family: DB4, category_label: wavelet_vae2_pure, active_g_cfg: false}
+
+      - name: Coif2WaveletV3VAE2
+        category: wavelet_vae2_pure
+        stacks: {type: homogeneous, block: Coif2WaveletV3VAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: Coif2WaveletV3VAE2, backbone_family: VAE2, wavelet_family: Coif2, category_label: wavelet_vae2_pure, active_g_cfg: false}
+
+      - name: Symlet3WaveletV3VAE2
+        category: wavelet_vae2_pure
+        stacks: {type: homogeneous, block: Symlet3WaveletV3VAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: Symlet3WaveletV3VAE2, backbone_family: VAE2, wavelet_family: Symlet3, category_label: wavelet_vae2_pure, active_g_cfg: false}
+
+      # ── TrendVAE2 + WaveletV3VAE2 hybrids (alternating) ──
+      # Both the trend block and wavelet block share the VAE2 backbone
+      - name: TrendVAE2+HaarV3VAE2
+        category: trend_waveletvae2
+        stacks: {type: alternating, blocks: [TrendVAE2, HaarWaveletV3VAE2], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: HaarVAE2, category_label: trend_waveletvae2, active_g_cfg: false}
+
+      - name: TrendVAE2+DB4V3VAE2
+        category: trend_waveletvae2
+        stacks: {type: alternating, blocks: [TrendVAE2, DB4WaveletV3VAE2], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: DB4VAE2, category_label: trend_waveletvae2, active_g_cfg: false}
+
+      - name: TrendVAE2+Coif2V3VAE2
+        category: trend_waveletvae2
+        stacks: {type: alternating, blocks: [TrendVAE2, Coif2WaveletV3VAE2], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Coif2VAE2, category_label: trend_waveletvae2, active_g_cfg: false}
+
+      - name: TrendVAE2+Symlet3V3VAE2
+        category: trend_waveletvae2
+        stacks: {type: alternating, blocks: [TrendVAE2, Symlet3WaveletV3VAE2], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Symlet3VAE2, category_label: trend_waveletvae2, active_g_cfg: false}
+
+  # ----------------------------------------------------------
+  # Pass 2 — activeG_fcast: activation on forecast projection
+  # Meaningfully affects Generic/VAE2/VAE-class blocks.
+  # Trend/Seasonality/Wavelet basis-expansion blocks not impacted.
+  # ----------------------------------------------------------
+  - pass_name: activeG_fcast
+    pass_params:
+      active_g: forecast
+    configs:
+
+      # ── Pure VAE2 stacks ──────────────────────────────────
+      - name: GenericVAE2
+        category: pure_vae2
+        stacks: {type: homogeneous, block: GenericVAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: GenericVAE2, backbone_family: VAE2, wavelet_family: '', category_label: pure_vae2, active_g_cfg: forecast}
+
+      - name: TrendVAE2
+        category: pure_vae2
+        stacks: {type: homogeneous, block: TrendVAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: '', category_label: pure_vae2, active_g_cfg: forecast}
+
+      - name: SeasonalityVAE2
+        category: pure_vae2
+        stacks: {type: homogeneous, block: SeasonalityVAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: SeasonalityVAE2, backbone_family: VAE2, wavelet_family: '', category_label: pure_vae2, active_g_cfg: forecast}
+
+      - name: VAE2
+        category: pure_vae2
+        stacks: {type: homogeneous, block: VAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: VAE2, backbone_family: VAE2, wavelet_family: '', category_label: pure_vae2, active_g_cfg: forecast}
+
+      # ── VAE1 comparison baseline ──────────────────────────
+      - name: GenericVAE
+        category: vae_baseline
+        stacks: {type: homogeneous, block: GenericVAE, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: GenericVAE, backbone_family: VAE1, wavelet_family: '', category_label: vae_baseline, active_g_cfg: forecast}
+
+      # ── TrendVAE2 + standard V3 wavelets (alternating) ───
+      - name: TrendVAE2+Haar
+        category: trend_wavelet_vae2
+        stacks: {type: alternating, blocks: [TrendVAE2, HaarWaveletV3], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Haar, category_label: trend_wavelet_vae2, active_g_cfg: forecast}
+
+      - name: TrendVAE2+DB4
+        category: trend_wavelet_vae2
+        stacks: {type: alternating, blocks: [TrendVAE2, DB4WaveletV3], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: DB4, category_label: trend_wavelet_vae2, active_g_cfg: forecast}
+
+      - name: TrendVAE2+Coif2
+        category: trend_wavelet_vae2
+        stacks: {type: alternating, blocks: [TrendVAE2, Coif2WaveletV3], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Coif2, category_label: trend_wavelet_vae2, active_g_cfg: forecast}
+
+      - name: TrendVAE2+Symlet3
+        category: trend_wavelet_vae2
+        stacks: {type: alternating, blocks: [TrendVAE2, Symlet3WaveletV3], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Symlet3, category_label: trend_wavelet_vae2, active_g_cfg: forecast}
+
+      # ── Pure WaveletV3VAE2 stacks ─────────────────────────
+      - name: HaarWaveletV3VAE2
+        category: wavelet_vae2_pure
+        stacks: {type: homogeneous, block: HaarWaveletV3VAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: HaarWaveletV3VAE2, backbone_family: VAE2, wavelet_family: Haar, category_label: wavelet_vae2_pure, active_g_cfg: forecast}
+
+      - name: DB4WaveletV3VAE2
+        category: wavelet_vae2_pure
+        stacks: {type: homogeneous, block: DB4WaveletV3VAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: DB4WaveletV3VAE2, backbone_family: VAE2, wavelet_family: DB4, category_label: wavelet_vae2_pure, active_g_cfg: forecast}
+
+      - name: Coif2WaveletV3VAE2
+        category: wavelet_vae2_pure
+        stacks: {type: homogeneous, block: Coif2WaveletV3VAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: Coif2WaveletV3VAE2, backbone_family: VAE2, wavelet_family: Coif2, category_label: wavelet_vae2_pure, active_g_cfg: forecast}
+
+      - name: Symlet3WaveletV3VAE2
+        category: wavelet_vae2_pure
+        stacks: {type: homogeneous, block: Symlet3WaveletV3VAE2, n: 16}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: Symlet3WaveletV3VAE2, backbone_family: VAE2, wavelet_family: Symlet3, category_label: wavelet_vae2_pure, active_g_cfg: forecast}
+
+      # ── TrendVAE2 + WaveletV3VAE2 hybrids (alternating) ──
+      - name: TrendVAE2+HaarV3VAE2
+        category: trend_waveletvae2
+        stacks: {type: alternating, blocks: [TrendVAE2, HaarWaveletV3VAE2], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: HaarVAE2, category_label: trend_waveletvae2, active_g_cfg: forecast}
+
+      - name: TrendVAE2+DB4V3VAE2
+        category: trend_waveletvae2
+        stacks: {type: alternating, blocks: [TrendVAE2, DB4WaveletV3VAE2], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: DB4VAE2, category_label: trend_waveletvae2, active_g_cfg: forecast}
+
+      - name: TrendVAE2+Coif2V3VAE2
+        category: trend_waveletvae2
+        stacks: {type: alternating, blocks: [TrendVAE2, Coif2WaveletV3VAE2], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Coif2VAE2, category_label: trend_waveletvae2, active_g_cfg: forecast}
+
+      - name: TrendVAE2+Symlet3V3VAE2
+        category: trend_waveletvae2
+        stacks: {type: alternating, blocks: [TrendVAE2, Symlet3WaveletV3VAE2], repeats: 8}
+        training: {n_blocks_per_stack: 1, share_weights: true}
+        extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Symlet3VAE2, category_label: trend_waveletvae2, active_g_cfg: forecast}
+
+hardware:
+  accelerator: auto
+  num_workers: 0
