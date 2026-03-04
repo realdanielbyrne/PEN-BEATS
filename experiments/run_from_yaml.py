@@ -167,7 +167,7 @@ def deep_merge(base: dict, override: dict) -> dict:
 
 def load_yaml_config(path: str) -> dict:
     """Load and return a YAML configuration file as a plain dict."""
-    with open(path, "r") as fh:
+    with open(path, "r", encoding="utf-8") as fh:
         cfg = yaml.safe_load(fh) or {}
     if not isinstance(cfg, dict):
         raise ValueError(f"YAML config must be a mapping at top level: {path}")
@@ -908,7 +908,7 @@ def _run_successive_halving(
         is_last_round = (round_idx == len(search_rounds) - 1)
 
         print(
-            f"\n  ── Search Round {round_num}/{len(search_rounds)} ──  "
+            f"\n  -- Search Round {round_num}/{len(search_rounds)} --  "
             f"configs={len(active_configs)}  "
             f"n_runs={n_runs_round}  "
             f"max_epochs={max_epochs_override}"
@@ -974,7 +974,7 @@ def _run_successive_halving(
                     k: v for k, v in active_configs.items() if k in promoted
                 }
                 print(
-                    f"\n  → Carrying {len(active_configs)} configs "
+                    f"\n  -> Carrying {len(active_configs)} configs "
                     f"into round {round_num + 1}."
                 )
 
