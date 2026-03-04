@@ -1121,7 +1121,6 @@ class TrendWaveletAELG(AERootBlockLG):
 
     return backcast, forecast
 
-
 class SeasonalityAE(AERootBlock):
   def __init__(self, units, backcast_length, forecast_length,  thetas_dim=5,
                share_weights = False, activation='ReLU', active_g:bool = False, latent_dim = 5):
@@ -1190,7 +1189,6 @@ class GenericAELG(AERootBlockLG):
         forecast = self.activation(forecast)
     return backcast, forecast
 
-
 class BottleneckGenericAELG(AERootBlockLG):
   def __init__(self, units, backcast_length, forecast_length, thetas_dim=5,
                share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
@@ -1217,7 +1215,6 @@ class BottleneckGenericAELG(AERootBlockLG):
         forecast = self.activation(forecast)
     return backcast, forecast
 
-
 class TrendAELG(AERootBlockLG):
   def __init__(self, units, backcast_length, forecast_length, thetas_dim,
                share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
@@ -1238,7 +1235,6 @@ class TrendAELG(AERootBlockLG):
     forecast = self.forecast_g(forecast_thetas)
     return backcast, forecast
 
-
 class SeasonalityAELG(AERootBlockLG):
   def __init__(self, units, backcast_length, forecast_length, thetas_dim=5,
                share_weights=False, activation='ReLU', active_g=False, latent_dim=5):
@@ -1255,7 +1251,6 @@ class SeasonalityAELG(AERootBlockLG):
     backcast = self.backcast_g(backcast_thetas)
     forecast = self.forecast_g(forecast_thetas)
     return backcast, forecast
-
 
 class AutoEncoderAELG(AERootBlockLG):
   def __init__(self, units, backcast_length, forecast_length, thetas_dim,
