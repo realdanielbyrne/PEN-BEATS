@@ -150,8 +150,10 @@ Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loade
 - **`active_g` parameter**: Non-standard extension that applies activation to the final linear layers of Generic-type blocks. Default `False` (paper-faithful).
 - **Weight sharing**: When `share_weights=True`, blocks within a stack reuse the first block's parameters.
 - **`sum_losses`**: Adds weighted backcast reconstruction loss (0.25 × loss vs zeros) to forecast loss, pushing backcasts to fully reconstruct the input.
+- **AE descendant dimension split**: In `AutoEncoderAE` / `AutoEncoderAELG` / `AutoEncoderVAE` and `GenericAEBackcastAE` / `GenericAEBackcastAELG` / `GenericAEBackcastVAE`, `latent_dim` controls the branch-local AE bottlenecks. `thetas_dim` remains reserved for explicit theta/basis projections such as the `GenericAEBackcast*` forecast heads.
 - **Generic vs BottleneckGeneric**: `Generic` matches the paper (single linear projection to target length). `BottleneckGeneric` projects through `thetas_dim` bottleneck first (rank-d factorized basis expansion).
 - **`forecast_basis_dim`**: Optional override for WaveletV3 forecast path basis dimensionality. When set, the forecast linear projection uses `forecast_basis_dim` (clamped to `forecast_length`) while the backcast path continues to use `basis_dim`. Allows asymmetric regularization when backcast and forecast lengths differ significantly. Default `None` (both paths use `basis_dim`).
+- **WaveletV3 short-target behavior**: `_WaveletGeneratorV3` respects `pywt.dwt_max_level(...)=0` and keeps `level=0` rather than forcing an invalid level-1 decomposition. Short targets paired with long-support families (`db20`, `sym20`, `coif10`) therefore become approximation-only orthonormal bases rather than true multilevel decompositions; prefer short-support families (`haar`, `db2`, `db3`) for short horizons.
 
 ### Width Parameter Mapping
 

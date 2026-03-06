@@ -364,6 +364,8 @@ The Wavelet blocks available in this repository are as follows:
 - Symlet10WaveletV3
 - Symlet20WaveletV3
 
+For short targets, prefer shorter-support families such as `HaarWaveletV3`, `DB2WaveletV3`, or `DB3WaveletV3`. Longer filters (`DB20`, `Symlet20`, `Coif10`) need substantially longer backcast/forecast windows to expose real multilevel structure. When PyWavelets reports `dwt_max_level(...) == 0`, WaveletV3 now respects `level=0` instead of forcing an invalid level-1 decomposition, which avoids boundary-effect warnings while keeping the basis orthonormal.
+
 ### AutoEncoder Block
 
 The AutoEncoder Block utilizes an AutoEncoider structure in both the forecast and backcast branches in the N-BEATS architecture.  The AutoEncoder block is useful for noisey time series data like Electric generation or in highly varied datasets like the M4.   It struggles with simpler more predictable datasets like the Milk Production Dataset taht rely on mostly trend.  However, combining this block with a Trend block often eliminates this problem.
@@ -406,6 +408,8 @@ Three AE backbone variants are available:
 
 - `GenericVAE`, `BottleneckGenericVAE`, `GenericAEBackcastVAE`
 - `TrendVAE`, `SeasonalityVAE`, `AutoEncoderVAE`
+
+For AE-style descendants, `latent_dim` controls the local autoencoder bottlenecks while `thetas_dim` remains reserved for explicit theta/basis projections where they still exist. In practice this means `AutoEncoderAE`/`AutoEncoderAELG`/`AutoEncoderVAE` and `GenericAEBackcastAE`/`GenericAEBackcastAELG`/`GenericAEBackcastVAE` compress branch-local paths with `latent_dim`, while `GenericAEBackcast*` forecast heads still project through `thetas_dim`.
 
 All three backbone variants can be used in isolation or freely mixed:
 
