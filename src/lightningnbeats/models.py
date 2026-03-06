@@ -10,6 +10,13 @@ from .losses import *
 from .blocks import blocks as b
 from .constants import LOSSES, OPTIMIZERS, BLOCKS
 
+# Generic wavelet base classes that accept wavelet_type / backcast_wavelet_type /
+# forecast_wavelet_type kwargs.  Family-named subclasses (e.g. HaarWaveletV3)
+# hardcode their wavelet family and do NOT accept these parameters.
+_GENERIC_WAVELET_V3 = {
+    "WaveletV3", "WaveletV3AE", "WaveletV3AELG", "WaveletV3VAE2", "WaveletV3VAE",
+}
+
 
 class _NBeatsBase(pl.LightningModule):
   """Shared training infrastructure for NBeatsNet and NHiTSNet.
@@ -160,6 +167,8 @@ class NBeatsNet(_NBeatsBase):
       stack_basis_offsets:list = None,
       forecast_basis_dim:int = None,
       wavelet_type:str = 'db3',
+      backcast_wavelet_type:str = None,
+      forecast_wavelet_type:str = None,
       trend_thetas_dim:int | None = 3,
       lr_scheduler_config:dict = None
     ):
@@ -309,6 +318,8 @@ class NBeatsNet(_NBeatsBase):
     self.stack_basis_offsets = stack_basis_offsets
     self.forecast_basis_dim = forecast_basis_dim
     self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
     self.trend_thetas_dim = self.thetas_dim if trend_thetas_dim is None else trend_thetas_dim
 
     self.save_hyperparameters()
@@ -380,27 +391,34 @@ class NBeatsNet(_NBeatsBase):
                 share_weights=self.share_weights, activation=self.activation,
                 active_g=self.active_g, latent_dim=self.latent_dim,
                 forecast_basis_dim=self.forecast_basis_dim,
-                wavelet_type=self.wavelet_type)
+                wavelet_type=self.wavelet_type,
+                backcast_wavelet_type=self.backcast_wavelet_type,
+                forecast_wavelet_type=self.forecast_wavelet_type)
           elif stack_type in ae_latent_blocks:
             block = getattr(b,stack_type)(
                 units, self.backcast_length, self.forecast_length, effective_td,
                 self.share_weights, self.activation, self.active_g, self.latent_dim)
           elif "Wavelet" in stack_type:
-            if "V3VAE2" in stack_type:
+            # Only generic base classes accept wavelet_type/backcast/forecast overrides;
+            # family-named subclasses (e.g. HaarWaveletV3) hardcode their wavelet family.
+            _wavelet_kwargs = {}
+            if stack_type in _GENERIC_WAVELET_V3:
+              _wavelet_kwargs = dict(
+                  wavelet_type=self.wavelet_type,
+                  backcast_wavelet_type=self.backcast_wavelet_type,
+                  forecast_wavelet_type=self.forecast_wavelet_type)
+            if any(token in stack_type for token in ("V3VAE2", "V3VAE", "V3AE")):
               block = getattr(b, stack_type)(
                   units, self.backcast_length, self.forecast_length, self.basis_dim,
                   effective_offset, self.share_weights, self.activation, self.active_g,
-                  forecast_basis_dim=self.forecast_basis_dim, latent_dim=self.latent_dim)
-            elif "V3AE" in stack_type:
-              block = getattr(b, stack_type)(
-                  units, self.backcast_length, self.forecast_length, self.basis_dim,
-                  effective_offset, self.share_weights, self.activation, self.active_g,
-                  forecast_basis_dim=self.forecast_basis_dim, latent_dim=self.latent_dim)
+                  forecast_basis_dim=self.forecast_basis_dim, latent_dim=self.latent_dim,
+                  **_wavelet_kwargs)
             elif "V3" in stack_type:
               block = getattr(b, stack_type)(
                   units, self.backcast_length, self.forecast_length, self.basis_dim,
                   effective_offset, self.share_weights, self.activation, self.active_g,
-                  forecast_basis_dim=self.forecast_basis_dim)
+                  forecast_basis_dim=self.forecast_basis_dim,
+                  **_wavelet_kwargs)
             else:
               block = getattr(b, stack_type)(
                   units, self.backcast_length, self.forecast_length, self.basis_dim,
@@ -546,6 +564,8 @@ class NHiTSNet(_NBeatsBase):
       stack_basis_offsets: list = None,
       forecast_basis_dim: int = None,
       wavelet_type: str = 'db3',
+      backcast_wavelet_type: str = None,
+      forecast_wavelet_type: str = None,
       trend_thetas_dim: int | None = 3,
       lr_scheduler_config: dict = None,
   ):
@@ -603,6 +623,8 @@ class NHiTSNet(_NBeatsBase):
     self.stack_basis_offsets = stack_basis_offsets
     self.forecast_basis_dim = forecast_basis_dim
     self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
     self.trend_thetas_dim = self.thetas_dim if trend_thetas_dim is None else trend_thetas_dim
 
     # Precompute per-stack effective block lengths
@@ -699,6 +721,8 @@ class NHiTSNet(_NBeatsBase):
               active_g=self.active_g, latent_dim=self.latent_dim,
               forecast_basis_dim=self.forecast_basis_dim,
               wavelet_type=self.wavelet_type,
+              backcast_wavelet_type=self.backcast_wavelet_type,
+              forecast_wavelet_type=self.forecast_wavelet_type,
           )
         elif stack_type in ae_latent_blocks:
           block = getattr(b, stack_type)(
@@ -707,13 +731,20 @@ class NHiTSNet(_NBeatsBase):
               self.active_g, self.latent_dim,
           )
         elif "Wavelet" in stack_type:
-          if "V3AE" in stack_type:
+          _wavelet_kwargs = {}
+          if stack_type in _GENERIC_WAVELET_V3:
+            _wavelet_kwargs = dict(
+                wavelet_type=self.wavelet_type,
+                backcast_wavelet_type=self.backcast_wavelet_type,
+                forecast_wavelet_type=self.forecast_wavelet_type)
+          if any(token in stack_type for token in ("V3VAE2", "V3VAE", "V3AE")):
             block = getattr(b, stack_type)(
                 units, effective_backcast_length, effective_forecast_length,
                 self.basis_dim, effective_offset,
                 self.share_weights, self.activation, self.active_g,
                 forecast_basis_dim=self.forecast_basis_dim,
                 latent_dim=self.latent_dim,
+                **_wavelet_kwargs,
             )
           elif "V3" in stack_type:
             block = getattr(b, stack_type)(
@@ -721,6 +752,7 @@ class NHiTSNet(_NBeatsBase):
                 self.basis_dim, effective_offset,
                 self.share_weights, self.activation, self.active_g,
                 forecast_basis_dim=self.forecast_basis_dim,
+                **_wavelet_kwargs,
             )
           else:
             block = getattr(b, stack_type)(

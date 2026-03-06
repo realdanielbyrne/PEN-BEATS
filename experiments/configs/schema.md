@@ -169,7 +169,9 @@ block_params:
   basis_dim: 128           # WaveletV3 basis dimension
   forecast_basis_dim: null # WaveletV3 asymmetric forecast basis (null = same as basis_dim)
   trend_thetas_dim: null   # Trend polynomial degree override (null = use thetas_dim)
-  wavelet_type: null       # Wavelet family for TrendWaveletAE/TrendWaveletAELG blocks (null = 'db3')
+  wavelet_type: null       # Wavelet family for wavelet-capable blocks (null = 'db3')
+  backcast_wavelet_type: null  # Override wavelet family for backcast path only (null = use wavelet_type)
+  forecast_wavelet_type: null  # Override wavelet family for forecast path only (null = use wavelet_type)
 ```
 
 ---
@@ -510,7 +512,8 @@ architecture:
 ```
 
 With a list, the total config count is `len(block_types) * len(wavelet_types)
-* len(basis_labels) * len(trend_dims) * len(latent_dims)`. Each config's
+
+* len(basis_labels) *len(trend_dims)* len(latent_dims)`. Each config's
 canonical ID encodes the block type as the first field (e.g.,
 `TrendWaveletAE|haar|eq_fcast|td3|ld8`), so AE and AELG configs have
 distinct IDs and can coexist in the same CSV.
@@ -590,14 +593,14 @@ output:
 
 ### Notes
 
-- Basis labels are mapped at runtime per dataset/period:
-  - `eq_fcast = forecast_length`
-  - `lt_fcast = max(forecast_length//2, forecast_length-2)`
-  - `eq_bcast = backcast_length`
-  - `lt_bcast = backcast_length//2`
-- Colliding basis values are **not** deduplicated; all labels remain in the
+* Basis labels are mapped at runtime per dataset/period:
+  * `eq_fcast = forecast_length`
+  * `lt_fcast = max(forecast_length//2, forecast_length-2)`
+  * `eq_bcast = backcast_length`
+  * `lt_bcast = backcast_length//2`
+* Colliding basis values are **not** deduplicated; all labels remain in the
   grid so each dataset keeps `14 * 4 * 2 * 3 = 336` configs.
-- Search CSV includes:
+* Search CSV includes:
   `search_round`, `basis_dim`, `basis_offset`, `trend_thetas_dim_cfg`,
   `wavelet_family`, `bd_label`, `latent_dim_cfg`,
   `meta_predicted_best`, `meta_convergence_score`.

@@ -73,7 +73,8 @@ BLOCKS = [
   "SeasonalityVAE",
   "AutoEncoderVAE",
   "GenericAEBackcastVAE",
-  # V3 Wavelet blocks (orthonormal DWT basis)
+  # V3 Wavelet blocks (orthonormal DWT basis) — generic base class + family wrappers
+  "WaveletV3",
   "HaarWaveletV3",
   "DB2WaveletV3",
   "DB3WaveletV3",
@@ -92,6 +93,7 @@ BLOCKS = [
   "TrendWaveletAE",
   "TrendWaveletAELG",
   # V3AE Wavelet blocks (orthonormal DWT basis, AE bottleneck backbone) (Option B)
+  "WaveletV3AE",
   "HaarWaveletV3AE",
   "DB2WaveletV3AE",
   "DB3WaveletV3AE",
@@ -107,6 +109,7 @@ BLOCKS = [
   "Symlet10WaveletV3AE",
   "Symlet20WaveletV3AE",
   # V3AELG Wavelet blocks (orthonormal DWT basis, Learned-Gate AE backbone)
+  "WaveletV3AELG",
   "HaarWaveletV3AELG",
   "DB2WaveletV3AELG",
   "DB3WaveletV3AELG",
@@ -127,6 +130,7 @@ BLOCKS = [
   "SeasonalityVAE2",
   "VAE2",
   # V3VAE2 Wavelet blocks (orthonormal DWT basis, compact VAE2 backbone)
+  "WaveletV3VAE2",
   "HaarWaveletV3VAE2",
   "DB2WaveletV3VAE2",
   "DB3WaveletV3VAE2",
@@ -142,6 +146,7 @@ BLOCKS = [
   "Symlet10WaveletV3VAE2",
   "Symlet20WaveletV3VAE2",
   # V3VAE Wavelet blocks (orthonormal DWT basis, variational AE backbone)
+  "WaveletV3VAE",
   "HaarWaveletV3VAE",
   "DB2WaveletV3VAE",
   "DB3WaveletV3VAE",

@@ -107,6 +107,8 @@ DEFAULT_BLOCK_PARAMS = {
     "forecast_basis_dim": None,
     "trend_thetas_dim": None,
     "wavelet_type": None,
+    "backcast_wavelet_type": None,
+    "forecast_wavelet_type": None,
 }
 
 DEFAULT_RUNS = {
@@ -705,6 +707,8 @@ def run_single_config(
         latent_dim_override=block_params.get("latent_dim"),
         trend_thetas_dim=block_params.get("trend_thetas_dim"),
         wavelet_type=block_params.get("wavelet_type") or "db3",
+        backcast_wavelet_type=block_params.get("backcast_wavelet_type"),
+        forecast_wavelet_type=block_params.get("forecast_wavelet_type"),
         lr_scheduler_config=lr_scheduler_cfg,
         optimizer_name=training.get("optimizer", "Adam"),
         learning_rate=training.get("learning_rate"),

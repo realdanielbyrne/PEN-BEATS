@@ -473,7 +473,8 @@ class TestAllBlocksOutputShapes:
         # Variational AE (VAE) blocks
         "GenericVAE", "BottleneckGenericVAE", "TrendVAE", "SeasonalityVAE",
         "AutoEncoderVAE", "GenericAEBackcastVAE",
-        # V3 Wavelet blocks (orthonormal DWT basis)
+        # V3 Wavelet blocks (orthonormal DWT basis) — generic base + family wrappers
+        "WaveletV3",
         "HaarWaveletV3", "DB2WaveletV3", "DB3WaveletV3", "DB4WaveletV3",
         "DB10WaveletV3", "DB20WaveletV3",
         "Coif1WaveletV3", "Coif2WaveletV3", "Coif3WaveletV3", "Coif10WaveletV3",
@@ -482,11 +483,13 @@ class TestAllBlocksOutputShapes:
         "TrendWaveletAE",
         "TrendWaveletAELG",
         # V3AE Wavelet blocks (orthonormal DWT basis, AE bottleneck backbone, Option B)
+        "WaveletV3AE",
         "HaarWaveletV3AE", "DB2WaveletV3AE", "DB3WaveletV3AE", "DB4WaveletV3AE",
         "DB10WaveletV3AE", "DB20WaveletV3AE",
         "Coif1WaveletV3AE", "Coif2WaveletV3AE", "Coif3WaveletV3AE", "Coif10WaveletV3AE",
         "Symlet2WaveletV3AE", "Symlet3WaveletV3AE", "Symlet10WaveletV3AE", "Symlet20WaveletV3AE",
         # V3AELG Wavelet blocks (orthonormal DWT basis, Learned-Gate AE backbone)
+        "WaveletV3AELG",
         "HaarWaveletV3AELG", "DB2WaveletV3AELG", "DB3WaveletV3AELG", "DB4WaveletV3AELG",
         "DB10WaveletV3AELG", "DB20WaveletV3AELG",
         "Coif1WaveletV3AELG", "Coif2WaveletV3AELG", "Coif3WaveletV3AELG", "Coif10WaveletV3AELG",
@@ -494,10 +497,13 @@ class TestAllBlocksOutputShapes:
         # VAE2 blocks (compact VAE backbone)
         "GenericVAE2", "TrendVAE2", "SeasonalityVAE2", "VAE2",
         # V3VAE2 Wavelet blocks (orthonormal DWT basis, compact VAE2 backbone)
+        "WaveletV3VAE2",
         "HaarWaveletV3VAE2", "DB2WaveletV3VAE2", "DB3WaveletV3VAE2", "DB4WaveletV3VAE2",
         "DB10WaveletV3VAE2", "DB20WaveletV3VAE2",
         "Coif1WaveletV3VAE2", "Coif2WaveletV3VAE2", "Coif3WaveletV3VAE2", "Coif10WaveletV3VAE2",
         "Symlet2WaveletV3VAE2", "Symlet3WaveletV3VAE2", "Symlet10WaveletV3VAE2", "Symlet20WaveletV3VAE2",
+        # V3VAE Wavelet blocks (orthonormal DWT basis, variational AE backbone)
+        "WaveletV3VAE",
     ])
     def test_block_output_shape(self, block_name):
         block_class = getattr(b, block_name)
@@ -518,11 +524,13 @@ class TestAllBlocksOutputShapes:
                           # TrendWaveletAE family and V3AE variants (AE backbone)
                           "TrendWaveletAE",
                           "TrendWaveletAELG",
+                          "WaveletV3AE",
                           "HaarWaveletV3AE", "DB2WaveletV3AE", "DB3WaveletV3AE", "DB4WaveletV3AE",
                           "DB10WaveletV3AE", "DB20WaveletV3AE",
                           "Coif1WaveletV3AE", "Coif2WaveletV3AE", "Coif3WaveletV3AE", "Coif10WaveletV3AE",
                           "Symlet2WaveletV3AE", "Symlet3WaveletV3AE", "Symlet10WaveletV3AE", "Symlet20WaveletV3AE",
                           # V3AELG variants (LG-AE backbone)
+                          "WaveletV3AELG",
                           "HaarWaveletV3AELG", "DB2WaveletV3AELG", "DB3WaveletV3AELG", "DB4WaveletV3AELG",
                           "DB10WaveletV3AELG", "DB20WaveletV3AELG",
                           "Coif1WaveletV3AELG", "Coif2WaveletV3AELG", "Coif3WaveletV3AELG", "Coif10WaveletV3AELG",
@@ -530,10 +538,13 @@ class TestAllBlocksOutputShapes:
                           # VAE2 blocks (compact VAE backbone)
                           "GenericVAE2", "TrendVAE2", "SeasonalityVAE2", "VAE2",
                           # V3VAE2 variants (compact VAE2 backbone)
+                          "WaveletV3VAE2",
                           "HaarWaveletV3VAE2", "DB2WaveletV3VAE2", "DB3WaveletV3VAE2", "DB4WaveletV3VAE2",
                           "DB10WaveletV3VAE2", "DB20WaveletV3VAE2",
                           "Coif1WaveletV3VAE2", "Coif2WaveletV3VAE2", "Coif3WaveletV3VAE2", "Coif10WaveletV3VAE2",
-                          "Symlet2WaveletV3VAE2", "Symlet3WaveletV3VAE2", "Symlet10WaveletV3VAE2", "Symlet20WaveletV3VAE2"]
+                          "Symlet2WaveletV3VAE2", "Symlet3WaveletV3VAE2", "Symlet10WaveletV3VAE2", "Symlet20WaveletV3VAE2",
+                          # V3VAE variants (variational AE backbone)
+                          "WaveletV3VAE"]
         if block_name in ae_root_blocks:
             kwargs["latent_dim"] = LATENT_DIM
 
@@ -686,6 +697,9 @@ class TestVAEBlockProperties:
 # --- V3 Wavelet property tests ---
 
 V3_WAVELET_BLOCKS = [
+    # Generic base classes (parameter-driven wavelet family)
+    "WaveletV3", "WaveletV3AE", "WaveletV3AELG", "WaveletV3VAE2", "WaveletV3VAE",
+    # Family wrappers (RootBlock backbone)
     "HaarWaveletV3", "DB2WaveletV3", "DB3WaveletV3", "DB4WaveletV3",
     "DB10WaveletV3", "DB20WaveletV3",
     "Coif1WaveletV3", "Coif2WaveletV3", "Coif3WaveletV3", "Coif10WaveletV3",
@@ -1051,3 +1065,73 @@ class TestVAE2RootBlockProperties:
         assert vae2_params < vae_params, (
             f"VAE2 ({vae2_params}) should have fewer params than VAE ({vae_params})"
         )
+
+
+# --- Asymmetric wavelet family tests ---
+
+class TestAsymmetricWaveletFamily:
+    """Verify backcast_wavelet_type and forecast_wavelet_type produce distinct bases."""
+
+    @pytest.mark.parametrize("block_cls_name", [
+        "WaveletV3", "WaveletV3AE", "WaveletV3AELG", "WaveletV3VAE2", "WaveletV3VAE",
+    ])
+    def test_asymmetric_params_stored(self, block_cls_name):
+        """Block stores backcast_wavelet_type and forecast_wavelet_type attributes."""
+        block_class = getattr(b, block_cls_name)
+        kwargs = {"units": UNITS, "backcast_length": BACKCAST_LENGTH,
+                  "forecast_length": FORECAST_LENGTH, "basis_dim": BASIS_DIM,
+                  "wavelet_type": "db3",
+                  "backcast_wavelet_type": "sym20",
+                  "forecast_wavelet_type": "coif2"}
+        if block_cls_name != "WaveletV3":
+            kwargs["latent_dim"] = LATENT_DIM
+        block = block_class(**kwargs)
+        assert block.backcast_wavelet_type == "sym20"
+        assert block.forecast_wavelet_type == "coif2"
+
+    @pytest.mark.parametrize("block_cls_name", [
+        "WaveletV3", "WaveletV3AE", "WaveletV3AELG", "WaveletV3VAE2", "WaveletV3VAE",
+    ])
+    def test_asymmetric_output_shapes(self, block_cls_name):
+        """Asymmetric wavelet families still produce correct output shapes."""
+        block_class = getattr(b, block_cls_name)
+        kwargs = {"units": UNITS, "backcast_length": BACKCAST_LENGTH,
+                  "forecast_length": FORECAST_LENGTH, "basis_dim": BASIS_DIM,
+                  "wavelet_type": "db3",
+                  "backcast_wavelet_type": "sym20",
+                  "forecast_wavelet_type": "coif2"}
+        if block_cls_name != "WaveletV3":
+            kwargs["latent_dim"] = LATENT_DIM
+        block = block_class(**kwargs)
+        x = torch.randn(4, BACKCAST_LENGTH)
+        backcast, forecast = block(x)
+        assert backcast.shape == (4, BACKCAST_LENGTH)
+        assert forecast.shape == (4, FORECAST_LENGTH)
+
+    def test_fallback_uses_wavelet_type(self):
+        """When backcast/forecast overrides are None, both paths use wavelet_type."""
+        block = b.WaveletV3(
+            units=UNITS, backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH, basis_dim=BASIS_DIM,
+            wavelet_type="coif2")
+        assert block.backcast_wavelet_type is None
+        assert block.forecast_wavelet_type is None
+        # Forward pass works with symmetric fallback
+        x = torch.randn(4, BACKCAST_LENGTH)
+        backcast, forecast = block(x)
+        assert backcast.shape == (4, BACKCAST_LENGTH)
+        assert forecast.shape == (4, FORECAST_LENGTH)
+
+    def test_partial_override_backcast_only(self):
+        """Only backcast_wavelet_type set; forecast falls back to wavelet_type."""
+        block = b.WaveletV3AELG(
+            units=UNITS, backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH, basis_dim=BASIS_DIM,
+            latent_dim=LATENT_DIM, wavelet_type="db3",
+            backcast_wavelet_type="sym20")
+        assert block.backcast_wavelet_type == "sym20"
+        assert block.forecast_wavelet_type is None
+        x = torch.randn(4, BACKCAST_LENGTH)
+        backcast, forecast = block(x)
+        assert backcast.shape == (4, BACKCAST_LENGTH)
+        assert forecast.shape == (4, FORECAST_LENGTH)

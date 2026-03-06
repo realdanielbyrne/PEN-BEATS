@@ -1162,7 +1162,8 @@ class TrendWaveletAE(AERootBlock):
   def __init__(self, units, backcast_length, forecast_length,
                trend_dim=4, wavelet_dim=16, basis_offset=0,
                share_weights=False, activation='ReLU', active_g=False,
-               wavelet_type='db3', latent_dim=5, forecast_basis_dim=None):
+               wavelet_type='db3', latent_dim=5, forecast_basis_dim=None,
+               backcast_wavelet_type=None, forecast_wavelet_type=None):
     """TrendWaveletAE merges polynomial (Vandermonde) and orthonormal DWT basis expansions
     into a single block with an AutoEncoder backbone (Option A — parallel basis, additive output).
 
@@ -1193,11 +1194,21 @@ class TrendWaveletAE(AERootBlock):
             path.  When set the forecast wavelet head uses this value (clamped to
             forecast_length) while the backcast path continues to use wavelet_dim.
             Defaults to None (both paths use wavelet_dim).
+        backcast_wavelet_type (str, optional): Override wavelet family for the backcast
+            path only.  Defaults to None (uses ``wavelet_type``).
+        forecast_wavelet_type (str, optional): Override wavelet family for the forecast
+            path only.  Defaults to None (uses ``wavelet_type``).
     """
     super(TrendWaveletAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.trend_dim = trend_dim
     self.active_g = active_g
     self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
+
+    # Resolve effective wavelet family per path (path-specific overrides fallback)
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
 
     # Effective wavelet dimension for each path (clamped to available rows after offset)
     eff_back_wave = min(wavelet_dim, backcast_length - min(basis_offset, backcast_length - 1))
@@ -1219,9 +1230,9 @@ class TrendWaveletAE(AERootBlock):
     self.forecast_trend_g = _TrendGenerator(trend_dim, forecast_length)
 
     # Frozen orthonormal DWT basis generators
-    self.backcast_wavelet_g = _WaveletGeneratorV3(backcast_length, wavelet_type=wavelet_type,
+    self.backcast_wavelet_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
                                                    basis_dim=eff_back_wave, basis_offset=basis_offset)
-    self.forecast_wavelet_g = _WaveletGeneratorV3(forecast_length, wavelet_type=wavelet_type,
+    self.forecast_wavelet_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
                                                    basis_dim=eff_fore_wave, basis_offset=basis_offset)
 
   def forward(self, x):
@@ -1254,7 +1265,8 @@ class TrendWaveletAELG(AERootBlockLG):
   def __init__(self, units, backcast_length, forecast_length,
                trend_dim=4, wavelet_dim=16, basis_offset=0,
                share_weights=False, activation='ReLU', active_g=False,
-               wavelet_type='db3', latent_dim=5, forecast_basis_dim=None):
+               wavelet_type='db3', latent_dim=5, forecast_basis_dim=None,
+               backcast_wavelet_type=None, forecast_wavelet_type=None):
     """TrendWaveletAELG extends TrendWaveletAE with the Learned-Gate AE backbone.
 
     Identical to TrendWaveletAE in its projection heads and frozen basis expansions
@@ -1286,11 +1298,21 @@ class TrendWaveletAELG(AERootBlockLG):
             path.  When set the forecast wavelet head uses this value (clamped to
             forecast_length) while the backcast path continues to use wavelet_dim.
             Defaults to None (both paths use wavelet_dim).
+        backcast_wavelet_type (str, optional): Override wavelet family for the backcast
+            path only.  Defaults to None (uses ``wavelet_type``).
+        forecast_wavelet_type (str, optional): Override wavelet family for the forecast
+            path only.  Defaults to None (uses ``wavelet_type``).
     """
     super(TrendWaveletAELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.trend_dim = trend_dim
     self.active_g = active_g
     self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
+
+    # Resolve effective wavelet family per path (path-specific overrides fallback)
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
 
     # Effective wavelet dimension for each path (clamped to available rows after offset)
     eff_back_wave = min(wavelet_dim, backcast_length - min(basis_offset, backcast_length - 1))
@@ -1312,9 +1334,9 @@ class TrendWaveletAELG(AERootBlockLG):
     self.forecast_trend_g = _TrendGenerator(trend_dim, forecast_length)
 
     # Frozen orthonormal DWT basis generators
-    self.backcast_wavelet_g = _WaveletGeneratorV3(backcast_length, wavelet_type=wavelet_type,
+    self.backcast_wavelet_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
                                                    basis_dim=eff_back_wave, basis_offset=basis_offset)
-    self.forecast_wavelet_g = _WaveletGeneratorV3(forecast_length, wavelet_type=wavelet_type,
+    self.forecast_wavelet_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
                                                    basis_dim=eff_fore_wave, basis_offset=basis_offset)
 
   def forward(self, x):
@@ -1782,11 +1804,17 @@ class _WaveletGeneratorV3(nn.Module):
 class WaveletV3(RootBlock):
   def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
                share_weights=False, activation='ReLU', active_g: bool = False, wavelet_type='db3',
-               forecast_basis_dim=None):
+               forecast_basis_dim=None, backcast_wavelet_type=None, forecast_wavelet_type=None):
     super(WaveletV3, self).__init__(backcast_length, units, activation)
     self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
     self.share_weights = share_weights
     self.active_g = active_g
+
+    # Resolve effective wavelet family per path
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
 
     # Clamp basis_dim to the available rows after offset (can't exceed sequence length).
     # basis_dim=None means no truncation; basis_offset shifts which frequency band is used.
@@ -1801,9 +1829,9 @@ class WaveletV3(RootBlock):
     self.backcast_linear = nn.Linear(units, eff_back_dim, bias=False)
     self.forecast_linear = nn.Linear(units, eff_fore_dim, bias=False)
 
-    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=wavelet_type,
+    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
                                           basis_dim=eff_back_dim, basis_offset=basis_offset)
-    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=wavelet_type,
+    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
                                           basis_dim=eff_fore_dim, basis_offset=basis_offset)
 
   def forward(self, x):
@@ -1984,7 +2012,8 @@ class Symlet20WaveletV3(WaveletV3):
 class WaveletV3AE(AERootBlock):
   def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
                share_weights=False, activation='ReLU', active_g: bool = False, wavelet_type='db3',
-               forecast_basis_dim=None, latent_dim=5):
+               forecast_basis_dim=None, latent_dim=5,
+               backcast_wavelet_type=None, forecast_wavelet_type=None):
     """WaveletV3AE: orthonormal DWT basis block with AutoEncoder backbone (Option B).
 
     Structurally identical to WaveletV3 but inherits from AERootBlock instead of RootBlock,
@@ -2008,11 +2037,21 @@ class WaveletV3AE(AERootBlock):
         forecast_basis_dim (int, optional): Override basis_dim for forecast path only.
             Defaults to None (both paths use basis_dim).
         latent_dim (int, optional): Dimensionality of the AE bottleneck. Defaults to 5.
+        backcast_wavelet_type (str, optional): Override wavelet family for the backcast
+            path only.  Defaults to None (uses ``wavelet_type``).
+        forecast_wavelet_type (str, optional): Override wavelet family for the forecast
+            path only.  Defaults to None (uses ``wavelet_type``).
     """
     super(WaveletV3AE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
     self.share_weights = share_weights
     self.active_g = active_g
+
+    # Resolve effective wavelet family per path
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
 
     eff_back_dim = (backcast_length - min(basis_offset, backcast_length - 1)
                     if basis_dim is None
@@ -2025,9 +2064,9 @@ class WaveletV3AE(AERootBlock):
     self.backcast_linear = nn.Linear(units, eff_back_dim, bias=False)
     self.forecast_linear = nn.Linear(units, eff_fore_dim, bias=False)
 
-    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=wavelet_type,
+    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
                                           basis_dim=eff_back_dim, basis_offset=basis_offset)
-    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=wavelet_type,
+    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
                                           basis_dim=eff_fore_dim, basis_offset=basis_offset)
 
   def forward(self, x):
@@ -2209,7 +2248,8 @@ class Symlet20WaveletV3AE(WaveletV3AE):
 class WaveletV3AELG(AERootBlockLG):
   def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
                share_weights=False, activation='ReLU', active_g: bool = False, wavelet_type='db3',
-               forecast_basis_dim=None, latent_dim=5):
+               forecast_basis_dim=None, latent_dim=5,
+               backcast_wavelet_type=None, forecast_wavelet_type=None):
     """WaveletV3AELG: orthonormal DWT basis block with Learned-Gate AE backbone.
 
     Structurally identical to WaveletV3AE but inherits from AERootBlockLG instead of
@@ -2231,11 +2271,21 @@ class WaveletV3AELG(AERootBlockLG):
         forecast_basis_dim (int, optional): Override basis_dim for forecast path only.
             Defaults to None (both paths use basis_dim).
         latent_dim (int, optional): Dimensionality of the LG-AE bottleneck. Defaults to 5.
+        backcast_wavelet_type (str, optional): Override wavelet family for the backcast
+            path only.  Defaults to None (uses ``wavelet_type``).
+        forecast_wavelet_type (str, optional): Override wavelet family for the forecast
+            path only.  Defaults to None (uses ``wavelet_type``).
     """
     super(WaveletV3AELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
     self.share_weights = share_weights
     self.active_g = active_g
+
+    # Resolve effective wavelet family per path
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
 
     eff_back_dim = (backcast_length - min(basis_offset, backcast_length - 1)
                     if basis_dim is None
@@ -2248,9 +2298,9 @@ class WaveletV3AELG(AERootBlockLG):
     self.backcast_linear = nn.Linear(units, eff_back_dim, bias=False)
     self.forecast_linear = nn.Linear(units, eff_fore_dim, bias=False)
 
-    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=wavelet_type,
+    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
                                           basis_dim=eff_back_dim, basis_offset=basis_offset)
-    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=wavelet_type,
+    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
                                           basis_dim=eff_fore_dim, basis_offset=basis_offset)
 
   def forward(self, x):
@@ -2450,14 +2500,23 @@ class WaveletV3VAE2(VAE2RootBlock):
       wavelet_type (str, optional): PyWavelets wavelet family string. Defaults to 'db3'.
       forecast_basis_dim (int, optional): Override basis_dim for forecast path only. Defaults to None.
       latent_dim (int, optional): Effective latent dimension for the VAE2 backbone. Defaults to 5.
+      backcast_wavelet_type (str, optional): Override wavelet family for the backcast path only. Defaults to None.
+      forecast_wavelet_type (str, optional): Override wavelet family for the forecast path only. Defaults to None.
   """
   def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
                share_weights=False, activation='ReLU', active_g: bool = False, wavelet_type='db3',
-               forecast_basis_dim=None, latent_dim=5):
+               forecast_basis_dim=None, latent_dim=5,
+               backcast_wavelet_type=None, forecast_wavelet_type=None):
     super(WaveletV3VAE2, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
     self.share_weights = share_weights
     self.active_g = active_g
+
+    # Resolve effective wavelet family per path
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
 
     eff_back_dim = (backcast_length - min(basis_offset, backcast_length - 1)
                     if basis_dim is None
@@ -2470,9 +2529,9 @@ class WaveletV3VAE2(VAE2RootBlock):
     self.backcast_linear = nn.Linear(units, eff_back_dim, bias=False)
     self.forecast_linear = nn.Linear(units, eff_fore_dim, bias=False)
 
-    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=wavelet_type,
+    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
                                           basis_dim=eff_back_dim, basis_offset=basis_offset)
-    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=wavelet_type,
+    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
                                           basis_dim=eff_fore_dim, basis_offset=basis_offset)
 
   def forward(self, x):
@@ -2670,14 +2729,23 @@ class WaveletV3VAE(AERootBlockVAE):
       wavelet_type (str, optional): PyWavelets wavelet family string. Defaults to 'db3'.
       forecast_basis_dim (int, optional): Override basis_dim for forecast path only. Defaults to None.
       latent_dim (int, optional): Dimensionality of the VAE bottleneck. Defaults to 5.
+      backcast_wavelet_type (str, optional): Override wavelet family for the backcast path only. Defaults to None.
+      forecast_wavelet_type (str, optional): Override wavelet family for the forecast path only. Defaults to None.
   """
   def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
                share_weights=False, activation='ReLU', active_g: bool = False, wavelet_type='db3',
-               forecast_basis_dim=None, latent_dim=5):
+               forecast_basis_dim=None, latent_dim=5,
+               backcast_wavelet_type=None, forecast_wavelet_type=None):
     super(WaveletV3VAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
     self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
     self.share_weights = share_weights
     self.active_g = active_g
+
+    # Resolve effective wavelet family per path
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
 
     eff_back_dim = (backcast_length - min(basis_offset, backcast_length - 1)
                     if basis_dim is None
@@ -2690,9 +2758,9 @@ class WaveletV3VAE(AERootBlockVAE):
     self.backcast_linear = nn.Linear(units, eff_back_dim, bias=False)
     self.forecast_linear = nn.Linear(units, eff_fore_dim, bias=False)
 
-    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=wavelet_type,
+    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
                                           basis_dim=eff_back_dim, basis_offset=basis_offset)
-    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=wavelet_type,
+    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
                                           basis_dim=eff_fore_dim, basis_offset=basis_offset)
 
   def forward(self, x):

@@ -151,6 +151,7 @@ Define the model by defining the architecture in the `stack_types` parameter.  T
 - SeasonalityAE
 - AutoEncoder
 - AutoEncoderAE
+- WaveletV3 *(generic base class — wavelet family set via `wavelet_type` parameter)*
 - HaarWaveletV3
 - DB2WaveletV3
 - DB3WaveletV3
@@ -165,6 +166,8 @@ Define the model by defining the architecture in the `stack_types` parameter.  T
 - Symlet3WaveletV3
 - Symlet10WaveletV3
 - Symlet20WaveletV3
+
+Generic base classes (`WaveletV3`, `WaveletV3AE`, `WaveletV3AELG`, `WaveletV3VAE2`, `WaveletV3VAE`) are the recommended public API for new experiments. They accept `wavelet_type`, `backcast_wavelet_type`, and `forecast_wavelet_type` parameters, allowing different wavelet families for the backcast and forecast paths. Family-named subclasses (e.g., `HaarWaveletV3`) remain as compatibility wrappers.
 
 Note: `WaveletV2`/`AltWaveletV2` block families were removed due to instability. Historical experiment results are retained under `experiments/results/` for reference.
 
@@ -351,6 +354,15 @@ n_stacks = 5
 stack_types = ['DB3WaveletV3'] * n_stacks # 5 stacks of DB3WaveletV3 blocks
 stack_types = ['Trend','DB3WaveletV3'] * n_stacks # 5 stacks of 1 Trend and 1 DB3WaveletV3
 stack_types = ['DB3WaveletV3','Generic'] # 5 stacks of 1 DB3WaveletV3 followed by 1 Generic
+
+# Using the generic base class with parameter-driven wavelet family
+stack_types = ['WaveletV3AELG'] * n_stacks
+model = NBeatsNet(..., stack_types=stack_types, wavelet_type='coif2')
+
+# Asymmetric wavelet families: different families for backcast and forecast paths
+# Useful when backcast and forecast lengths differ significantly (e.g., L=480, H=96)
+model = NBeatsNet(..., stack_types=stack_types, wavelet_type='coif2',
+                  backcast_wavelet_type='sym20', forecast_wavelet_type='coif2')
 ```
 
 The Wavelet blocks available in this repository are as follows:

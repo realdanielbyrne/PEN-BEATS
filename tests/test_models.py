@@ -711,3 +711,103 @@ class TestNHiTSNetParameters:
         block = model.stacks[0][0]
         assert block.backcast_linear.out_features == 3
         assert block.forecast_linear.out_features == 3
+
+
+
+# --- Asymmetric wavelet forwarding tests ---
+
+class TestAsymmetricWaveletForwarding:
+    """Verify NBeatsNet and NHiTSNet forward backcast/forecast_wavelet_type to blocks."""
+
+    def test_nbeats_forwards_asymmetric_wavelet_to_waveletv3(self):
+        """WaveletV3 blocks should receive asymmetric wavelet params from NBeatsNet."""
+        model = _make_model(
+            ["WaveletV3"] * 2, g_width=64,
+            backcast_wavelet_type="sym20", forecast_wavelet_type="coif2")
+        block = model.stacks[0][0]
+        assert block.backcast_wavelet_type == "sym20"
+        assert block.forecast_wavelet_type == "coif2"
+
+    def test_nbeats_forwards_asymmetric_wavelet_to_waveletv3aelg(self):
+        """WaveletV3AELG blocks should receive asymmetric wavelet params from NBeatsNet."""
+        model = _make_model(
+            ["WaveletV3AELG"] * 2, g_width=64,
+            backcast_wavelet_type="sym20", forecast_wavelet_type="db3")
+        block = model.stacks[0][0]
+        assert block.backcast_wavelet_type == "sym20"
+        assert block.forecast_wavelet_type == "db3"
+
+    def test_nbeats_forwards_asymmetric_wavelet_to_trendwaveletaelg(self):
+        """TrendWaveletAELG blocks should receive asymmetric wavelet params."""
+        model = _make_model(
+            ["TrendWaveletAELG"], g_width=64,
+            backcast_wavelet_type="sym20", forecast_wavelet_type="coif2")
+        block = model.stacks[0][0]
+        assert block.backcast_wavelet_type == "sym20"
+        assert block.forecast_wavelet_type == "coif2"
+
+    def test_nbeats_asymmetric_forward_pass(self):
+        """Forward pass with asymmetric wavelet params produces correct shapes."""
+        model = _make_model(
+            ["TrendAELG", "WaveletV3AELG"] * 2, g_width=64, t_width=32,
+            backcast_wavelet_type="sym20", forecast_wavelet_type="coif2")
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)
+
+    def test_nbeats_none_asymmetric_defaults_to_wavelet_type(self):
+        """When asymmetric params are None, blocks fall back to wavelet_type."""
+        model = _make_model(
+            ["WaveletV3AELG"] * 2, g_width=64, wavelet_type="haar")
+        block = model.stacks[0][0]
+        assert block.backcast_wavelet_type is None
+        assert block.forecast_wavelet_type is None
+        assert block.wavelet_type == "haar"
+
+    def test_nhits_forwards_asymmetric_wavelet(self):
+        """NHiTSNet should forward asymmetric wavelet params to wavelet blocks."""
+        model = _make_nhits(
+            ["WaveletV3AELG"], g_width=64,
+            n_pools_kernel_size=[1], n_freq_downsample=[1],
+            backcast_wavelet_type="sym20", forecast_wavelet_type="coif2")
+        block = model.stacks[0][0]
+        assert block.backcast_wavelet_type == "sym20"
+        assert block.forecast_wavelet_type == "coif2"
+
+    def test_nhits_asymmetric_forward_pass(self):
+        """NHiTSNet forward pass with asymmetric wavelet params produces correct shapes."""
+        model = _make_nhits(
+            ["TrendAELG", "WaveletV3AELG"], g_width=64, t_width=32,
+            n_pools_kernel_size=[2, 1], n_freq_downsample=[2, 1],
+            backcast_wavelet_type="sym20", forecast_wavelet_type="coif2")
+        x = torch.randn(4, 24)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 24)
+        assert forecast.shape == (4, 6)
+
+
+class TestWaveletVAELatentDimRouting:
+    """Verify generic WaveletV3 VAE variants receive the configured latent_dim."""
+
+    @pytest.mark.parametrize("block_name", ["WaveletV3VAE", "WaveletV3VAE2"])
+    def test_nbeats_wavelet_vae_variants_route_latent_dim(self, block_name):
+        latent_dim = 7
+        model = _make_model([block_name], g_width=64, latent_dim=latent_dim)
+        block = model.stacks[0][0]
+
+        assert block.fc2_mu.out_features == latent_dim
+
+    @pytest.mark.parametrize("block_name", ["WaveletV3VAE", "WaveletV3VAE2"])
+    def test_nhits_wavelet_vae_variants_route_latent_dim(self, block_name):
+        latent_dim = 7
+        model = _make_nhits(
+            [block_name],
+            g_width=64,
+            latent_dim=latent_dim,
+            n_pools_kernel_size=[1],
+            n_freq_downsample=[1],
+        )
+        block = model.stacks[0][0]
+
+        assert block.fc2_mu.out_features == latent_dim
