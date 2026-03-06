@@ -122,6 +122,7 @@ SEARCH_EXTRA_COLUMNS = [
     "wavelet_family",
     "bd_label",
     "latent_dim_cfg",
+    "repeats_cfg",
     "meta_predicted_best",
     "meta_convergence_score",
 ]
@@ -390,13 +391,20 @@ def wavelet_short_name(wavelet_family: str) -> str:
     return wavelet_family.replace("WaveletV3AELG", "").replace("WaveletV3AE", "")
 
 
-def canonical_config_id(wavelet_family: str, bd_label: str, trend_thetas_dim: int, latent_dim: int) -> str:
-    return f"{wavelet_family}|{bd_label}|ttd{int(trend_thetas_dim)}|ld{int(latent_dim)}"
+def canonical_config_id(wavelet_family: str, bd_label: str, trend_thetas_dim: int, latent_dim: int, repeats: int = 0) -> str:
+    cid = f"{wavelet_family}|{bd_label}|ttd{int(trend_thetas_dim)}|ld{int(latent_dim)}"
+    if repeats > 0:
+        cid += f"|r{int(repeats)}"
+    return cid
 
 
 def config_name_from_canonical(canonical_id: str) -> str:
-    wavelet_family, bd_label, ttd_tag, ld_tag = canonical_id.split("|")
-    return f"{wavelet_short_name(wavelet_family)}_{bd_label}_{ttd_tag}_{ld_tag}"
+    parts = canonical_id.split("|")
+    wavelet_family, bd_label, ttd_tag, ld_tag = parts[0], parts[1], parts[2], parts[3]
+    name = f"{wavelet_short_name(wavelet_family)}_{bd_label}_{ttd_tag}_{ld_tag}"
+    if len(parts) > 4:
+        name += f"_{parts[4]}"
+    return name
 
 
 def _forecast_backcast_lengths(dataset_name: str, period: str, forecast_multiplier_override: int | None = None) -> tuple[int, int]:
@@ -419,7 +427,14 @@ def generate_search_configs(study_cfg: StudyConfig, promoted_config_names: set[s
     )
 
     trend_block = str(study_cfg.architecture.get("trend_block", "TrendAELG"))
-    repeats = int(study_cfg.architecture.get("repeats", 5))
+
+    # Repeats: search_space list > architecture scalar > default 5
+    repeats_search = study_cfg.search_space.get("repeats")
+    if isinstance(repeats_search, list) and len(repeats_search) > 0:
+        repeats_list = [int(r) for r in repeats_search]
+    else:
+        repeats_list = [int(study_cfg.architecture.get("repeats", 5))]
+    use_repeats_axis = len(repeats_list) > 1
 
     wavelets = list(study_cfg.search_space.get("wavelets") or [])
     basis_labels = list(study_cfg.search_space.get("basis_labels") or [])
@@ -432,30 +447,33 @@ def generate_search_configs(study_cfg: StudyConfig, promoted_config_names: set[s
             basis_dim = compute_basis_dim(bd_label, forecast_length, backcast_length)
             for trend_thetas_dim in trend_thetas_dims:
                 for latent_dim in latent_dims:
-                    canonical_id = canonical_config_id(
-                        wavelet_family,
-                        bd_label,
-                        int(trend_thetas_dim),
-                        int(latent_dim),
-                    )
-                    config_name = config_name_from_canonical(canonical_id)
+                    for repeats in repeats_list:
+                        canonical_id = canonical_config_id(
+                            wavelet_family,
+                            bd_label,
+                            int(trend_thetas_dim),
+                            int(latent_dim),
+                            repeats=repeats if use_repeats_axis else 0,
+                        )
+                        config_name = config_name_from_canonical(canonical_id)
 
-                    if promoted_config_names is not None and config_name not in promoted_config_names:
-                        continue
+                        if promoted_config_names is not None and config_name not in promoted_config_names:
+                            continue
 
-                    configs[config_name] = {
-                        "config_name": config_name,
-                        "canonical_config_id": canonical_id,
-                        "wavelet_family": wavelet_family,
-                        "bd_label": bd_label,
-                        "basis_dim": int(basis_dim),
-                        "basis_offset": int(study_cfg.training.get("basis_offset", 0)),
-                        "trend_thetas_dim": int(trend_thetas_dim),
-                        "latent_dim": int(latent_dim),
-                        "stack_types": [trend_block, wavelet_family] * repeats,
-                        "n_blocks_per_stack": int(study_cfg.training.get("n_blocks_per_stack", 1)),
-                        "share_weights": bool(study_cfg.training.get("share_weights", True)),
-                    }
+                        configs[config_name] = {
+                            "config_name": config_name,
+                            "canonical_config_id": canonical_id,
+                            "wavelet_family": wavelet_family,
+                            "bd_label": bd_label,
+                            "basis_dim": int(basis_dim),
+                            "basis_offset": int(study_cfg.training.get("basis_offset", 0)),
+                            "trend_thetas_dim": int(trend_thetas_dim),
+                            "latent_dim": int(latent_dim),
+                            "repeats": int(repeats),
+                            "stack_types": [trend_block, wavelet_family] * repeats,
+                            "n_blocks_per_stack": int(study_cfg.training.get("n_blocks_per_stack", 1)),
+                            "share_weights": bool(study_cfg.training.get("share_weights", True)),
+                        }
 
     return configs
 
@@ -686,6 +704,7 @@ def _run_single_search_job(
         "wavelet_family": config["wavelet_family"],
         "bd_label": config["bd_label"],
         "latent_dim_cfg": int(config["latent_dim"]),
+        "repeats_cfg": int(config.get("repeats", 0)),
         "meta_predicted_best": "",
         "meta_convergence_score": "",
     }
@@ -959,12 +978,13 @@ def run_search_mode(study_cfg: StudyConfig, cli_args) -> None:
     init_csv(search_csv, columns=SEARCH_CSV_COLUMNS)
 
     full_configs = generate_search_configs(study_cfg)
+    stack_lengths = sorted({len(c['stack_types']) for c in full_configs.values()})
     print(f"\n{'=' * 78}")
     print(f"WaveletV3AELG search — dataset={study_cfg.dataset} period={study_cfg.period}")
-    print(f"  Config space: {len(full_configs)}")
-    print(f"  Latent dims:  {study_cfg.latent_dims}")
-    print(f"  Stack length: {len(next(iter(full_configs.values()))['stack_types'])}")
-    print(f"  Output CSV:   {search_csv}")
+    print(f"  Config space:  {len(full_configs)}")
+    print(f"  Latent dims:   {study_cfg.latent_dims}")
+    print(f"  Stack lengths: {stack_lengths}")
+    print(f"  Output CSV:    {search_csv}")
     print(f"{'=' * 78}")
 
     n_gpus = _resolve_gpu_count(study_cfg, cli_args)
@@ -1057,11 +1077,13 @@ def _canonical_from_row(row: dict) -> str:
     ld = _safe_float(row.get("latent_dim_cfg"), default=float("nan"))
     if not math.isfinite(ttd) or not math.isfinite(ld):
         return ""
+    reps = _safe_float(row.get("repeats_cfg"), default=0.0)
     return canonical_config_id(
         row.get("wavelet_family", ""),
         row.get("bd_label", ""),
         int(ttd),
         int(ld),
+        repeats=int(reps) if math.isfinite(reps) and reps > 0 else 0,
     )
 
 
@@ -1127,13 +1149,18 @@ def select_global_top10(dataset_rankings: dict[str, tuple[list[tuple[str, float]
 
 
 def _parse_canonical(canonical_id: str) -> dict:
-    wavelet_family, bd_label, ttd_tag, ld_tag = canonical_id.split("|")
-    return {
+    parts = canonical_id.split("|")
+    wavelet_family, bd_label, ttd_tag, ld_tag = parts[0], parts[1], parts[2], parts[3]
+    result = {
         "wavelet_family": wavelet_family,
         "bd_label": bd_label,
         "trend_thetas_dim": int(ttd_tag.replace("ttd", "")),
         "latent_dim": int(ld_tag.replace("ld", "")),
+        "repeats": 0,
     }
+    if len(parts) > 4:
+        result["repeats"] = int(parts[4].replace("r", ""))
+    return result
 
 
 def _run_single_cross_job(
@@ -1162,7 +1189,8 @@ def _run_single_cross_job(
     )
     basis_dim = compute_basis_dim(parsed["bd_label"], forecast_length, backcast_length)
 
-    repeats = int(dataset_cfg.architecture.get("repeats", 5))
+    # Use repeats from canonical ID if present, else fall back to architecture default
+    repeats = int(parsed.get("repeats", 0)) or int(dataset_cfg.architecture.get("repeats", 5))
     trend_block = str(dataset_cfg.architecture.get("trend_block", "TrendAELG"))
     config_name = config_name_from_canonical(candidate["canonical_config_id"])
 
@@ -1174,6 +1202,7 @@ def _run_single_cross_job(
         "wavelet_family": parsed["wavelet_family"],
         "bd_label": parsed["bd_label"],
         "latent_dim_cfg": int(parsed["latent_dim"]),
+        "repeats_cfg": int(parsed.get("repeats", 0)),
         "meta_predicted_best": "",
         "meta_convergence_score": "",
         "source_datasets": ",".join(candidate.get("source_datasets", [])),
