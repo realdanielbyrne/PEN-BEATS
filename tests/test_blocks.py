@@ -1,4 +1,6 @@
 """Tests for block implementations — activation, instantiation, forward pass, attribute names."""
+import warnings
+
 import pytest
 import torch
 from torch import nn
@@ -815,6 +817,23 @@ class TestWaveletV3Properties:
                     f"{wavelet_class}.{name}: rank {rank} != expected {expected_dim} "
                     f"(min(BASIS_DIM={BASIS_DIM}, target_length={target_length}))"
                 )
+
+    @pytest.mark.parametrize("wavelet_type", ["db20", "sym20", "coif10"])
+    def test_short_sequences_do_not_force_invalid_level_one(self, wavelet_type):
+        """Regression: keep level=0 when PyWavelets reports no valid decomposition levels."""
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            warnings.simplefilter("always")
+            basis = b._WaveletGeneratorV3._build_basis(
+                target_length=5,
+                wavelet_type=wavelet_type,
+                max_decomp_level=5,
+            )
+
+        assert basis.shape == (5, 5)
+        assert not any(
+            "Level value of 1 is too high" in str(warning.message)
+            for warning in caught_warnings
+        ), f"{wavelet_type} should respect level=0 when max_level == 0"
 
     @pytest.mark.parametrize("block_name", V3_WAVELET_BLOCKS)
     def test_no_nan_output(self, block_name):

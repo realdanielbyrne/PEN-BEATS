@@ -1734,7 +1734,9 @@ class _WaveletGeneratorV3(nn.Module):
 
     wavelet = PyWavelet(wavelet_type)
     max_level = pywt.dwt_max_level(target_length, wavelet.dec_len)
-    level = max(1, min(max_level, max_decomp_level))
+    # Respect PyWavelets level=0 for short sequences / long filters. Forcing level=1
+    # triggers boundary-effect warnings without yielding a valid multilevel decomposition.
+    level = min(max_level, max_decomp_level)
 
     # Get DWT coefficient structure
     dummy = np.zeros(target_length)
@@ -1753,7 +1755,7 @@ class _WaveletGeneratorV3(nn.Module):
     raw_basis = np.array(basis_rows, dtype=np.float64)
 
     # SVD orthogonalization — rows of Vt are ordered low→high frequency by singular value
-    U, S, Vt = np.linalg.svd(raw_basis, full_matrices=False)
+    _, S, Vt = np.linalg.svd(raw_basis, full_matrices=False)
     tol = S[0] * max(raw_basis.shape) * np.finfo(np.float64).eps
     full_rank = int(np.sum(S > tol))
 
