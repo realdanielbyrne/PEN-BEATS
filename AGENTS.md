@@ -68,6 +68,8 @@ pytest tests/test_blocks.py -k "TestGenericArchitecture"
 pytest tests/test_blocks.py -k "test_output_shapes"
 ```
 
+For the complete testing guide, including conventions for adding coverage and common troubleshooting tips, see [`TESTING.md`](TESTING.md).
+
 Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loaders.py` (DataModule setup, splits), `test_models.py` (width selection, optimizer dispatch, forward pass, sum_losses). CI does not run tests before publishing. No linter or formatter is configured.
 
 ## Architecture

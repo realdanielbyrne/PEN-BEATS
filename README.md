@@ -53,6 +53,12 @@ The key innovation is the **doubly residual topology** inspired by deep residual
 - **PyTorch** >= 2.1.0
 - **Lightning** >= 2.1.0
 
+## Testing
+
+This project uses `pytest` with tests located in `tests/`.
+
+For the full testing workflow, command reference, conventions, and troubleshooting notes, see [TESTING.md](TESTING.md).
+
 ## Getting Started
 
 ### Installation
