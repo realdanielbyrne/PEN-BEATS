@@ -379,18 +379,46 @@ def resolve_config(config_spec: dict, top_level_cfg: dict) -> dict:
     return base
 
 
+def _expand_block_param_lists(configs: list) -> list:
+    """Expand configs where block_params values are lists into multiple configs.
+
+    Currently supports list-valued ``latent_dim``.  When ``latent_dim`` is a
+    list (e.g. ``[8, 16, 32]``), each config is fanned out into one variant
+    per value.  The variant name gets a ``_ld<N>`` suffix and ``latent_dim``
+    is recorded in ``extra_fields`` for CSV tracking.
+    """
+    expanded = []
+    for cfg in configs:
+        latent_dim = cfg["block_params"].get("latent_dim")
+        if isinstance(latent_dim, list):
+            for ld in latent_dim:
+                new_cfg = copy.deepcopy(cfg)
+                new_cfg["block_params"]["latent_dim"] = int(ld)
+                new_cfg["name"] = f"{cfg['name']}_ld{ld}"
+                new_cfg.setdefault("extra_fields", {})["latent_dim"] = int(ld)
+                expanded.append(new_cfg)
+        else:
+            expanded.append(cfg)
+    return expanded
+
+
 def build_configs(top_level_cfg: dict) -> list:
     """Build the list of resolved config dicts from a top-level YAML config.
 
     When a ``configs`` list is present, each entry is resolved via
     :func:`resolve_config`.  Otherwise, a single config is built from
     the top-level ``stacks`` / ``stack_types`` spec.
+
+    Block params that are lists (e.g. ``latent_dim: [8, 16, 32]``) are
+    expanded into separate configs via :func:`_expand_block_param_lists`.
     """
     configs_spec = top_level_cfg.get("configs")
     if configs_spec is not None:
         if not isinstance(configs_spec, list):
             raise ValueError("'configs' must be a YAML list.")
-        return [resolve_config(cs, top_level_cfg) for cs in configs_spec]
+        return _expand_block_param_lists(
+            [resolve_config(cs, top_level_cfg) for cs in configs_spec]
+        )
 
     # Single-config mode
     stacks_spec = top_level_cfg.get("stacks", top_level_cfg.get("stack_types"))
@@ -413,7 +441,7 @@ def build_configs(top_level_cfg: dict) -> list:
     ):
         if key in top_level_cfg:
             single_spec[key] = top_level_cfg[key]
-    return [resolve_config(single_spec, top_level_cfg)]
+    return _expand_block_param_lists([resolve_config(single_spec, top_level_cfg)])
 
 
 # ---------------------------------------------------------------------------
@@ -676,7 +704,7 @@ def run_single_config(
         thetas_dim_override=block_params.get("thetas_dim"),
         latent_dim_override=block_params.get("latent_dim"),
         trend_thetas_dim=block_params.get("trend_thetas_dim"),
-        wavelet_type=block_params.get("wavelet_type", "db3"),
+        wavelet_type=block_params.get("wavelet_type") or "db3",
         lr_scheduler_config=lr_scheduler_cfg,
         optimizer_name=training.get("optimizer", "Adam"),
         learning_rate=training.get("learning_rate"),
@@ -1071,6 +1099,11 @@ def run_experiment(
     # CLI overrides take precedence
     cfg = deep_merge(top_level_cfg, cli_overrides)
 
+    # Pin to a specific GPU before any CUDA context is created
+    gpu_id = (cfg.get("hardware") or {}).get("gpu_id")
+    if gpu_id is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+
     experiment_name = cfg.get("experiment_name", "yaml_experiment")
 
     # ── Dataset selection ────────────────────────────────────────────────
@@ -1278,6 +1311,10 @@ Examples:
         help="Override accelerator (default: from YAML or 'auto').",
     )
     parser.add_argument(
+        "--gpu-id", type=int, default=None,
+        help="GPU index to use (sets CUDA_VISIBLE_DEVICES). Overrides YAML hardware.gpu_id.",
+    )
+    parser.add_argument(
         "--num-workers", type=int, default=None,
         help="Override DataLoader workers (default: from YAML).",
     )
@@ -1331,6 +1368,8 @@ Examples:
         cli_overrides.setdefault("training", {})["batch_size"] = args.batch_size
     if args.accelerator is not None:
         cli_overrides.setdefault("hardware", {})["accelerator"] = args.accelerator
+    if args.gpu_id is not None:
+        cli_overrides.setdefault("hardware", {})["gpu_id"] = args.gpu_id
     if args.num_workers is not None:
         cli_overrides.setdefault("hardware", {})["num_workers"] = args.num_workers
     if args.wandb:
