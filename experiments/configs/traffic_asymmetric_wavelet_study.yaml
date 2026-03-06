@@ -57,62 +57,62 @@ runs:
   base_seed: 1
 
 configs:
-  # ── AELG backbone: TrendAELG + WaveletV3AELG alternating (5 pairs = 10 stacks) ──
+  # ── AELG backbone: TrendAELG + WaveletV3AELG alternating (4 pairs = 8 stacks) ──
 
   - name: AELG-coif2-coif2
-    stacks: {type: alternating, blocks: [TrendAELG, WaveletV3AELG], repeats: 5}
+    stacks: {type: alternating, blocks: [TrendAELG, WaveletV3AELG], repeats: 4}
     block_params:
       wavelet_type: coif2
 
   - name: AELG-sym3-sym3
-    stacks: {type: alternating, blocks: [TrendAELG, WaveletV3AELG], repeats: 5}
+    stacks: {type: alternating, blocks: [TrendAELG, WaveletV3AELG], repeats: 4}
     block_params:
       wavelet_type: sym3
 
   - name: AELG-sym20-sym3
-    stacks: {type: alternating, blocks: [TrendAELG, WaveletV3AELG], repeats: 5}
+    stacks: {type: alternating, blocks: [TrendAELG, WaveletV3AELG], repeats: 4}
     block_params:
       wavelet_type: sym3
       backcast_wavelet_type: sym20
 
   - name: AELG-sym20-coif2
-    stacks: {type: alternating, blocks: [TrendAELG, WaveletV3AELG], repeats: 5}
+    stacks: {type: alternating, blocks: [TrendAELG, WaveletV3AELG], repeats: 4}
     block_params:
       wavelet_type: coif2
       backcast_wavelet_type: sym20
 
   - name: AELG-sym3-sym20
-    stacks: {type: alternating, blocks: [TrendAELG, WaveletV3AELG], repeats: 5}
+    stacks: {type: alternating, blocks: [TrendAELG, WaveletV3AELG], repeats: 4}
     block_params:
       wavelet_type: sym20
       backcast_wavelet_type: sym3
 
-  # ── VAE backbone: TrendVAE + WaveletV3VAE alternating (5 pairs = 10 stacks) ──
+  # ── VAE backbone: TrendVAE + WaveletV3VAE alternating (4 pairs = 8 stacks) ──
 
   - name: VAE-coif2-coif2
-    stacks: {type: alternating, blocks: [TrendVAE, WaveletV3VAE], repeats: 5}
+    stacks: {type: alternating, blocks: [TrendVAE, WaveletV3VAE], repeats: 4}
     block_params:
       wavelet_type: coif2
 
   - name: VAE-sym3-sym3
-    stacks: {type: alternating, blocks: [TrendVAE, WaveletV3VAE], repeats: 5}
+    stacks: {type: alternating, blocks: [TrendVAE, WaveletV3VAE], repeats: 4}
     block_params:
       wavelet_type: sym3
 
   - name: VAE-sym20-sym3
-    stacks: {type: alternating, blocks: [TrendVAE, WaveletV3VAE], repeats: 5}
+    stacks: {type: alternating, blocks: [TrendVAE, WaveletV3VAE], repeats: 4}
     block_params:
       wavelet_type: sym3
       backcast_wavelet_type: sym20
 
   - name: VAE-sym20-coif2
-    stacks: {type: alternating, blocks: [TrendVAE, WaveletV3VAE], repeats: 5}
+    stacks: {type: alternating, blocks: [TrendVAE, WaveletV3VAE], repeats: 4}
     block_params:
       wavelet_type: coif2
       backcast_wavelet_type: sym20
 
   - name: VAE-sym3-sym20
-    stacks: {type: alternating, blocks: [TrendVAE, WaveletV3VAE], repeats: 5}
+    stacks: {type: alternating, blocks: [TrendVAE, WaveletV3VAE], repeats: 4}
     block_params:
       wavelet_type: sym20
       backcast_wavelet_type: sym3
