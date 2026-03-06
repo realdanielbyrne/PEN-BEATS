@@ -100,6 +100,16 @@ DEFAULT_TRAINING = {
     "forecast_multiplier": None, # None = auto-resolve per dataset
 }
 
+DEFAULT_PROTOCOL = {
+    "normalize": False,
+    "train_ratio": None,
+    "val_ratio": None,
+    "include_target": False,
+    "loss": None,
+    "forecast_multiplier": None,
+    "batch_size": None,
+}
+
 DEFAULT_BLOCK_PARAMS = {
     "thetas_dim": THETAS_DIM,
     "latent_dim": LATENT_DIM,
@@ -161,6 +171,27 @@ def deep_merge(base: dict, override: dict) -> dict:
         else:
             result[key] = val
     return result
+
+
+def apply_protocol_training_fallbacks(
+    training: dict,
+    protocol: dict,
+    explicit_training: dict | None = None,
+) -> dict:
+    """Apply protocol defaults only when training does not set a value.
+
+    This preserves the precedence order:
+
+    explicit training value > protocol value > launcher default
+    """
+    resolved_training = copy.deepcopy(training)
+    explicit_training = explicit_training or {}
+
+    for key in ("loss", "forecast_multiplier", "batch_size"):
+        if explicit_training.get(key) is None and protocol.get(key) is not None:
+            resolved_training[key] = protocol[key]
+
+    return resolved_training
 
 
 # ---------------------------------------------------------------------------
@@ -354,12 +385,23 @@ def resolve_config(config_spec: dict, top_level_cfg: dict) -> dict:
         }
 
     # ── Merge training params: global defaults → top-level → config-level ─
-    top_training = deep_merge(DEFAULT_TRAINING, top_level_cfg.get("training", {}))
-    cfg_training = deep_merge(top_training, config_spec.get("training", {}))
+    raw_top_training = top_level_cfg.get("training", {}) or {}
+    raw_cfg_training = config_spec.get("training", {}) or {}
+    explicit_training = deep_merge(raw_top_training, raw_cfg_training)
+
+    top_training = deep_merge(DEFAULT_TRAINING, raw_top_training)
+    cfg_training = deep_merge(top_training, raw_cfg_training)
+
+    top_protocol = deep_merge(DEFAULT_PROTOCOL, top_level_cfg.get("protocol", {}) or {})
+    cfg_protocol = deep_merge(top_protocol, config_spec.get("protocol", {}) or {})
+    cfg_training = apply_protocol_training_fallbacks(
+        cfg_training, cfg_protocol, explicit_training)
+
     # Propagate n_blocks_per_stack and share_weights into training for convenience
     cfg_training["n_blocks_per_stack"] = base["n_blocks_per_stack"]
     cfg_training["share_weights"] = base["share_weights"]
     base["training"] = cfg_training
+    base["protocol"] = cfg_protocol
 
     # ── Merge block params ────────────────────────────────────────────────
     top_block = deep_merge(
@@ -439,7 +481,7 @@ def build_configs(top_level_cfg: dict) -> list:
     # Propagate any config-level overrides from top-level
     for key in (
         "n_blocks_per_stack", "share_weights",
-        "training", "block_params", "lr_scheduler", "extra_fields",
+        "training", "block_params", "lr_scheduler", "extra_fields", "protocol",
     ):
         if key in top_level_cfg:
             single_spec[key] = top_level_cfg[key]
@@ -639,6 +681,7 @@ def run_single_config(
     # Merge training: config-level ← pass-level override
     training = deep_merge(config["training"], pass_training_override)
     block_params = config["block_params"]
+    protocol = config.get("protocol") or {}
 
     # Build the experiment tag (= "experiment" column in CSV)
     exp_tag = pass_name
@@ -713,6 +756,8 @@ def run_single_config(
         optimizer_name=training.get("optimizer", "Adam"),
         learning_rate=training.get("learning_rate"),
         loss_override=training.get("loss"),
+        normalize=bool(protocol.get("normalize", False)),
+        val_ratio=protocol.get("val_ratio"),
         seed=seed,
     )
 
@@ -1134,6 +1179,9 @@ def run_experiment(
     use_search = bool(search_cfg.get("enabled", False))
     search_rounds = search_cfg.get("rounds") or []
 
+    # ── Dataset / evaluation protocol ────────────────────────────────────
+    protocol_cfg = deep_merge(DEFAULT_PROTOCOL, cfg.get("protocol", {}) or {})
+
     # ── Analysis config ──────────────────────────────────────────────────
     analysis_cfg = cfg.get("analysis") or {}
     do_analysis = bool(analysis_cfg.get("enabled", False))
@@ -1212,7 +1260,12 @@ def run_experiment(
                 continue
 
             if not dry_run:
-                dataset = load_dataset(dataset_name, period)
+                dataset = load_dataset(
+                    dataset_name,
+                    period,
+                    train_ratio=protocol_cfg.get("train_ratio"),
+                    include_target=protocol_cfg.get("include_target"),
+                )
                 train_series_list = dataset.get_training_series()
             else:
                 dataset = None

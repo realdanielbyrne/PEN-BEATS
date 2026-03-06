@@ -486,7 +486,7 @@ model = NBeatsNet(
 
 ## Upcoming Work
 
-NHiTS-architecture benchmarks using the same parameter-efficient AE-backbone block types are in progress. These experiments evaluate both `NBeatsNet` (10-stack) and `NHiTSNet` (3-stack with hierarchical pooling and multi-rate signal sampling) configurations with AELG block variants against NHiTS published baselines on the Weather and Traffic datasets across four forecast horizons (96, 192, 336, 720 steps), using the NHiTS evaluation protocol (Z-score normalization, 70/10/20 train/val/test split, MSE loss). Configuration files:
+NHiTS-architecture benchmarks using the same parameter-efficient AE-backbone block types are in progress. These experiments evaluate both `NBeatsNet` (10-stack) and `NHiTSNet` (3-stack with hierarchical pooling and multi-rate signal sampling) configurations with AELG block variants against NHiTS published baselines on the Weather and Traffic datasets across four forecast horizons (96, 192, 336, 720 steps), using the NHiTS evaluation protocol (Z-score normalization, 70/10/20 train/val/test split, MSE loss). The YAML launcher now honors the top-level `protocol` block for these studies, including dataset split settings, optional target-column inclusion, datamodule normalization/validation behavior, and protocol fallbacks for loss / forecast multiplier / batch size. Configuration files:
 
 - [`experiments/configs/nhits_benchmark_weather.yaml`](experiments/configs/nhits_benchmark_weather.yaml)
 - [`experiments/configs/nhits_benchmark_traffic.yaml`](experiments/configs/nhits_benchmark_traffic.yaml)

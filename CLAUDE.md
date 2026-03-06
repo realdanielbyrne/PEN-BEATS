@@ -37,6 +37,8 @@ python examples/TourismAllBlks.py  # Tourism dataset benchmark
 
 `experiments/run_from_yaml.py` is the **unified experiment launcher** that standardizes the workflow across all study types. It accepts all parameters through a YAML configuration file and wraps `run_single_experiment()` from `run_unified_benchmark.py`.
 
+For Traffic/Weather benchmark configs that define a top-level `protocol:` block, the launcher forwards `train_ratio` / `include_target` into dataset loading, passes `normalize` / `val_ratio` into the columnar datamodule, and treats `protocol.loss` / `protocol.forecast_multiplier` / `protocol.batch_size` as fallbacks when the same keys are not explicitly set under `training`.
+
 ```bash
 # Run a pre-built config (dry-run first to check the plan)
 python experiments/run_from_yaml.py experiments/configs/nbeats_g.yaml --dry-run

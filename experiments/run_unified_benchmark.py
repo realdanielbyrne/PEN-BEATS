@@ -566,8 +566,12 @@ def run_inference(model, test_dm, device):
     return np.concatenate(all_preds, axis=0), np.concatenate(all_targets, axis=0)
 
 
-def load_dataset(dataset_name, period):
-    """Factory function to load the appropriate benchmark dataset."""
+def load_dataset(dataset_name, period, train_ratio=None, include_target=None):
+    """Factory function to load the appropriate benchmark dataset.
+
+    ``train_ratio`` and ``include_target`` are only used by the Traffic and
+    Weather benchmark datasets; all other dataset types ignore them.
+    """
     if dataset_name == "m4":
         return M4Dataset(period, "All")
     elif dataset_name == "tourism":
@@ -577,10 +581,20 @@ def load_dataset(dataset_name, period):
         return MilkDataset()
     elif dataset_name == "traffic":
         horizon = TRAFFIC_PERIODS[period]["horizon"]
-        return TrafficDataset(horizon)
+        dataset_kwargs = {}
+        if train_ratio is not None:
+            dataset_kwargs["train_ratio"] = train_ratio
+        if include_target is not None:
+            dataset_kwargs["include_target"] = include_target
+        return TrafficDataset(horizon, **dataset_kwargs)
     elif dataset_name == "weather":
         horizon = WEATHER_PERIODS[period]["horizon"]
-        return WeatherDataset(horizon)
+        dataset_kwargs = {}
+        if train_ratio is not None:
+            dataset_kwargs["train_ratio"] = train_ratio
+        if include_target is not None:
+            dataset_kwargs["include_target"] = include_target
+        return WeatherDataset(horizon, **dataset_kwargs)
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")
 
@@ -794,6 +808,8 @@ def run_single_experiment(
     optimizer_name="Adam",
     learning_rate=None,      # None → uses module-level LEARNING_RATE constant
     loss_override=None,      # None → uses module-level LOSS constant
+    normalize=False,
+    val_ratio=None,
     seed=None,               # None → BASE_SEED + run_idx
     wavelet_type="db3",      # Wavelet family for TrendWaveletAE/TrendWaveletAELG blocks
     backcast_wavelet_type=None,   # Override wavelet family for backcast path only
@@ -872,7 +888,10 @@ def run_single_experiment(
         no_val=False,
         num_workers=num_workers,
         pin_memory=pin_memory,
+        normalize=normalize,
+        val_ratio=val_ratio,
     )
+    dm.setup()
 
     test_dm = ColumnarCollectionTimeSeriesTestDataModule(
         train_data,
@@ -882,6 +901,8 @@ def run_single_experiment(
         batch_size=batch_size,
         num_workers=num_workers,
         pin_memory=pin_memory,
+        col_means=dm.col_means,
+        col_stds=dm.col_stds,
     )
 
     # Trainer

@@ -160,6 +160,29 @@ Can be overridden at the config level or the pass level.
 
 ---
 
+## `protocol` — Dataset / Evaluation Protocol
+
+```yaml
+protocol:
+  normalize: false          # true = z-score each series using train-split stats
+  train_ratio: null         # Traffic/Weather only; null = dataset default (0.8)
+  val_ratio: null           # null = last backcast+forecast rows form validation
+  include_target: false     # Traffic/Weather only; true keeps the OT column
+  loss: null                # fallback when training.loss is not explicitly set
+  forecast_multiplier: null # fallback when training.forecast_multiplier is not explicitly set
+  batch_size: null          # fallback when training.batch_size is not explicitly set
+```
+
+Notes:
+
+- The YAML launcher reads `protocol` from the top level and forwards the relevant values into dataset loading and datamodule construction.
+- `normalize` and `val_ratio` are passed into `ColumnarCollectionTimeSeriesDataModule`.
+- `train_ratio` and `include_target` are applied when loading the Traffic or Weather dataset.
+- `loss`, `forecast_multiplier`, and `batch_size` act as **fallbacks** only when the same fields are not explicitly set under `training`.
+- The tuned `BATCH_SIZES` table still takes precedence over `protocol.batch_size` or `training.batch_size` for protected dataset/period combinations such as `Traffic-96`.
+
+---
+
 ## `block_params` — Block-Specific Parameters
 
 ```yaml
@@ -513,7 +536,7 @@ architecture:
 
 With a list, the total config count is `len(block_types) * len(wavelet_types)
 
-* len(basis_labels) *len(trend_dims)* len(latent_dims)`. Each config's
+- len(basis_labels) *len(trend_dims)* len(latent_dims)`. Each config's
 canonical ID encodes the block type as the first field (e.g.,
 `TrendWaveletAE|haar|eq_fcast|td3|ld8`), so AE and AELG configs have
 distinct IDs and can coexist in the same CSV.
@@ -593,14 +616,14 @@ output:
 
 ### Notes
 
-* Basis labels are mapped at runtime per dataset/period:
-  * `eq_fcast = forecast_length`
-  * `lt_fcast = max(forecast_length//2, forecast_length-2)`
-  * `eq_bcast = backcast_length`
-  * `lt_bcast = backcast_length//2`
-* Colliding basis values are **not** deduplicated; all labels remain in the
+- Basis labels are mapped at runtime per dataset/period:
+  - `eq_fcast = forecast_length`
+  - `lt_fcast = max(forecast_length//2, forecast_length-2)`
+  - `eq_bcast = backcast_length`
+  - `lt_bcast = backcast_length//2`
+- Colliding basis values are **not** deduplicated; all labels remain in the
   grid so each dataset keeps `14 * 4 * 2 * 3 = 336` configs.
-* Search CSV includes:
+- Search CSV includes:
   `search_round`, `basis_dim`, `basis_offset`, `trend_thetas_dim_cfg`,
   `wavelet_family`, `bd_label`, `latent_dim_cfg`,
   `meta_predicted_best`, `meta_convergence_score`.
