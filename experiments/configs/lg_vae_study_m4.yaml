@@ -20,7 +20,7 @@ runs:
   base_seed: 42
 
 training:
-  max_epochs: 50
+  max_epochs: 100
   patience: 10
   learning_rate: 0.001
   loss: SMAPELoss

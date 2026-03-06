@@ -120,27 +120,6 @@
 | Coif2   |     1.2245 | 0.6864 |  12 |
 | DB4     |     1.2546 | 0.6417 |  12 |
 
-# Hyperparameter Marginal Analysis: LG/VAE Block Study
-
-## Key Findings
-
-This study isolates the contribution of **backbone architectural choice** (learned-gate AE vs. variational AE vs. standard blocks) while controlling for category strategy. The three backbone families represent increasing complexity: RootBlock (baseline VAE), VAE (explicit latent distribution), and LG (learned-gate bottleneck with adaptive routing).
-
-**Expected ranking by sophistication:**
-- **LG (Learned-Gate AE)**: Adaptive routing through learned attention gates should provide the most flexible basis selection, enabling per-block specialization across heterogeneous M4-Yearly patterns (seasonal vs. trend-dominated).
-- **VAE**: Enforces Gaussian latent structure; useful regularization but less adaptive than gated mechanisms.
-- **RootBlock**: Baseline; lowest capacity for dynamic basis switching.
-
-## Actionable Guidance
-
-1. **If LG < VAE < RootBlock in OWA**: The learned-gate mechanism is justified—it outweighs added complexity. Investigate gate activation entropy to confirm the network is *using* the routing, not defaulting to one path.
-
-2. **If VAE ≥ RootBlock**: The KL regularization may over-constrain latent space. Consider reducing `kl_weight` or increasing `latent_dim` to recover capacity without abandoning stochasticity.
-
-3. **Wavelet family interaction**: If trend+wavelet + LG significantly underperforms trend+wavelet + RootBlock, the learned gates may conflict with hard frequency decomposition. This suggests **complementarity between soft (gate) and hard (wavelet) routing**—avoid combining them.
-
-4. **Dataset scale**: M4-Yearly has only ~23k series; monitor for overfitting in LG (highest params). Regularization strength and early stopping become critical.
-
 
 ## 5. Stability Analysis
 
@@ -162,23 +141,6 @@ This study isolates the contribution of **backbone architectural choice** (learn
 - Max spread: 0.1178 (TrendAELG+Haar)
 - Mean std: 0.0311
 
-# Stability Analysis: LG/VAE Block Configurations
-
-## Key Findings
-
-The stability analysis reveals **moderate variance in LG/VAE block performance**, indicating that encoder-decoder bottleneck designs introduce stochasticity that baselines avoid. While individual runs show promise—some configurations approach or exceed the NBEATS-I+G baseline (0.8057 OWA)—**consistency across runs lags behind deterministic counterparts**. This suggests the VAE's latent sampling mechanism, though theoretically beneficial for regularization, adds optimization noise that requires careful hyperparameter tuning to stabilize.
-
-## Architectural Implications
-
-The degradation in stability stems from VAE block architecture: the KL divergence term in the ELBO creates a competing objective with forecasting loss, and random sampling during forward passes introduces gradient variance. Unlike the static basis expansions in NBEATS-I/G, AE variants must jointly optimize reconstruction and predictive fidelity. **Successive halving should prioritize configurations that pair strong KL weighting schedules with learning rate annealing**—this typically reduces run-to-run variance by 15–25% on M4-Yearly.
-
-## Actionable Guidance
-
-1. **Report mean ± std OWA** across ≥3 runs for surviving configs; discard any with coefficient of variation >8%
-2. **Implement β-annealing** (warm-up KL weight from 0.1→1.0 over first 20% of epochs) to stabilize training dynamics
-3. **Use ensemble predictions** from runs meeting stability threshold—averaging 2–3 low-variance models often recovers 0.002–0.005 OWA without additional tuning
-4. **Favor LG blocks over VAE** if final budget is tight; linear-Gaussian posteriors offer comparable expressivity with <50% variance penalty
-
 
 ## 6. Round-over-Round Progression
 
@@ -187,19 +149,6 @@ The degradation in stability stems from VAE block architecture: the KL divergenc
 | TrendAELG+Symlet3 | 0.9253 | 0.8533 | 0.8042 | -0.1211 |      -13.1 |
 | TrendAELG+Coif2   | 0.9091 | 0.8938 | 0.8011 | -0.108  |      -11.9 |
 | TrendAELG+Haar    | 0.8879 | 0.8513 | 0.809  | -0.0789 |       -8.9 |
-
-# Round Progression Analysis
-
-## Overview
-The successive halving campaign systematically narrows the configuration space while allocating increased compute to the most promising variants. This progression reveals which architectural choices—particularly latent bottlenecks and generative mechanisms—compound benefits under higher training budgets.
-
-## Key Dynamics
-
-**Early elimination filters noise.** Weaker configs (typically those with mismatched latent dims or weak VAE coupling) drop in round 1-2, leaving only variants with fundamental architectural coherence. The survivors typically share: (1) moderate bottleneck compression (latent_dim in the range that balances reconstruction fidelity vs. regularization), and (2) effective KL weighting that doesn't collapse the latent space or overwhelm reconstruction loss.
-
-**Training budget amplifies differences.** As rounds progress and selected configs receive 2–4× more training epochs, small architectural advantages become statistically significant. AE variants often show steeper improvement curves than pure VAE, suggesting the encoder-decoder factorization is particularly data-efficient on M4-Yearly's relatively small sample size (~400 time series). This is the likely reason baseline NBEATS-I+G (0.8057 OWA) benefits from both interpretability and generative augmentation—the combination is synergistic.
-
-**Actionable insight:** Monitor round 3+ finalists for the *magnitude of improvement per epoch*. Configs showing sub-linear or flat improvement curves have likely saturated; those still declining sharply should receive final rounds of scaling. Compare OWA improvements against the baseline spread (0.8198 → 0.8057 = ~0.0141 gap): beating NBEATS-I+G requires ≤0.8040 in final evaluation.
 
 
 ## 7. Baseline Comparisons
@@ -362,27 +311,6 @@ vs NBEATS-I+G (0.8057): beats (delta=-0.0052).
 | Haar    |              52.5811 | 26.7079 |  12 |
 | DB4     |              54.3220 | 33.7610 |  12 |
 
-# Hyperparameter Marginal Analysis: LG/VAE Block Study
-
-## Key Findings
-
-This study isolates the contribution of **backbone architectural choice** (learned-gate AE vs. variational AE vs. standard blocks) while controlling for category strategy. The three backbone families represent increasing complexity: RootBlock (baseline VAE), VAE (explicit latent distribution), and LG (learned-gate bottleneck with adaptive routing).
-
-**Expected ranking by sophistication:**
-- **LG (Learned-Gate AE)**: Adaptive routing through learned attention gates should provide the most flexible basis selection, enabling per-block specialization across heterogeneous M4-Yearly patterns (seasonal vs. trend-dominated).
-- **VAE**: Enforces Gaussian latent structure; useful regularization but less adaptive than gated mechanisms.
-- **RootBlock**: Baseline; lowest capacity for dynamic basis switching.
-
-## Actionable Guidance
-
-1. **If LG < VAE < RootBlock in OWA**: The learned-gate mechanism is justified—it outweighs added complexity. Investigate gate activation entropy to confirm the network is *using* the routing, not defaulting to one path.
-
-2. **If VAE ≥ RootBlock**: The KL regularization may over-constrain latent space. Consider reducing `kl_weight` or increasing `latent_dim` to recover capacity without abandoning stochasticity.
-
-3. **Wavelet family interaction**: If trend+wavelet + LG significantly underperforms trend+wavelet + RootBlock, the learned gates may conflict with hard frequency decomposition. This suggests **complementarity between soft (gate) and hard (wavelet) routing**—avoid combining them.
-
-4. **Dataset scale**: M4-Yearly has only ~23k series; monitor for overfitting in LG (highest params). Regularization strength and early stopping become critical.
-
 
 ## 5. Stability Analysis
 
@@ -404,23 +332,6 @@ This study isolates the contribution of **backbone architectural choice** (learn
 - Max spread: 0.6225 (TrendAELG+Coif2)
 - Mean std: 0.1751
 
-# Stability Analysis: LG/VAE Block Configurations
-
-## Key Findings
-
-The stability analysis reveals **moderate variance in LG/VAE block performance**, indicating that encoder-decoder bottleneck designs introduce stochasticity that baselines avoid. While individual runs show promise—some configurations approach or exceed the NBEATS-I+G baseline (0.8057 OWA)—**consistency across runs lags behind deterministic counterparts**. This suggests the VAE's latent sampling mechanism, though theoretically beneficial for regularization, adds optimization noise that requires careful hyperparameter tuning to stabilize.
-
-## Architectural Implications
-
-The degradation in stability stems from VAE block architecture: the KL divergence term in the ELBO creates a competing objective with forecasting loss, and random sampling during forward passes introduces gradient variance. Unlike the static basis expansions in NBEATS-I/G, AE variants must jointly optimize reconstruction and predictive fidelity. **Successive halving should prioritize configurations that pair strong KL weighting schedules with learning rate annealing**—this typically reduces run-to-run variance by 15–25% on M4-Yearly.
-
-## Actionable Guidance
-
-1. **Report mean ± std OWA** across ≥3 runs for surviving configs; discard any with coefficient of variation >8%
-2. **Implement β-annealing** (warm-up KL weight from 0.1→1.0 over first 20% of epochs) to stabilize training dynamics
-3. **Use ensemble predictions** from runs meeting stability threshold—averaging 2–3 low-variance models often recovers 0.002–0.005 OWA without additional tuning
-4. **Favor LG blocks over VAE** if final budget is tight; linear-Gaussian posteriors offer comparable expressivity with <50% variance penalty
-
 
 ## 6. Round-over-Round Progression
 
@@ -429,19 +340,6 @@ The degradation in stability stems from VAE block architecture: the KL divergenc
 | TrendAELG+DB4   | 28.2869 | 26.2872 | 25.2698 | -3.0171 |      -10.7 |
 | TrendAELG+Coif2 | 27.4526 | 26.5641 | 25.1863 | -2.2663 |       -8.3 |
 | TrendAELG+Haar  | 27.6461 | 26.5056 | 25.3898 | -2.2563 |       -8.2 |
-
-# Round Progression Analysis
-
-## Overview
-The successive halving campaign systematically narrows the configuration space while allocating increased compute to the most promising variants. This progression reveals which architectural choices—particularly latent bottlenecks and generative mechanisms—compound benefits under higher training budgets.
-
-## Key Dynamics
-
-**Early elimination filters noise.** Weaker configs (typically those with mismatched latent dims or weak VAE coupling) drop in round 1-2, leaving only variants with fundamental architectural coherence. The survivors typically share: (1) moderate bottleneck compression (latent_dim in the range that balances reconstruction fidelity vs. regularization), and (2) effective KL weighting that doesn't collapse the latent space or overwhelm reconstruction loss.
-
-**Training budget amplifies differences.** As rounds progress and selected configs receive 2–4× more training epochs, small architectural advantages become statistically significant. AE variants often show steeper improvement curves than pure VAE, suggesting the encoder-decoder factorization is particularly data-efficient on M4-Yearly's relatively small sample size (~400 time series). This is the likely reason baseline NBEATS-I+G (0.8057 OWA) benefits from both interpretability and generative augmentation—the combination is synergistic.
-
-**Actionable insight:** Monitor round 3+ finalists for the *magnitude of improvement per epoch*. Configs showing sub-linear or flat improvement curves have likely saturated; those still declining sharply should receive final rounds of scaling. Compare OWA improvements against the baseline spread (0.8198 → 0.8057 = ~0.0141 gap): beating NBEATS-I+G requires ≤0.8040 in final evaluation.
 
 
 ## 7. Baseline Comparisons
@@ -587,27 +485,6 @@ Primary metric: best_val_loss (lower is better). OWA-based baseline comparisons 
 | Coif2   |              43.7291 | 0.4618 |  12 |
 | Symlet3 |              43.9010 | 0.8648 |  12 |
 
-# Hyperparameter Marginal Analysis: LG/VAE Block Study
-
-## Key Findings
-
-This study isolates the contribution of **backbone architectural choice** (learned-gate AE vs. variational AE vs. standard blocks) while controlling for category strategy. The three backbone families represent increasing complexity: RootBlock (baseline VAE), VAE (explicit latent distribution), and LG (learned-gate bottleneck with adaptive routing).
-
-**Expected ranking by sophistication:**
-- **LG (Learned-Gate AE)**: Adaptive routing through learned attention gates should provide the most flexible basis selection, enabling per-block specialization across heterogeneous M4-Yearly patterns (seasonal vs. trend-dominated).
-- **VAE**: Enforces Gaussian latent structure; useful regularization but less adaptive than gated mechanisms.
-- **RootBlock**: Baseline; lowest capacity for dynamic basis switching.
-
-## Actionable Guidance
-
-1. **If LG < VAE < RootBlock in OWA**: The learned-gate mechanism is justified—it outweighs added complexity. Investigate gate activation entropy to confirm the network is *using* the routing, not defaulting to one path.
-
-2. **If VAE ≥ RootBlock**: The KL regularization may over-constrain latent space. Consider reducing `kl_weight` or increasing `latent_dim` to recover capacity without abandoning stochasticity.
-
-3. **Wavelet family interaction**: If trend+wavelet + LG significantly underperforms trend+wavelet + RootBlock, the learned gates may conflict with hard frequency decomposition. This suggests **complementarity between soft (gate) and hard (wavelet) routing**—avoid combining them.
-
-4. **Dataset scale**: M4-Yearly has only ~23k series; monitor for overfitting in LG (highest params). Regularization strength and early stopping become critical.
-
 
 ## 5. Stability Analysis
 
@@ -629,23 +506,6 @@ This study isolates the contribution of **backbone architectural choice** (learn
 - Max spread: 1.7507 (TrendAELG+Symlet3)
 - Mean std: 0.5059
 
-# Stability Analysis: LG/VAE Block Configurations
-
-## Key Findings
-
-The stability analysis reveals **moderate variance in LG/VAE block performance**, indicating that encoder-decoder bottleneck designs introduce stochasticity that baselines avoid. While individual runs show promise—some configurations approach or exceed the NBEATS-I+G baseline (0.8057 OWA)—**consistency across runs lags behind deterministic counterparts**. This suggests the VAE's latent sampling mechanism, though theoretically beneficial for regularization, adds optimization noise that requires careful hyperparameter tuning to stabilize.
-
-## Architectural Implications
-
-The degradation in stability stems from VAE block architecture: the KL divergence term in the ELBO creates a competing objective with forecasting loss, and random sampling during forward passes introduces gradient variance. Unlike the static basis expansions in NBEATS-I/G, AE variants must jointly optimize reconstruction and predictive fidelity. **Successive halving should prioritize configurations that pair strong KL weighting schedules with learning rate annealing**—this typically reduces run-to-run variance by 15–25% on M4-Yearly.
-
-## Actionable Guidance
-
-1. **Report mean ± std OWA** across ≥3 runs for surviving configs; discard any with coefficient of variation >8%
-2. **Implement β-annealing** (warm-up KL weight from 0.1→1.0 over first 20% of epochs) to stabilize training dynamics
-3. **Use ensemble predictions** from runs meeting stability threshold—averaging 2–3 low-variance models often recovers 0.002–0.005 OWA without additional tuning
-4. **Favor LG blocks over VAE** if final budget is tight; linear-Gaussian posteriors offer comparable expressivity with <50% variance penalty
-
 
 ## 6. Round-over-Round Progression
 
@@ -654,19 +514,6 @@ The degradation in stability stems from VAE block architecture: the KL divergenc
 | GenericAELG       | 43.5055 | 42.9819 | 42.4593 | -1.0462 |       -2.4 |
 | TrendAELG+Symlet3 | 43.36   | 43.238  | 43.238  | -0.122  |       -0.3 |
 | TrendAELG+DB4     | 43.1166 | 43.0315 | 43.0315 | -0.0852 |       -0.2 |
-
-# Round Progression Analysis
-
-## Overview
-The successive halving campaign systematically narrows the configuration space while allocating increased compute to the most promising variants. This progression reveals which architectural choices—particularly latent bottlenecks and generative mechanisms—compound benefits under higher training budgets.
-
-## Key Dynamics
-
-**Early elimination filters noise.** Weaker configs (typically those with mismatched latent dims or weak VAE coupling) drop in round 1-2, leaving only variants with fundamental architectural coherence. The survivors typically share: (1) moderate bottleneck compression (latent_dim in the range that balances reconstruction fidelity vs. regularization), and (2) effective KL weighting that doesn't collapse the latent space or overwhelm reconstruction loss.
-
-**Training budget amplifies differences.** As rounds progress and selected configs receive 2–4× more training epochs, small architectural advantages become statistically significant. AE variants often show steeper improvement curves than pure VAE, suggesting the encoder-decoder factorization is particularly data-efficient on M4-Yearly's relatively small sample size (~400 time series). This is the likely reason baseline NBEATS-I+G (0.8057 OWA) benefits from both interpretability and generative augmentation—the combination is synergistic.
-
-**Actionable insight:** Monitor round 3+ finalists for the *magnitude of improvement per epoch*. Configs showing sub-linear or flat improvement curves have likely saturated; those still declining sharply should receive final rounds of scaling. Compare OWA improvements against the baseline spread (0.8198 → 0.8057 = ~0.0141 gap): beating NBEATS-I+G requires ≤0.8040 in final evaluation.
 
 
 ## 7. Baseline Comparisons
@@ -697,14 +544,14 @@ Primary metric: best_val_loss (lower is better). OWA-based baseline comparisons 
 ## Dataset: traffic
 
 - CSV: `/home/realdanielbyrne/GitHub/N-BEATS-Lightning/experiments/results/traffic/lg_vae_study_results.csv`
-- Rows: 179
+- Rows: 190
 - Primary metric: `best_val_loss`
 
 
 ## 1. Overview & Data Summary
 
 - CSV: `/home/realdanielbyrne/GitHub/N-BEATS-Lightning/experiments/results/traffic/lg_vae_study_results.csv`
-- Total rows: 179
+- Total rows: 190
 - Unique configs: 19
 - Search rounds: [1, 2, 3]
 - Primary metric: best_val_loss
@@ -713,7 +560,7 @@ Primary metric: best_val_loss (lower is better). OWA-based baseline comparisons 
 |--------:|----------:|-------:|:---------|:----------------|
 |       1 |        19 |    114 | 10-10    | False, forecast |
 |       2 |         9 |     64 | 11-15    | False, forecast |
-|       3 |         1 |      1 | 11-11    | False           |
+|       3 |         2 |     12 | 11-50    | False, forecast |
 
 
 ## 2. Successive Halving Funnel
@@ -722,7 +569,7 @@ Primary metric: best_val_loss (lower is better). OWA-based baseline comparisons 
 |--------:|----------:|-------:|-------------------------:|:-----------|
 |       1 |        19 |    114 |                  19.9437 | -          |
 |       2 |         9 |     64 |                  17.6834 | 9/19 (47%) |
-|       3 |         1 |      1 |                 200      | 1/9 (11%)  |
+|       3 |         2 |     12 |                  15.0727 | 2/9 (22%)  |
 
 
 ## 3. Round Leaderboards
@@ -769,9 +616,12 @@ Primary metric: best_val_loss (lower is better). OWA-based baseline comparisons 
 
 ### Round 3
 
-| Config         | Pass   |   best_val_loss |   Std |    sMAPE |     MASE |   Params |
-|:---------------|:-------|----------------:|------:|---------:|---------:|---------:|
-| TrendVAE+Coif2 | False  |        200.0000 |   nan | 200.0000 | 543.6749 |  8623208 |
+| Config           | Pass     |   best_val_loss |      Std |   sMAPE |     MASE |   Params |
+|:-----------------|:---------|----------------:|---------:|--------:|---------:|---------:|
+| TrendVAE+Symlet3 | False    |         15.1962 |   0.2724 | 14.3412 |   0.5878 |  8623208 |
+| TrendVAE+Symlet3 | forecast |         76.6084 | 106.8602 | 76.0324 |  77.8900 |  8623208 |
+| TrendVAE+Coif2   | forecast |         76.6272 | 106.8440 | 75.9729 |  85.5840 |  8623208 |
+| TrendVAE+Coif2   | False    |         76.8742 | 106.6300 | 76.2332 | 181.6163 |  8623208 |
 
 
 ## 4. Hyperparameter Marginals (Round 1)
@@ -808,27 +658,6 @@ Primary metric: best_val_loss (lower is better). OWA-based baseline comparisons 
 | Haar    |             109.9190 | 94.0886 |  12 |
 | DB4     |             110.0743 | 93.9257 |  12 |
 
-# Hyperparameter Marginal Analysis: LG/VAE Block Study
-
-## Key Findings
-
-This study isolates the contribution of **backbone architectural choice** (learned-gate AE vs. variational AE vs. standard blocks) while controlling for category strategy. The three backbone families represent increasing complexity: RootBlock (baseline VAE), VAE (explicit latent distribution), and LG (learned-gate bottleneck with adaptive routing).
-
-**Expected ranking by sophistication:**
-- **LG (Learned-Gate AE)**: Adaptive routing through learned attention gates should provide the most flexible basis selection, enabling per-block specialization across heterogeneous M4-Yearly patterns (seasonal vs. trend-dominated).
-- **VAE**: Enforces Gaussian latent structure; useful regularization but less adaptive than gated mechanisms.
-- **RootBlock**: Baseline; lowest capacity for dynamic basis switching.
-
-## Actionable Guidance
-
-1. **If LG < VAE < RootBlock in OWA**: The learned-gate mechanism is justified—it outweighs added complexity. Investigate gate activation entropy to confirm the network is *using* the routing, not defaulting to one path.
-
-2. **If VAE ≥ RootBlock**: The KL regularization may over-constrain latent space. Consider reducing `kl_weight` or increasing `latent_dim` to recover capacity without abandoning stochasticity.
-
-3. **Wavelet family interaction**: If trend+wavelet + LG significantly underperforms trend+wavelet + RootBlock, the learned gates may conflict with hard frequency decomposition. This suggests **complementarity between soft (gate) and hard (wavelet) routing**—avoid combining them.
-
-4. **Dataset scale**: M4-Yearly has only ~23k series; monitor for overfitting in LG (highest params). Regularization strength and early stopping become critical.
-
 
 ## 5. Stability Analysis
 
@@ -846,46 +675,17 @@ This study isolates the contribution of **backbone architectural choice** (learn
 
 ### Round 3
 
-- Mean spread: 0.0000
-- Max spread: 0.0000 (TrendVAE+Coif2)
-- Mean std: nan
-
-# Stability Analysis: LG/VAE Block Configurations
-
-## Key Findings
-
-The stability analysis reveals **moderate variance in LG/VAE block performance**, indicating that encoder-decoder bottleneck designs introduce stochasticity that baselines avoid. While individual runs show promise—some configurations approach or exceed the NBEATS-I+G baseline (0.8057 OWA)—**consistency across runs lags behind deterministic counterparts**. This suggests the VAE's latent sampling mechanism, though theoretically beneficial for regularization, adds optimization noise that requires careful hyperparameter tuning to stabilize.
-
-## Architectural Implications
-
-The degradation in stability stems from VAE block architecture: the KL divergence term in the ELBO creates a competing objective with forecasting loss, and random sampling during forward passes introduces gradient variance. Unlike the static basis expansions in NBEATS-I/G, AE variants must jointly optimize reconstruction and predictive fidelity. **Successive halving should prioritize configurations that pair strong KL weighting schedules with learning rate annealing**—this typically reduces run-to-run variance by 15–25% on M4-Yearly.
-
-## Actionable Guidance
-
-1. **Report mean ± std OWA** across ≥3 runs for surviving configs; discard any with coefficient of variation >8%
-2. **Implement β-annealing** (warm-up KL weight from 0.1→1.0 over first 20% of epochs) to stabilize training dynamics
-3. **Use ensemble predictions** from runs meeting stability threshold—averaging 2–3 low-variance models often recovers 0.002–0.005 OWA without additional tuning
-4. **Favor LG blocks over VAE** if final budget is tight; linear-Gaussian posteriors offer comparable expressivity with <50% variance penalty
+- Mean spread: 185.1163
+- Max spread: 185.1402 (TrendVAE+Symlet3)
+- Mean std: 85.4805
 
 
 ## 6. Round-over-Round Progression
 
-| config_name    |     R1 |      R2 |   R3 |   Delta |   DeltaPct |
-|:---------------|-------:|--------:|-----:|--------:|-----------:|
-| TrendVAE+Coif2 | 20.104 | 17.6834 |  200 | 179.896 |      894.8 |
-
-# Round Progression Analysis
-
-## Overview
-The successive halving campaign systematically narrows the configuration space while allocating increased compute to the most promising variants. This progression reveals which architectural choices—particularly latent bottlenecks and generative mechanisms—compound benefits under higher training budgets.
-
-## Key Dynamics
-
-**Early elimination filters noise.** Weaker configs (typically those with mismatched latent dims or weak VAE coupling) drop in round 1-2, leaving only variants with fundamental architectural coherence. The survivors typically share: (1) moderate bottleneck compression (latent_dim in the range that balances reconstruction fidelity vs. regularization), and (2) effective KL weighting that doesn't collapse the latent space or overwhelm reconstruction loss.
-
-**Training budget amplifies differences.** As rounds progress and selected configs receive 2–4× more training epochs, small architectural advantages become statistically significant. AE variants often show steeper improvement curves than pure VAE, suggesting the encoder-decoder factorization is particularly data-efficient on M4-Yearly's relatively small sample size (~400 time series). This is the likely reason baseline NBEATS-I+G (0.8057 OWA) benefits from both interpretability and generative augmentation—the combination is synergistic.
-
-**Actionable insight:** Monitor round 3+ finalists for the *magnitude of improvement per epoch*. Configs showing sub-linear or flat improvement curves have likely saturated; those still declining sharply should receive final rounds of scaling. Compare OWA improvements against the baseline spread (0.8198 → 0.8057 = ~0.0141 gap): beating NBEATS-I+G requires ≤0.8040 in final evaluation.
+| config_name      |      R1 |      R2 |      R3 |   Delta |   DeltaPct |
+|:-----------------|--------:|--------:|--------:|--------:|-----------:|
+| TrendVAE+Symlet3 | 19.9437 | 17.9253 | 15.0727 | -4.871  |      -24.4 |
+| TrendVAE+Coif2   | 20.104  | 17.6834 | 15.3114 | -4.7926 |      -23.8 |
 
 
 ## 7. Baseline Comparisons
@@ -900,12 +700,15 @@ No matched LG/VAE pairs found in the final round.
 
 ## 9. Final Verdict
 
-Best configuration: **TrendVAE+Coif2** (pass=False) with median best_val_loss=200.0000.
+Best configuration: **TrendVAE+Symlet3** (pass=forecast) with median best_val_loss=14.9655.
 Primary metric: best_val_loss (lower is better). OWA-based baseline comparisons are not applicable.
 
-| Config         | Pass   |   Med best_val_loss |   Std |   Params |    sMAPE |     MASE |
-|:---------------|:-------|--------------------:|------:|---------:|---------:|---------:|
-| TrendVAE+Coif2 | False  |            200.0000 |   nan |  8623208 | 200.0000 | 543.6749 |
+| Config           | Pass     |   Med best_val_loss |      Std |   Params |   sMAPE |   MASE |
+|:-----------------|:---------|--------------------:|---------:|---------:|--------:|-------:|
+| TrendVAE+Symlet3 | forecast |             14.9655 | 106.8602 |  8623208 | 14.0597 | 0.5770 |
+| TrendVAE+Coif2   | forecast |             14.9741 | 106.8440 |  8623208 | 14.0715 | 0.5736 |
+| TrendVAE+Symlet3 | False    |             15.1799 |   0.2724 |  8623208 | 14.2205 | 0.5822 |
+| TrendVAE+Coif2   | False    |             15.3418 | 106.6300 |  8623208 | 14.4554 | 0.5892 |
 
 
 # Summary

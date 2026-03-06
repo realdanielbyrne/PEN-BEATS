@@ -25,6 +25,7 @@ import io
 import os
 import sys
 
+import nbformat as nbf
 import numpy as np
 import pandas as pd
 
