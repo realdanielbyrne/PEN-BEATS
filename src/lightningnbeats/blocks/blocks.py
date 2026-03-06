@@ -2644,3 +2644,223 @@ class Symlet20WaveletV3VAE2(WaveletV3VAE2):
                                                forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
   def forward(self, x):
     return super(Symlet20WaveletV3VAE2, self).forward(x)
+
+
+# ---------------------------------------------------------------------------
+# WaveletV3VAE — V3 wavelet blocks with AERootBlockVAE (variational AE) backbone
+# ---------------------------------------------------------------------------
+
+class WaveletV3VAE(AERootBlockVAE):
+  """WaveletV3VAE: orthonormal DWT basis block with variational AE backbone.
+
+  Structurally identical to WaveletV3AELG but inherits from AERootBlockVAE instead of
+  AERootBlockLG, replacing the learned-gate bottleneck with the reparameterization trick
+  (mu + std * eps during training, mu during eval). KL loss is stored in self.kl_loss
+  and collected by NBeatsNet.training_step().
+
+  Args:
+      units (int): Width of the fully connected layers in the VAE backbone.
+      backcast_length (int): Length of the historical input sequence.
+      forecast_length (int): Length of the forecast horizon.
+      basis_dim (int, optional): Number of DWT basis rows. Defaults to 32.
+      basis_offset (int, optional): Row offset into SVD-ordered basis. Defaults to 0.
+      share_weights (bool, optional): Share projection heads when dims match. Defaults to False.
+      activation (str, optional): Activation for the VAE backbone. Defaults to 'ReLU'.
+      active_g (bool or str, optional): Apply activation after basis expansion. Defaults to False.
+      wavelet_type (str, optional): PyWavelets wavelet family string. Defaults to 'db3'.
+      forecast_basis_dim (int, optional): Override basis_dim for forecast path only. Defaults to None.
+      latent_dim (int, optional): Dimensionality of the VAE bottleneck. Defaults to 5.
+  """
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False, wavelet_type='db3',
+               forecast_basis_dim=None, latent_dim=5):
+    super(WaveletV3VAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.wavelet_type = wavelet_type
+    self.share_weights = share_weights
+    self.active_g = active_g
+
+    eff_back_dim = (backcast_length - min(basis_offset, backcast_length - 1)
+                    if basis_dim is None
+                    else min(basis_dim, backcast_length - min(basis_offset, backcast_length - 1)))
+    fore_dim = forecast_basis_dim if forecast_basis_dim is not None else basis_dim
+    eff_fore_dim = (forecast_length - min(basis_offset, forecast_length - 1)
+                    if fore_dim is None
+                    else min(fore_dim, forecast_length - min(basis_offset, forecast_length - 1)))
+
+    self.backcast_linear = nn.Linear(units, eff_back_dim, bias=False)
+    self.forecast_linear = nn.Linear(units, eff_fore_dim, bias=False)
+
+    self.backcast_g = _WaveletGeneratorV3(backcast_length, wavelet_type=wavelet_type,
+                                          basis_dim=eff_back_dim, basis_offset=basis_offset)
+    self.forecast_g = _WaveletGeneratorV3(forecast_length, wavelet_type=wavelet_type,
+                                          basis_dim=eff_fore_dim, basis_offset=basis_offset)
+
+  def forward(self, x):
+    x = super(WaveletV3VAE, self).forward(x)
+    backcast_thetas = self.backcast_linear(x)
+    forecast_thetas = self.forecast_linear(x)
+    backcast = self.backcast_g(backcast_thetas)
+    forecast = self.forecast_g(forecast_thetas)
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+    return backcast, forecast
+
+
+# --- V3VAE Wavelet subclasses (thin wrappers setting wavelet_type) ---
+
+class HaarWaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(HaarWaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                          basis_offset, share_weights, activation, active_g,
+                                          wavelet_type='haar',
+                                          forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(HaarWaveletV3VAE, self).forward(x)
+
+class DB2WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(DB2WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                         basis_offset, share_weights, activation, active_g,
+                                         wavelet_type='db2',
+                                         forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(DB2WaveletV3VAE, self).forward(x)
+
+class DB3WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(DB3WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                         basis_offset, share_weights, activation, active_g,
+                                         wavelet_type='db3',
+                                         forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(DB3WaveletV3VAE, self).forward(x)
+
+class DB4WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(DB4WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                         basis_offset, share_weights, activation, active_g,
+                                         wavelet_type='db4',
+                                         forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(DB4WaveletV3VAE, self).forward(x)
+
+class DB10WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(DB10WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                          basis_offset, share_weights, activation, active_g,
+                                          wavelet_type='db10',
+                                          forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(DB10WaveletV3VAE, self).forward(x)
+
+class DB20WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(DB20WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                          basis_offset, share_weights, activation, active_g,
+                                          wavelet_type='db20',
+                                          forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(DB20WaveletV3VAE, self).forward(x)
+
+class Coif1WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Coif1WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                           basis_offset, share_weights, activation, active_g,
+                                           wavelet_type='coif1',
+                                           forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Coif1WaveletV3VAE, self).forward(x)
+
+class Coif2WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Coif2WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                           basis_offset, share_weights, activation, active_g,
+                                           wavelet_type='coif2',
+                                           forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Coif2WaveletV3VAE, self).forward(x)
+
+class Coif3WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Coif3WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                           basis_offset, share_weights, activation, active_g,
+                                           wavelet_type='coif3',
+                                           forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Coif3WaveletV3VAE, self).forward(x)
+
+class Coif10WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Coif10WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                            basis_offset, share_weights, activation, active_g,
+                                            wavelet_type='coif10',
+                                            forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Coif10WaveletV3VAE, self).forward(x)
+
+class Symlet2WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Symlet2WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                             basis_offset, share_weights, activation, active_g,
+                                             wavelet_type='sym2',
+                                             forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Symlet2WaveletV3VAE, self).forward(x)
+
+class Symlet3WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Symlet3WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                             basis_offset, share_weights, activation, active_g,
+                                             wavelet_type='sym3',
+                                             forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Symlet3WaveletV3VAE, self).forward(x)
+
+class Symlet10WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Symlet10WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                              basis_offset, share_weights, activation, active_g,
+                                              wavelet_type='sym10',
+                                              forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Symlet10WaveletV3VAE, self).forward(x)
+
+class Symlet20WaveletV3VAE(WaveletV3VAE):
+  def __init__(self, units, backcast_length, forecast_length, basis_dim=32, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g: bool = False,
+               forecast_basis_dim=None, latent_dim=5):
+    super(Symlet20WaveletV3VAE, self).__init__(units, backcast_length, forecast_length, basis_dim,
+                                              basis_offset, share_weights, activation, active_g,
+                                              wavelet_type='sym20',
+                                              forecast_basis_dim=forecast_basis_dim, latent_dim=latent_dim)
+  def forward(self, x):
+    return super(Symlet20WaveletV3VAE, self).forward(x)
