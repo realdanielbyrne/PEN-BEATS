@@ -95,7 +95,7 @@ class _NBeatsBase(pl.LightningModule):
         if isinstance(block, (b.AERootBlockVAE, b.VAE, b.VAE2RootBlock)):
           kl_loss = kl_loss + block.kl_loss
     if kl_loss.item() > 0:
-      loss = loss + kl_loss * 0.001
+      loss = loss + kl_loss * 0.002
 
     self.log('train_loss', loss, prog_bar=True)
     return loss

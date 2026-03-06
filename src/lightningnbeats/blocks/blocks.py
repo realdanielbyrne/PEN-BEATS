@@ -122,7 +122,7 @@ class _VAEMixin:
   This mixin centralises the three core VAE operations to eliminate code duplication
   across all VAE-type block hierarchies (RootBlock, AERootBlockVAE, VAE2RootBlock).
   """
-  LOGVAR_MIN: float = -20.0
+  LOGVAR_MIN: float = -10.0
   LOGVAR_MAX: float = 4.0
 
   def _clamp_logvar(self, logvar: torch.Tensor) -> torch.Tensor:
@@ -668,20 +668,20 @@ class AERootBlockVAE(_VAEMixin, nn.Module):
 
 # ---------------------------------------------------------------------------
 # VAE2RootBlock — compact VAE backbone and derivative blocks
-# Architecture: backcast_length → units → units//2 → latent_dim*2
-#               (torch.chunk → mu, logvar) → latent_dim (z) → units//2 → units
+# Architecture: backcast_length → units//2 → (mu, logvar) → latent_dim (z)
+#               → units//2 → units
 # ---------------------------------------------------------------------------
 
 class VAE2RootBlock(_VAEMixin, nn.Module):
-  """Compact VAE backbone with a 3-layer encoder and 2-layer decoder.
+  """Compact VAE backbone with separate mu/logvar heads.
 
-  Simpler than AERootBlockVAE (which steps down to units//4 before the bottleneck).
-  This block steps down to units//2, then uses a single combined linear head that
-  outputs latent_dim * 2, split via torch.chunk into mu and logvar of size latent_dim
-  each. The decoder mirrors the encoder back up through units//2 to units.
+  Simpler than AERootBlockVAE (which steps down through units//4 before the
+  bottleneck). This block steps down to units//2, then uses separate linear
+  heads for mu and logvar (no activation applied to either), preserving the
+  full real-valued range needed for proper variational inference.
 
   Architecture:
-    Encoder: backcast_length → units → units//2 → latent_dim*2 (→ mu, logvar)
+    Encoder: backcast_length → units//2 (activated) → mu (linear), logvar (linear)
     Latent:  z = reparameterize(mu, logvar)
     Decoder: z (latent_dim) → units//2 → units
 
@@ -691,8 +691,7 @@ class VAE2RootBlock(_VAEMixin, nn.Module):
       backcast_length (int): Length of the historical input sequence.
       units (int): Width of the fully connected layers.
       activation (str, optional): Activation function name. Defaults to 'ReLU'.
-      latent_dim (int, optional): Effective latent dimension (each of mu/logvar has
-          this size). The encoder's combined head outputs latent_dim*2. Defaults to 5.
+      latent_dim (int, optional): Latent space dimensionality. Defaults to 5.
   """
   def __init__(self, backcast_length, units, activation='ReLU', latent_dim=5):
     super(VAE2RootBlock, self).__init__()
@@ -706,13 +705,13 @@ class VAE2RootBlock(_VAEMixin, nn.Module):
     self.activation = getattr(nn, activation)()
 
     # Encoder layers
-    self.fc1 = nn.Linear(backcast_length, units)
-    self.fc2 = nn.Linear(units, units // 2)
-    self.fc3 = nn.Linear(units // 2, latent_dim * 2)   # outputs mu || logvar
+    self.fc1 = nn.Linear(backcast_length, units // 2)
+    self.fc2_mu = nn.Linear(units // 2, latent_dim)
+    self.fc2_logvar = nn.Linear(units // 2, latent_dim)
 
     # Decoder layers
-    self.fc4 = nn.Linear(latent_dim, units // 2)
-    self.fc5 = nn.Linear(units // 2, units)
+    self.fc3 = nn.Linear(latent_dim, units // 2)
+    self.fc4 = nn.Linear(units // 2, units)
 
     # KL divergence loss stored after each forward pass
     self.kl_loss = torch.tensor(0.0)
@@ -720,17 +719,18 @@ class VAE2RootBlock(_VAEMixin, nn.Module):
   def forward(self, x):
     x = squeeze_last_dim(x)
     x = self.activation(self.fc1(x))
-    x = self.activation(self.fc2(x))
 
-    combined = self.fc3(x)
-    mu, logvar = torch.chunk(combined, 2, dim=-1)
-    logvar = self._clamp_logvar(logvar)
-
+    mu = self.fc2_mu(x)
+    logvar = self._clamp_logvar(self.fc2_logvar(x))
     z = self._reparameterize(mu, logvar)
+
+    # Store KL divergence loss
     self.kl_loss = self._kl_divergence(mu, logvar, x.shape[0])
 
-    x = self.activation(self.fc4(z))
-    x = self.activation(self.fc5(x))
+    # Decode
+    x = self.activation(self.fc3(z))
+    x = self.activation(self.fc4(x))
+
     return x
 
 
