@@ -84,6 +84,64 @@ class TestWidthSelection:
         assert block.units == 64
 
 
+class TestAEDescendantRouting:
+    """Verify NBeatsNet routes latent_dim and thetas_dim to repaired descendants."""
+
+    @pytest.mark.parametrize("block_name", [
+        "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderVAE",
+    ])
+    def test_autoencoder_descendants_route_latent_dim_to_branch_layers(self, block_name):
+        latent_dim = 7
+        model = _make_model([block_name], ae_width=96, thetas_dim=3, latent_dim=latent_dim)
+        block = model.stacks[0][0]
+
+        assert block.units == 96
+        assert block.b_encoder.out_features == latent_dim
+        assert block.b_decoder.in_features == latent_dim
+        assert block.forecast_g.in_features == 96
+
+    @pytest.mark.parametrize("block_name", [
+        "GenericAEBackcastAE", "GenericAEBackcastAELG", "GenericAEBackcastVAE",
+    ])
+    def test_generic_ae_backcast_descendants_split_latent_and_theta_dims(self, block_name):
+        latent_dim = 7
+        thetas_dim = 3
+        model = _make_model([block_name], g_width=64, thetas_dim=thetas_dim, latent_dim=latent_dim)
+        block = model.stacks[0][0]
+
+        assert block.units == 64
+        assert block.b_encoder.out_features == latent_dim
+        assert block.b_decoder.in_features == latent_dim
+        assert block.forecast_linear.out_features == thetas_dim
+        assert block.forecast_g.in_features == thetas_dim
+
+
+class TestNHiTSAEDescendantRouting:
+    """Verify NHiTSNet mirrors AE descendant latent/theta routing semantics."""
+
+    @pytest.mark.parametrize("block_name", [
+        "GenericAEBackcastAE", "GenericAEBackcastAELG", "GenericAEBackcastVAE",
+    ])
+    def test_generic_ae_backcast_descendants_split_latent_and_theta_dims(self, block_name):
+        latent_dim = 7
+        thetas_dim = 3
+        model = _make_nhits(
+            [block_name],
+            g_width=64,
+            thetas_dim=thetas_dim,
+            latent_dim=latent_dim,
+            n_pools_kernel_size=[1],
+            n_freq_downsample=[1],
+        )
+        block = model.stacks[0][0]
+
+        assert block.units == 64
+        assert block.b_encoder.out_features == latent_dim
+        assert block.b_decoder.in_features == latent_dim
+        assert block.forecast_linear.out_features == thetas_dim
+        assert block.forecast_g.in_features == thetas_dim
+
+
 # --- Optimizer dispatch tests ---
 
 class TestOptimizerDispatch:

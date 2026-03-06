@@ -74,14 +74,104 @@ class TestAutoEncoderAE:
         assert backcast.shape == (4, BACKCAST_LENGTH)
         assert forecast.shape == (4, FORECAST_LENGTH)
 
-    def test_sequential_has_activation_modules(self):
+    def test_uses_explicit_linear_branch_layers(self):
         block = b.AutoEncoderAE(
             units=UNITS, backcast_length=BACKCAST_LENGTH,
             forecast_length=FORECAST_LENGTH, thetas_dim=THETAS_DIM,
             share_weights=False, activation="ReLU", latent_dim=LATENT_DIM)
-        encoder_modules = list(block.b_encoder.modules())
-        has_activation = any(isinstance(m, nn.ReLU) for m in encoder_modules)
-        assert has_activation
+        assert isinstance(block.b_encoder, nn.Linear)
+        assert isinstance(block.f_encoder, nn.Linear)
+        assert isinstance(block.b_decoder, nn.Linear)
+        assert isinstance(block.f_decoder, nn.Linear)
+
+
+class TestAEDescendantDimensionSemantics:
+    """Verify AE-like descendants use latent_dim for local bottlenecks."""
+
+    @pytest.mark.parametrize("block_name", [
+        "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderVAE",
+        "GenericAEBackcastAE", "GenericAEBackcastAELG", "GenericAEBackcastVAE",
+    ])
+    def test_branch_bottlenecks_use_latent_dim(self, block_name):
+        block_class = getattr(b, block_name)
+        block = block_class(
+            units=UNITS,
+            backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH,
+            thetas_dim=THETAS_DIM,
+            share_weights=False,
+            activation="ReLU",
+            latent_dim=LATENT_DIM,
+        )
+
+        assert isinstance(block.b_encoder, nn.Linear)
+        assert isinstance(block.b_decoder, nn.Linear)
+        assert block.b_encoder.in_features == UNITS
+        assert block.b_encoder.out_features == LATENT_DIM
+        assert block.b_decoder.in_features == LATENT_DIM
+        assert block.b_decoder.out_features == UNITS
+
+    @pytest.mark.parametrize("block_name", [
+        "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderVAE",
+    ])
+    def test_autoencoder_descendants_project_directly_from_units(self, block_name):
+        block_class = getattr(b, block_name)
+        block = block_class(
+            units=UNITS,
+            backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH,
+            thetas_dim=THETAS_DIM,
+            share_weights=False,
+            activation="ReLU",
+            latent_dim=LATENT_DIM,
+        )
+
+        assert isinstance(block.forecast_g, nn.Linear)
+        assert block.backcast_g.in_features == UNITS
+        assert block.backcast_g.out_features == BACKCAST_LENGTH
+        assert block.forecast_g.in_features == UNITS
+        assert block.forecast_g.out_features == FORECAST_LENGTH
+
+    @pytest.mark.parametrize("block_name", [
+        "GenericAEBackcastAE", "GenericAEBackcastAELG", "GenericAEBackcastVAE",
+    ])
+    def test_generic_ae_backcast_descendants_keep_thetas_dim_forecast_head(self, block_name):
+        block_class = getattr(b, block_name)
+        block = block_class(
+            units=UNITS,
+            backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH,
+            thetas_dim=THETAS_DIM,
+            share_weights=False,
+            activation="ReLU",
+            latent_dim=LATENT_DIM,
+        )
+
+        assert isinstance(block.forecast_linear, nn.Linear)
+        assert isinstance(block.forecast_g, nn.Linear)
+        assert block.backcast_g.in_features == UNITS
+        assert block.backcast_g.out_features == BACKCAST_LENGTH
+        assert block.forecast_linear.in_features == UNITS
+        assert block.forecast_linear.out_features == THETAS_DIM
+        assert block.forecast_g.in_features == THETAS_DIM
+        assert block.forecast_g.out_features == FORECAST_LENGTH
+
+    @pytest.mark.parametrize("block_name", [
+        "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderVAE",
+    ])
+    def test_autoencoder_descendants_still_share_encoder_when_requested(self, block_name):
+        block_class = getattr(b, block_name)
+        block = block_class(
+            units=UNITS,
+            backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH,
+            thetas_dim=THETAS_DIM,
+            share_weights=True,
+            activation="ReLU",
+            latent_dim=LATENT_DIM,
+        )
+
+        assert block.b_encoder is block.f_encoder
 
 
 # --- SeasonalityAE forward (dead code removal) ---

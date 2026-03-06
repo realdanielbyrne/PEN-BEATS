@@ -364,7 +364,7 @@ class NBeatsNet(_NBeatsBase):
 
           ae_latent_blocks = (
               "GenericAE", "BottleneckGenericAE", "SeasonalityAE",
-              "AutoEncoderAE", "TrendAE",
+              "AutoEncoderAE", "TrendAE", "GenericAEBackcastAE",
               "GenericAELG", "BottleneckGenericAELG", "SeasonalityAELG",
               "AutoEncoderAELG", "TrendAELG", "GenericAEBackcastAELG",
               "GenericVAE", "BottleneckGenericVAE", "SeasonalityVAE",
@@ -655,7 +655,7 @@ class NHiTSNet(_NBeatsBase):
 
     ae_latent_blocks = (
         "GenericAE", "BottleneckGenericAE", "SeasonalityAE",
-        "AutoEncoderAE", "TrendAE",
+        "AutoEncoderAE", "TrendAE", "GenericAEBackcastAE",
         "GenericAELG", "BottleneckGenericAELG", "SeasonalityAELG",
         "AutoEncoderAELG", "TrendAELG", "GenericAEBackcastAELG",
         "GenericVAE", "BottleneckGenericVAE", "SeasonalityVAE",

@@ -921,27 +921,20 @@ class GenericAEBackcastAE(AERootBlock):
       self.backcast_length = backcast_length
       self.forecast_length = forecast_length
       self.active_g = active_g
+      branch_latent_dim = latent_dim
 
       self.forecast_linear = nn.Linear(units, thetas_dim)
       self.forecast_g = nn.Linear(thetas_dim, forecast_length, bias = False)
 
-      # Encoders
-      self.b_encoder = nn.Sequential(
-          nn.Linear(units, thetas_dim),
-          nn.ReLU(),
-      )
-
-      # Decoders
-      self.b_decoder = nn.Sequential(
-          nn.Linear(thetas_dim, units),
-          nn.ReLU(),
-          nn.Linear(units, backcast_length),
-      )
+      self.b_encoder = nn.Linear(units, branch_latent_dim)
+      self.b_decoder = nn.Linear(branch_latent_dim, units)
+      self.backcast_g = nn.Linear(units, backcast_length)
 
   def forward(self, x):
     x = super(GenericAEBackcastAE, self).forward(x)
-    b = self.b_encoder(x)
-    b = self.b_decoder(b)
+    b = self.activation(self.b_encoder(x))
+    b = self.activation(self.b_decoder(b))
+    b = self.backcast_g(b)
 
     theta_f = self.forecast_linear(x)
     f = self.forecast_g(theta_f)
@@ -965,17 +958,17 @@ class AutoEncoderAE(AERootBlock):
                 activation:str = 'ReLU',
                 active_g:bool = False,
                 latent_dim:int = 5):
-    """_summary_
+    """AutoEncoder block with an AE backbone.
 
     Args:
         units (int): The number of inoput and output units
         backcast_length (int): The length of the historical data.
         forecast_length (int): The length of the forecast_length horizon.
-        thetas_dim (int): The dimensionality of the compressed latent space in the middle of the autoencoder
+        thetas_dim (int): Unused. Kept for API compatibility with other block types.
         share_weights (bool): The weights of the encoder are shared if True.
-        activation (str, optional): _description_. Defaults to 'ReLU'.
-        active_g (bool, optional): _description_. Defaults to False.
-        latent_dim (int, optional): _description_. Defaults to 5.
+        activation (str, optional): Activation function name. Defaults to 'ReLU'.
+        active_g (bool, optional): Apply activation after decoding. Defaults to False.
+        latent_dim (int, optional): Branch-local AE bottleneck size. Defaults to 5.
     """
 
     super(AutoEncoderAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
@@ -987,41 +980,28 @@ class AutoEncoderAE(AERootBlock):
     self.backcast_length = backcast_length
     self.forecast_length = forecast_length
     self.active_g = active_g
+    branch_latent_dim = latent_dim
 
-    # Encoders
     if share_weights:
-      self.b_encoder = self.f_encoder = nn.Sequential(
-        nn.Linear(units, thetas_dim),
-        getattr(nn, activation)(),
-      )
+      self.b_encoder = self.f_encoder = nn.Linear(units, branch_latent_dim)
     else:
-      self.b_encoder = nn.Sequential(
-          nn.Linear(units, thetas_dim),
-          getattr(nn, activation)(),
-      )
-      self.f_encoder = nn.Sequential(
-          nn.Linear(units, thetas_dim),
-          getattr(nn, activation)(),
-      )
+      self.b_encoder = nn.Linear(units, branch_latent_dim)
+      self.f_encoder = nn.Linear(units, branch_latent_dim)
 
-    self.b_decoder = nn.Sequential(
-        nn.Linear(thetas_dim, units),
-        getattr(nn, activation)(),
-        nn.Linear(units, backcast_length),
-    )
-    self.f_decoder = nn.Sequential(
-        nn.Linear(thetas_dim, units),
-        getattr(nn, activation)(),
-        nn.Linear(units, forecast_length),
-    )
+    self.b_decoder = nn.Linear(branch_latent_dim, units)
+    self.f_decoder = nn.Linear(branch_latent_dim, units)
+    self.backcast_g = nn.Linear(units, backcast_length)
+    self.forecast_g = nn.Linear(units, forecast_length)
 
   def forward(self, x):
     x = super(AutoEncoderAE, self).forward(x)
-    b = self.b_encoder(x)
-    b = self.b_decoder(b)
+    b = self.activation(self.b_encoder(x))
+    b = self.activation(self.b_decoder(b))
+    b = self.backcast_g(b)
 
-    f = self.f_encoder(x)
-    f = self.f_decoder(f)
+    f = self.activation(self.f_encoder(x))
+    f = self.activation(self.f_decoder(f))
+    f = self.forecast_g(f)
 
     # N-BEATS paper does not apply activation here, but Generic models will not converge sometimes without it
     if self.active_g:
@@ -1504,23 +1484,25 @@ class AutoEncoderAELG(AERootBlockLG):
     self.backcast_length = backcast_length
     self.forecast_length = forecast_length
     self.active_g = active_g
+    branch_latent_dim = latent_dim
     if share_weights:
-      self.b_encoder = self.f_encoder = nn.Sequential(
-          nn.Linear(units, thetas_dim), getattr(nn, activation)())
+      self.b_encoder = self.f_encoder = nn.Linear(units, branch_latent_dim)
     else:
-      self.b_encoder = nn.Sequential(nn.Linear(units, thetas_dim), getattr(nn, activation)())
-      self.f_encoder = nn.Sequential(nn.Linear(units, thetas_dim), getattr(nn, activation)())
-    self.b_decoder = nn.Sequential(
-        nn.Linear(thetas_dim, units), getattr(nn, activation)(), nn.Linear(units, backcast_length))
-    self.f_decoder = nn.Sequential(
-        nn.Linear(thetas_dim, units), getattr(nn, activation)(), nn.Linear(units, forecast_length))
+      self.b_encoder = nn.Linear(units, branch_latent_dim)
+      self.f_encoder = nn.Linear(units, branch_latent_dim)
+    self.b_decoder = nn.Linear(branch_latent_dim, units)
+    self.f_decoder = nn.Linear(branch_latent_dim, units)
+    self.backcast_g = nn.Linear(units, backcast_length)
+    self.forecast_g = nn.Linear(units, forecast_length)
 
   def forward(self, x):
     x = super(AutoEncoderAELG, self).forward(x)
-    b = self.b_encoder(x)
-    b = self.b_decoder(b)
-    f = self.f_encoder(x)
-    f = self.f_decoder(f)
+    b = self.activation(self.b_encoder(x))
+    b = self.activation(self.b_decoder(b))
+    b = self.backcast_g(b)
+    f = self.activation(self.f_encoder(x))
+    f = self.activation(self.f_decoder(f))
+    f = self.forecast_g(f)
     if self.active_g:
       if self.active_g != 'forecast':
         b = self.activation(b)
@@ -1540,16 +1522,18 @@ class GenericAEBackcastAELG(AERootBlockLG):
     self.backcast_length = backcast_length
     self.forecast_length = forecast_length
     self.active_g = active_g
+    branch_latent_dim = latent_dim
     self.forecast_linear = nn.Linear(units, thetas_dim)
     self.forecast_g = nn.Linear(thetas_dim, forecast_length, bias=False)
-    self.b_encoder = nn.Sequential(nn.Linear(units, thetas_dim), nn.ReLU())
-    self.b_decoder = nn.Sequential(
-        nn.Linear(thetas_dim, units), nn.ReLU(), nn.Linear(units, backcast_length))
+    self.b_encoder = nn.Linear(units, branch_latent_dim)
+    self.b_decoder = nn.Linear(branch_latent_dim, units)
+    self.backcast_g = nn.Linear(units, backcast_length)
 
   def forward(self, x):
     x = super(GenericAEBackcastAELG, self).forward(x)
-    b = self.b_encoder(x)
-    b = self.b_decoder(b)
+    b = self.activation(self.b_encoder(x))
+    b = self.activation(self.b_decoder(b))
+    b = self.backcast_g(b)
     theta_f = self.forecast_linear(x)
     f = self.forecast_g(theta_f)
     if self.active_g:
@@ -1663,23 +1647,25 @@ class AutoEncoderVAE(AERootBlockVAE):
     self.backcast_length = backcast_length
     self.forecast_length = forecast_length
     self.active_g = active_g
+    branch_latent_dim = latent_dim
     if share_weights:
-      self.b_encoder = self.f_encoder = nn.Sequential(
-          nn.Linear(units, thetas_dim), getattr(nn, activation)())
+      self.b_encoder = self.f_encoder = nn.Linear(units, branch_latent_dim)
     else:
-      self.b_encoder = nn.Sequential(nn.Linear(units, thetas_dim), getattr(nn, activation)())
-      self.f_encoder = nn.Sequential(nn.Linear(units, thetas_dim), getattr(nn, activation)())
-    self.b_decoder = nn.Sequential(
-        nn.Linear(thetas_dim, units), getattr(nn, activation)(), nn.Linear(units, backcast_length))
-    self.f_decoder = nn.Sequential(
-        nn.Linear(thetas_dim, units), getattr(nn, activation)(), nn.Linear(units, forecast_length))
+      self.b_encoder = nn.Linear(units, branch_latent_dim)
+      self.f_encoder = nn.Linear(units, branch_latent_dim)
+    self.b_decoder = nn.Linear(branch_latent_dim, units)
+    self.f_decoder = nn.Linear(branch_latent_dim, units)
+    self.backcast_g = nn.Linear(units, backcast_length)
+    self.forecast_g = nn.Linear(units, forecast_length)
 
   def forward(self, x):
     x = super(AutoEncoderVAE, self).forward(x)
-    b = self.b_encoder(x)
-    b = self.b_decoder(b)
-    f = self.f_encoder(x)
-    f = self.f_decoder(f)
+    b = self.activation(self.b_encoder(x))
+    b = self.activation(self.b_decoder(b))
+    b = self.backcast_g(b)
+    f = self.activation(self.f_encoder(x))
+    f = self.activation(self.f_decoder(f))
+    f = self.forecast_g(f)
     if self.active_g:
       if self.active_g != 'forecast':
         b = self.activation(b)
@@ -1699,16 +1685,18 @@ class GenericAEBackcastVAE(AERootBlockVAE):
     self.backcast_length = backcast_length
     self.forecast_length = forecast_length
     self.active_g = active_g
+    branch_latent_dim = latent_dim
     self.forecast_linear = nn.Linear(units, thetas_dim)
     self.forecast_g = nn.Linear(thetas_dim, forecast_length, bias=False)
-    self.b_encoder = nn.Sequential(nn.Linear(units, thetas_dim), nn.ReLU())
-    self.b_decoder = nn.Sequential(
-        nn.Linear(thetas_dim, units), nn.ReLU(), nn.Linear(units, backcast_length))
+    self.b_encoder = nn.Linear(units, branch_latent_dim)
+    self.b_decoder = nn.Linear(branch_latent_dim, units)
+    self.backcast_g = nn.Linear(units, backcast_length)
 
   def forward(self, x):
     x = super(GenericAEBackcastVAE, self).forward(x)
-    b = self.b_encoder(x)
-    b = self.b_decoder(b)
+    b = self.activation(self.b_encoder(x))
+    b = self.activation(self.b_decoder(b))
+    b = self.backcast_g(b)
     theta_f = self.forecast_linear(x)
     f = self.forecast_g(theta_f)
     if self.active_g:
