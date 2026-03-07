@@ -98,6 +98,8 @@ DEFAULT_TRAINING = {
     "share_weights": True,
     "batch_size": None,          # None = auto-resolve per dataset/period
     "forecast_multiplier": None, # None = auto-resolve per dataset
+    "skip_distance": 0,          # Re-inject original input every N stacks (0 = disabled)
+    "skip_alpha": 0.0,           # Mixing weight for skip injection (float or "learnable")
 }
 
 DEFAULT_PROTOCOL = {
@@ -759,6 +761,8 @@ def run_single_config(
         normalize=bool(protocol.get("normalize", False)),
         val_ratio=protocol.get("val_ratio"),
         seed=seed,
+        skip_distance=int(training.get("skip_distance", 0)),
+        skip_alpha=training.get("skip_alpha", 0.0),
     )
 
 

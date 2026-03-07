@@ -170,7 +170,9 @@ class NBeatsNet(_NBeatsBase):
       backcast_wavelet_type:str = None,
       forecast_wavelet_type:str = None,
       trend_thetas_dim:int | None = 3,
-      lr_scheduler_config:dict = None
+      lr_scheduler_config:dict = None,
+      skip_distance:int = 0,
+      skip_alpha: float | str = 0.0,
     ):
 
     """A PyTorch Lightning module for the N-BEATS network for time series forecasting.
@@ -294,6 +296,10 @@ class NBeatsNet(_NBeatsBase):
       raise ValueError(f"active_g must be True, False, 'backcast', or 'forecast', got '{active_g}'")
     if trend_thetas_dim is not None and (not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1):
       raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
+    if not isinstance(skip_distance, int) or skip_distance < 0:
+      raise ValueError(f"skip_distance must be a non-negative integer, got {skip_distance}")
+    if isinstance(skip_alpha, str) and skip_alpha != "learnable":
+      raise ValueError(f"skip_alpha must be a float or 'learnable', got '{skip_alpha}'")
 
     super(NBeatsNet, self).__init__(
         loss=loss, frequency=frequency, no_val=no_val,
@@ -321,8 +327,16 @@ class NBeatsNet(_NBeatsBase):
     self.backcast_wavelet_type = backcast_wavelet_type
     self.forecast_wavelet_type = forecast_wavelet_type
     self.trend_thetas_dim = self.thetas_dim if trend_thetas_dim is None else trend_thetas_dim
+    self.skip_distance = skip_distance
+    self.skip_alpha = skip_alpha
 
     self.save_hyperparameters()
+
+    if isinstance(skip_alpha, str) and skip_alpha == "learnable":
+      self._skip_alpha_learnable = True
+      self.skip_alpha_param = nn.Parameter(torch.tensor(0.01))
+    else:
+      self._skip_alpha_learnable = False
 
     if stack_types is not None:
       self.stack_types = stack_types
@@ -433,18 +447,28 @@ class NBeatsNet(_NBeatsBase):
     return blocks
 
   def forward(self, x):
-    x = torch.squeeze(x,-1)    
+    x = torch.squeeze(x,-1)
     y = torch.zeros(
             x.shape[0],
             self.forecast_length,
             device=x.device,
             dtype=x.dtype)
-    
-    for stack_id in range(len(self.stacks)):
+
+    if self.skip_distance > 0:
+      x_original = x.clone()
+      alpha = self.skip_alpha_param if self._skip_alpha_learnable else self.skip_alpha
+
+    n_stacks = len(self.stacks)
+    for stack_id in range(n_stacks):
         for block_id in range(len(self.stacks[stack_id])):
           x_hat, y_hat = self.stacks[stack_id][block_id](x)
           x = x - x_hat
           y = y + y_hat
+        if (self.skip_distance > 0
+                and (stack_id + 1) % self.skip_distance == 0
+                and stack_id < n_stacks - 1):
+          x = x + alpha * x_original
+
     stack_residual = x
     stack_forecast = y
     return stack_residual, stack_forecast
@@ -568,6 +592,8 @@ class NHiTSNet(_NBeatsBase):
       forecast_wavelet_type: str = None,
       trend_thetas_dim: int | None = 3,
       lr_scheduler_config: dict = None,
+      skip_distance: int = 0,
+      skip_alpha: float | str = 0.0,
   ):
     if stack_types is None:
       raise ValueError("Stack architecture must be specified.")
@@ -575,6 +601,10 @@ class NHiTSNet(_NBeatsBase):
       raise ValueError(f"active_g must be True, False, 'backcast', or 'forecast', got '{active_g}'")
     if trend_thetas_dim is not None and (not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1):
       raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
+    if not isinstance(skip_distance, int) or skip_distance < 0:
+      raise ValueError(f"skip_distance must be a non-negative integer, got {skip_distance}")
+    if isinstance(skip_alpha, str) and skip_alpha != "learnable":
+      raise ValueError(f"skip_alpha must be a float or 'learnable', got '{skip_alpha}'")
 
     n_stacks = len(stack_types)
 
@@ -626,6 +656,8 @@ class NHiTSNet(_NBeatsBase):
     self.backcast_wavelet_type = backcast_wavelet_type
     self.forecast_wavelet_type = forecast_wavelet_type
     self.trend_thetas_dim = self.thetas_dim if trend_thetas_dim is None else trend_thetas_dim
+    self.skip_distance = skip_distance
+    self.skip_alpha = skip_alpha
 
     # Precompute per-stack effective block lengths
     self.pooled_backcast_lengths = [
@@ -638,6 +670,12 @@ class NHiTSNet(_NBeatsBase):
     ]
 
     self.save_hyperparameters()
+
+    if isinstance(skip_alpha, str) and skip_alpha == "learnable":
+      self._skip_alpha_learnable = True
+      self.skip_alpha_param = nn.Parameter(torch.tensor(0.01))
+    else:
+      self._skip_alpha_learnable = False
 
     self.stacks = nn.ModuleList()
     for stack_idx, stack_type in enumerate(self.stack_types):
@@ -806,7 +844,12 @@ class NHiTSNet(_NBeatsBase):
         x.shape[0], self.forecast_length, device=x.device, dtype=x.dtype
     )
 
-    for stack_id in range(len(self.stacks)):
+    if self.skip_distance > 0:
+      x_original = x.clone()
+      alpha = self.skip_alpha_param if self._skip_alpha_learnable else self.skip_alpha
+
+    n_stacks = len(self.stacks)
+    for stack_id in range(n_stacks):
       pool_size = self.n_pools_kernel_size[stack_id]
 
       # Multi-rate input pooling
@@ -834,5 +877,10 @@ class NHiTSNet(_NBeatsBase):
 
         x = x - x_hat_full
         y = y + y_hat_full
+
+      if (self.skip_distance > 0
+              and (stack_id + 1) % self.skip_distance == 0
+              and stack_id < n_stacks - 1):
+        x = x + alpha * x_original
 
     return x, y

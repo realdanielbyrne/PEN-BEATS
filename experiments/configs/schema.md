@@ -154,9 +154,37 @@ training:
   share_weights: true
   batch_size: null         # null = auto per dataset/period from BATCH_SIZES table
   forecast_multiplier: null  # null = auto per dataset (M4→5, Tourism/Traffic/Weather→2)
+  skip_distance: 0         # Re-inject original input every N stacks (0 = disabled)
+  skip_alpha: 0.0          # Mixing weight for skip injection (float or "learnable")
 ```
 
 Can be overridden at the config level or the pass level.
+
+### Skip Connections (ResNet-style signal re-injection)
+
+When `skip_distance > 0`, the forward pass periodically adds `alpha * original_input`
+to the residual stream after every `skip_distance` stacks. This combats signal and
+gradient decay in deep stack architectures (e.g., 30-stack Generic).
+
+- `skip_distance: 0` — Disabled (default, backward compatible).
+- `skip_distance: 5` — Re-inject after stacks 5, 10, 15, 20, 25 (in a 30-stack model).
+- `skip_alpha: 0.1` — Fixed mixing weight.
+- `skip_alpha: "learnable"` — Creates an `nn.Parameter` initialized to 0.01;
+  the model learns the optimal injection strength during training.
+
+The last stack is always excluded from re-injection.
+
+```yaml
+# Example: fixed alpha
+training:
+  skip_distance: 5
+  skip_alpha: 0.1
+
+# Example: learnable alpha
+training:
+  skip_distance: 5
+  skip_alpha: learnable
+```
 
 ---
 
