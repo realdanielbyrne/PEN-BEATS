@@ -108,6 +108,14 @@ When in doubt, pick the family using the **shorter of the two target lengths**.
 
 ---
 
+## Exception: TrendWaveletAELG (Unified Block)
+
+**Wavelet family selection does NOT apply to TrendWaveletAELG.** In the unified block (which combines trend + wavelet in a single AE bottleneck), wavelet family is a non-factor (Kruskal-Wallis p=0.107 across 14 families on M4-Yearly). The AE bottleneck homogenizes basis representations.
+
+For TrendWaveletAELG, use any reasonable family. Coif3 has the best cross-dataset average rank (1.5). See the `trendwavelet-block-selection` skill for details.
+
+---
+
 ## Source / Reproducibility
 
 | Evidence | Report | Data |

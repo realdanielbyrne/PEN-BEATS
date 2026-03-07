@@ -32,6 +32,12 @@ When configuring `latent_dim` for AE-family wavelet blocks (`AERootBlock`, `AERo
   - Only 5% of top-quartile configs use ld=2
 - The plain AE lacks a gating mechanism, so it needs enough latent dimensions to avoid discarding useful signal. But the tested range only went up to 8 -- **ld=16 may be better** (untested for plain AE, but optimal for AELG).
 
+### TrendWaveletAELG (Unified Block)
+
+- **Use `latent_dim=16`.** v2 (ld=16) top-5 configs significantly outperform v1 (ld=8) top-5 (Mann-Whitney p=0.042) on M4-Yearly.
+- **Caution with DB4+eq_fcast at ld=16:** This specific combination catastrophically fails (SMAPE ~76). DB4 with other basis labels or at ld=8 is fine.
+- Evidence: TrendWaveletAELG Pure Study. See `experiments/analysis/analysis_reports/trendwaveletaelg_pure_study_analysis.md`.
+
 ### Untested but Recommended: ld=16 for Plain AE
 
 Given that:

@@ -87,6 +87,15 @@ The bd_label ranking is broadly consistent across Trend, TrendAE, and TrendAELG 
 - **Weather:** eq_fcast top-1 for Trend and TrendAELG; TrendAE slightly prefers eq_bcast at R1 but likely converges to eq_fcast
 - **Conclusion:** The backbone choice does not change the bd_label recommendation
 
+### TrendWaveletAELG exception: bd_label sensitivity is HIGHER
+
+In TrendWaveletAELG (unified trend+wavelet block), bd_label differences do NOT vanish at convergence:
+- eq_fcast (13.571) vs lt_fcast (13.599): p=0.017 **
+- eq_fcast (13.571) vs eq_bcast (13.943): p=0.004 ***
+- Spread: 0.372 SMAPE at R3 (vs 0.014 in V3AELG alternating study)
+
+The unified AE bottleneck makes basis dimension selection more consequential. **eq_fcast is even more critical for TrendWaveletAELG than for alternating stacks.** See TrendWaveletAELG Pure Study analysis.
+
 ---
 
 ## Source / Reproducibility
