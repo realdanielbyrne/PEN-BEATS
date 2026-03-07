@@ -298,8 +298,11 @@ class NBeatsNet(_NBeatsBase):
       raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
     if not isinstance(skip_distance, int) or skip_distance < 0:
       raise ValueError(f"skip_distance must be a non-negative integer, got {skip_distance}")
-    if isinstance(skip_alpha, str) and skip_alpha != "learnable":
-      raise ValueError(f"skip_alpha must be a float or 'learnable', got '{skip_alpha}'")
+    if isinstance(skip_alpha, str):
+      if skip_alpha != "learnable":
+        raise ValueError(f"skip_alpha must be a float or 'learnable', got '{skip_alpha}'")
+    elif not isinstance(skip_alpha, (int, float)) or isinstance(skip_alpha, bool):
+      raise ValueError(f"skip_alpha must be a float or 'learnable', got {skip_alpha!r}")
 
     super(NBeatsNet, self).__init__(
         loss=loss, frequency=frequency, no_val=no_val,
@@ -332,7 +335,7 @@ class NBeatsNet(_NBeatsBase):
 
     self.save_hyperparameters()
 
-    if isinstance(skip_alpha, str) and skip_alpha == "learnable":
+    if skip_distance > 0 and isinstance(skip_alpha, str) and skip_alpha == "learnable":
       self._skip_alpha_learnable = True
       self.skip_alpha_param = nn.Parameter(torch.tensor(0.01))
     else:
@@ -455,7 +458,7 @@ class NBeatsNet(_NBeatsBase):
             dtype=x.dtype)
 
     if self.skip_distance > 0:
-      x_original = x.clone()
+      x_original = x
       alpha = self.skip_alpha_param if self._skip_alpha_learnable else self.skip_alpha
 
     n_stacks = len(self.stacks)
@@ -603,8 +606,11 @@ class NHiTSNet(_NBeatsBase):
       raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
     if not isinstance(skip_distance, int) or skip_distance < 0:
       raise ValueError(f"skip_distance must be a non-negative integer, got {skip_distance}")
-    if isinstance(skip_alpha, str) and skip_alpha != "learnable":
-      raise ValueError(f"skip_alpha must be a float or 'learnable', got '{skip_alpha}'")
+    if isinstance(skip_alpha, str):
+      if skip_alpha != "learnable":
+        raise ValueError(f"skip_alpha must be a float or 'learnable', got '{skip_alpha}'")
+    elif not isinstance(skip_alpha, (int, float)) or isinstance(skip_alpha, bool):
+      raise ValueError(f"skip_alpha must be a float or 'learnable', got {skip_alpha!r}")
 
     n_stacks = len(stack_types)
 
@@ -671,7 +677,7 @@ class NHiTSNet(_NBeatsBase):
 
     self.save_hyperparameters()
 
-    if isinstance(skip_alpha, str) and skip_alpha == "learnable":
+    if skip_distance > 0 and isinstance(skip_alpha, str) and skip_alpha == "learnable":
       self._skip_alpha_learnable = True
       self.skip_alpha_param = nn.Parameter(torch.tensor(0.01))
     else:
@@ -845,7 +851,7 @@ class NHiTSNet(_NBeatsBase):
     )
 
     if self.skip_distance > 0:
-      x_original = x.clone()
+      x_original = x
       alpha = self.skip_alpha_param if self._skip_alpha_learnable else self.skip_alpha
 
     n_stacks = len(self.stacks)

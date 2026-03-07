@@ -860,6 +860,21 @@ class TestSkipConnections:
         with pytest.raises(ValueError, match="skip_alpha must be"):
             _make_model(["Generic"], skip_distance=1, skip_alpha="invalid")
 
+    def test_skip_alpha_none_raises(self):
+        with pytest.raises(ValueError, match="skip_alpha must be"):
+            _make_model(["Generic"], skip_distance=1, skip_alpha=None)
+
+    def test_skip_alpha_bool_raises(self):
+        with pytest.raises(ValueError, match="skip_alpha must be"):
+            _make_model(["Generic"], skip_distance=1, skip_alpha=True)
+
+    def test_learnable_alpha_without_skip_distance_no_param(self):
+        """learnable alpha with skip_distance=0 should not create nn.Parameter."""
+        model = _make_model(["Generic"] * 4, g_width=32,
+                            skip_distance=0, skip_alpha="learnable")
+        assert model._skip_alpha_learnable is False
+        assert not hasattr(model, 'skip_alpha_param')
+
     def test_forward_pass_skip_disabled(self):
         model = _make_model(["Generic"] * 5, g_width=32, skip_distance=0)
         x = torch.randn(4, 20)
