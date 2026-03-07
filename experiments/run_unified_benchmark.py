@@ -814,6 +814,8 @@ def run_single_experiment(
     wavelet_type="db3",      # Wavelet family for TrendWaveletAE/TrendWaveletAELG blocks
     backcast_wavelet_type=None,   # Override wavelet family for backcast path only
     forecast_wavelet_type=None,   # Override wavelet family for forecast path only
+    skip_distance=0,              # Re-inject original input every N stacks (0 = disabled)
+    skip_alpha=0.0,               # Mixing weight for skip injection (float or "learnable")
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -871,6 +873,8 @@ def run_single_experiment(
         optimizer_name=optimizer_name,
         no_val=False,
         lr_scheduler_config=lr_scheduler_config,
+        skip_distance=skip_distance,
+        skip_alpha=skip_alpha,
     )
 
     n_params = count_parameters(model)

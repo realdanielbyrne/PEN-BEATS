@@ -811,3 +811,172 @@ class TestWaveletVAELatentDimRouting:
         block = model.stacks[0][0]
 
         assert block.fc2_mu.out_features == latent_dim
+
+
+# ---------------------------------------------------------------------------
+# Skip connection tests
+# ---------------------------------------------------------------------------
+
+class TestSkipConnections:
+    """Verify ResNet-style skip connection behavior in NBeatsNet."""
+
+    def test_skip_distance_default_is_zero(self):
+        model = _make_model(["Generic"] * 5, g_width=32)
+        assert model.skip_distance == 0
+
+    def test_skip_alpha_default_is_zero(self):
+        model = _make_model(["Generic"] * 5, g_width=32)
+        assert model.skip_alpha == 0.0
+        assert model._skip_alpha_learnable is False
+
+    def test_skip_distance_stored(self):
+        model = _make_model(["Generic"] * 6, g_width=32, skip_distance=3)
+        assert model.skip_distance == 3
+
+    def test_skip_alpha_stored(self):
+        model = _make_model(["Generic"] * 6, g_width=32,
+                            skip_distance=3, skip_alpha=0.1)
+        assert model.skip_alpha == 0.1
+        assert model._skip_alpha_learnable is False
+
+    def test_learnable_alpha_creates_parameter(self):
+        model = _make_model(["Generic"] * 6, g_width=32,
+                            skip_distance=3, skip_alpha="learnable")
+        assert model._skip_alpha_learnable is True
+        assert hasattr(model, 'skip_alpha_param')
+        assert isinstance(model.skip_alpha_param, torch.nn.Parameter)
+        assert model.skip_alpha_param.requires_grad is True
+
+    def test_learnable_alpha_initial_value(self):
+        model = _make_model(["Generic"] * 6, g_width=32,
+                            skip_distance=3, skip_alpha="learnable")
+        assert abs(model.skip_alpha_param.item() - 0.01) < 1e-6
+
+    def test_skip_distance_negative_raises(self):
+        with pytest.raises(ValueError, match="skip_distance must be a non-negative integer"):
+            _make_model(["Generic"], skip_distance=-1)
+
+    def test_skip_alpha_invalid_string_raises(self):
+        with pytest.raises(ValueError, match="skip_alpha must be"):
+            _make_model(["Generic"], skip_distance=1, skip_alpha="invalid")
+
+    def test_skip_alpha_none_raises(self):
+        with pytest.raises(ValueError, match="skip_alpha must be"):
+            _make_model(["Generic"], skip_distance=1, skip_alpha=None)
+
+    def test_skip_alpha_bool_raises(self):
+        with pytest.raises(ValueError, match="skip_alpha must be"):
+            _make_model(["Generic"], skip_distance=1, skip_alpha=True)
+
+    def test_learnable_alpha_without_skip_distance_no_param(self):
+        """learnable alpha with skip_distance=0 should not create nn.Parameter."""
+        model = _make_model(["Generic"] * 4, g_width=32,
+                            skip_distance=0, skip_alpha="learnable")
+        assert model._skip_alpha_learnable is False
+        assert not hasattr(model, 'skip_alpha_param')
+
+    def test_forward_pass_skip_disabled(self):
+        model = _make_model(["Generic"] * 5, g_width=32, skip_distance=0)
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)
+
+    def test_forward_pass_skip_fixed_alpha(self):
+        model = _make_model(["Generic"] * 6, g_width=32,
+                            skip_distance=2, skip_alpha=0.1)
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)
+
+    def test_forward_pass_skip_learnable_alpha(self):
+        model = _make_model(["Generic"] * 6, g_width=32,
+                            skip_distance=2, skip_alpha="learnable")
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)
+
+    def test_skip_modifies_residual(self):
+        stack_types = ["Generic"] * 6
+        model_no_skip = _make_model(stack_types, g_width=32, skip_distance=0)
+        model_skip = _make_model(stack_types, g_width=32,
+                                 skip_distance=2, skip_alpha=0.5)
+        model_skip.load_state_dict(model_no_skip.state_dict(), strict=False)
+        x = torch.randn(4, 20)
+        res_no_skip, _ = model_no_skip(x)
+        res_skip, _ = model_skip(x)
+        assert not torch.allclose(res_no_skip, res_skip, atol=1e-6)
+
+    def test_skip_distance_larger_than_stacks(self):
+        model = _make_model(["Generic"] * 3, g_width=32,
+                            skip_distance=10, skip_alpha=0.5)
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)
+
+    def test_skip_distance_one(self):
+        model = _make_model(["Generic"] * 4, g_width=32,
+                            skip_distance=1, skip_alpha=0.1)
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)
+
+    def test_skip_with_mixed_block_types(self):
+        model = _make_model(
+            ["Trend", "Seasonality", "Generic", "GenericAE"],
+            g_width=32, t_width=32, s_width=64,
+            skip_distance=2, skip_alpha=0.1)
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)
+
+    def test_skip_alpha_zero_is_noop(self):
+        model = _make_model(["Generic"] * 4, g_width=32,
+                            skip_distance=2, skip_alpha=0.0)
+        x = torch.randn(4, 20)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 20)
+        assert forecast.shape == (4, 5)
+
+
+class TestNHiTSSkipConnections:
+    """Verify skip connections work in NHiTSNet."""
+
+    def test_nhits_skip_disabled_by_default(self):
+        model = _make_nhits(["Generic", "Generic"])
+        assert model.skip_distance == 0
+
+    def test_nhits_skip_forward_shape(self):
+        model = _make_nhits(
+            ["Generic"] * 4, g_width=32,
+            n_pools_kernel_size=[1, 2, 1, 2],
+            n_freq_downsample=[1, 1, 2, 2],
+            skip_distance=2, skip_alpha=0.1)
+        x = torch.randn(4, 24)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 24)
+        assert forecast.shape == (4, 6)
+
+    def test_nhits_skip_learnable_alpha(self):
+        model = _make_nhits(
+            ["Generic"] * 4, g_width=32,
+            skip_distance=2, skip_alpha="learnable")
+        assert model._skip_alpha_learnable is True
+        assert isinstance(model.skip_alpha_param, torch.nn.Parameter)
+        x = torch.randn(4, 24)
+        backcast, forecast = model(x)
+        assert backcast.shape == (4, 24)
+        assert forecast.shape == (4, 6)
+
+    def test_nhits_skip_distance_negative_raises(self):
+        with pytest.raises(ValueError, match="skip_distance must be a non-negative integer"):
+            _make_nhits(["Generic"], skip_distance=-1)
+
+    def test_nhits_skip_alpha_invalid_string_raises(self):
+        with pytest.raises(ValueError, match="skip_alpha must be"):
+            _make_nhits(["Generic"], skip_distance=1, skip_alpha="bad")
