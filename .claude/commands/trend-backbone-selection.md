@@ -12,7 +12,9 @@ When building Trend+Wavelet stacks, the **backbone class hierarchy** matters mor
 | TrendAELG + WaveletV3AELG | AERootBlockLG | 13.438 | 0.795 |
 | TrendAE + WaveletV3AE | AERootBlock | 15.020 | 0.894 |
 
-The plain AE bottleneck (`AERootBlock`) is **not viable** — it destroys information and homogenizes wavelet families (η²=0.003, ns). The learned gate in `AERootBlockLG` is essential for AE-family competitiveness.
+The plain AE bottleneck (`AERootBlock`) is **not viable** for alternating wavelet stacks — it destroys information and homogenizes wavelet families (η²=0.003, ns). The learned gate in `AERootBlockLG` is essential for AE-family competitiveness in alternating configurations.
+
+**Depth scaling exception (skip study v2):** For GenericAE (homogeneous stacks), `AERootBlock` is actually **more depth-stable** than `AERootBlockLG`. GenericAE maintains SMAPE ~15.2 at 30 stacks, while GenericAELG collapses to SMAPE ~36 without skip connections. The learned gate amplifies gradient issues at depth. For unified TrendWavelet blocks, both AE and AELG perform equivalently at all depths (10-30 stacks).
 
 Within the top two tiers (non-AE and AELG), **both Trend and TrendAE companion blocks reach comparable top-tier accuracy**. Prefer TrendAE when parameter efficiency matters; prefer Trend for marginally better average-case performance. This is a **soft guideline** based on paired statistical tests across two datasets (Cohen's d < 0.2).
 

@@ -28,7 +28,14 @@ Wavelet family is a non-factor for TrendWaveletAELG (Kruskal-Wallis p=0.107 acro
 
 **This is the opposite of alternating stacks** where sym20 is the universal best family.
 
+### Depth scaling (skip study v2, 2026-03-07)
+- **TrendWaveletAELG is depth-stable from 10 to 30 stacks.** SMAPE 13.57 at both 10 and 30 stacks (no degradation). CV < 1%.
+- **TrendWaveletAE is equally depth-stable** from 10 to 30 stacks. SMAPE 13.58 at 30 stacks.
+- **Skip connections are NOT needed and slightly hurt** at 30 stacks (+0.09 SMAPE). The integrated polynomial+DWT basis provides sufficient inductive bias to prevent residual decay.
+- **Both AE and AELG backbones perform equivalently** for the unified TrendWavelet block at all depths (unlike alternating stacks where LG > non-LG).
+
 ### Known instability
+
 **Avoid DB4 + eq_fcast + ld=16.** This specific combination catastrophically fails (SMAPE ~76). DB4 with other bd_labels or at ld=8 is fine.
 
 ---
@@ -53,4 +60,6 @@ Wavelet family is a non-factor for TrendWaveletAELG (Kruskal-Wallis p=0.107 acro
 |-------|--------|------|
 | TrendWaveletAELG Pure v1 (M4, 112 configs) | `experiments/analysis/analysis_reports/trendwaveletaelg_pure_study_analysis.md` | `experiments/results/m4/trendwaveletaelg_pure_study_results.csv` |
 | TrendWaveletAELG Pure v2 (4 datasets) | Same report | `experiments/results/*/trendwaveletaelg_pure_v2_study_results.csv` |
+| Skip Study v2 (36 configs, depth scaling) | `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.md` | `experiments/results/m4/resnet_skip_study_v2_results.csv` |
+| Skip Study v2 Notebook | `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.ipynb` | See notebook |
 | Notebook | `experiments/analysis/notebooks/trendwaveletaelg_pure_study_insights.ipynb` | See notebook |

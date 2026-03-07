@@ -64,7 +64,7 @@
 - **bd_label and basis_dim are perfectly confounded** in this study; cannot separate their effects.
 - **Prior analysis report was unreliable:** Recommended LD=2 (wrong), BD=30 (unreliable), claimed TrendAE was "clear winner" (wrong vs non-AE SOTA).
 
-## ResNet Skip Connection Study (M4-Yearly) (2026-03-07)
+## ResNet Skip Connection Study v1 (M4-Yearly) (2026-03-07)
 - See `experiments/analysis/analysis_reports/resnet_skip_study_analysis.md`
 - **Skip connections should NOT be a default setting.** Only beneficial for unstable architectures.
 - **GenericAELG collapses at depth >= 20** (bimodal convergence: ~2/3 seeds stuck at SMAPE ~48). Skip connections (skip_distance=5, alpha=0.1) rescue convergence, reducing SMAPE from 36 to 13.8. Skip_distance=10 is insufficient.
@@ -75,7 +75,20 @@
 - **Study winner:** TW16_skip4_learn (SMAPE=13.521, OWA=0.802) -- does NOT beat prior SOTA (Coif2_bd6: 13.410, 0.794).
 - **M4-Yearly SOTA unchanged:** Coif2_bd6_eq_fcast_td3 (Trend+WaveletV3, non-AE) SMAPE=13.410, OWA=0.794.
 - **MetaForecaster:** Moderate predictive value (Spearman rho=0.49, p=0.015), 75% top-12 overlap, but ranked eventual winner 15th/24.
-- **Next:** Test skip on non-AE Trend+WaveletV3 SOTA config; test on Traffic/Weather (longer sequences).
+
+## ResNet Skip Connection Study v2 (M4-Yearly) (2026-03-07)
+- See `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.md`
+- See notebook: `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.ipynb`
+- **36 configs, 207 runs, 3-round successive halving (15/30/100 epochs).** Tests GenericAE, TrendWaveletAE, TrendWaveletAELG, double-VAE, double-VAE2, and TrendVAE+HaarWaveletV3.
+- **Winner: TWALG30_no_skip** (TrendWaveletAELG, 30 stacks, NO skip) SMAPE=13.568 ± 0.131, OWA=0.805. Matches v1 winner (13.521) within noise.
+- **TrendWavelet blocks are depth-stable:** No degradation from 10 to 30 stacks for both TrendWaveletAE and TrendWaveletAELG. Skip connections don't help (and slightly hurt at 30 stacks).
+- **GenericAE does NOT degrade at depth** (unlike GenericAELG): SMAPE 15.2 at 30 stacks vs GenericAELG's collapse to 36. The learned gate (AERootBlockLG) is the source of depth instability, not the AE bottleneck itself.
+- **Double-VAE pairing is catastrophically bad:** TrendVAE+WaveletV3VAE (SMAPE 29-31) and TrendVAE2+WaveletV3VAE2 (SMAPE 37-44). Compounded reparameterization noise corrupts backcast residuals. Skip connections cannot rescue this.
+- **Single-VAE + deterministic wavelet works but underperforms:** TrendVAE+HaarWaveletV3 (SMAPE 15.3 at 10 stacks) is 2x better than double-VAE but still ~12% worse than TrendWaveletAE (13.6). Uses 3x more parameters (4.4M vs 1.5M).
+- **skip_distance=2 is too frequent.** Eliminated in R2 for all architectures. Sweet spot remains 3-5.
+- **Unified TrendWavelet matches alternating architecture:** SMAPE 13.57 (unified, 4.5M params) vs 13.52 (alternating TrendAELG+WaveletV3AELG, ~13M params at matched depth). 3x parameter efficiency advantage.
+- **All R3 configs early-stopped** (39-64 epochs of 100 max). Most stable: TWA30_no_skip (CV=0.5%).
+- **Backbone hierarchy updated:** RootBlock > AERootBlockLG ≈ AERootBlock (at depth) >> AERootBlockVAE. Key insight: GenericAE (AERootBlock) is depth-stable while GenericAELG (AERootBlockLG) collapses, reversing the usual LG > non-LG ordering specifically for depth scaling.
 
 ## Skill File Updates (2026-03-07)
 - **wavelet-family-selection.md:** Updated from "Haar/DB2/DB3 as safe defaults" to "Symlet20 as universal best (avg rank 2.3/14)" with horizon-dependent tier recommendations.
