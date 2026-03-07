@@ -42,12 +42,27 @@
 - **All runs hit MAX_EPOCHS at 10 epochs** with 3-6% improvement in final epoch. Extended training needed for fair comparison.
 - **Recommendation:** Do NOT use TrendAE+WaveletV3AE for production. Use Trend+WaveletV3 or TrendAELG+WaveletV3AELG.
 
-## AE Backbone Hierarchy (M4-Yearly)
-- **RootBlock (non-AE) > AERootBlockLG > AERootBlock** for wavelet blocks.
-- Non-AE Trend+WaveletV3: SMAPE=13.410, OWA=0.794
-- TrendAELG+WaveletV3AELG: SMAPE=13.438, OWA=0.795
+## AE Backbone Hierarchy (M4-Yearly, updated 2026-03-07)
+- **RootBlock (non-AE) > AERootBlockLG > AERootBlock >> AERootBlockVAE** for wavelet blocks.
+- Non-AE Trend+WaveletV3: SMAPE=13.410, OWA=0.794, ~1.4M params
+- TrendAELG+WaveletV3AELG: SMAPE=13.438, OWA=0.795, ~4.3M params
+- TrendAE+WaveletV3 (non-AE wavelet): SMAPE=13.462, OWA=0.797, ~4.2M params (TrendAE comparison study)
 - TrendAE+WaveletV3AE: SMAPE=15.020, OWA=0.894 (at 10 epochs; gap may narrow with training)
 - The learned gate in AELG is essential for AE-family competitiveness.
+- TrendAE backbone does NOT improve over plain Trend even with non-AE WaveletV3 blocks.
+
+## TrendAE + WaveletV3 Comparison Study (M4-Yearly) (2026-03-07)
+- See `experiments/analysis/analysis_reports/wavelet_trendae_comparison_analysis.md`
+- **30 configs, 90 runs (8 wavelet families x ~3 bd_labels x 3 latent_dims), 50 epochs**
+- **TrendAE does NOT improve over plain Trend.** Best OWA=0.797 vs non-AE SOTA 0.794, with 3x more params.
+- **CSV has 2 duplicate rows** for Symlet3_bd4_lt_fcast_ttd3_ld5. Always deduplicate before analysis.
+- **No hyperparameter factor is significant** (all KW p>0.18). Study underpowered with 3 seeds.
+- **Strong wavelet x latent_dim interaction:** Symlets prefer LD=8, Daubechies prefer LD=2, Coiflets/Haar prefer LD=5. Marginal LD analysis is misleading.
+- **Most stable config:** Symlet3_bd4_lt_fcast_ttd3_ld8 (OWA=0.797, std=0.0006, range=0.0011).
+- **10/30 configs have >5% outlier seed gap.** Seed 44 is worst in 8/16 problematic cases.
+- **Mean vs median OWA rank correlation is only rho=0.65** (3 seeds insufficient for stable ranking).
+- **bd_label and basis_dim are perfectly confounded** in this study; cannot separate their effects.
+- **Prior analysis report was unreliable:** Recommended LD=2 (wrong), BD=30 (unreliable), claimed TrendAE was "clear winner" (wrong vs non-AE SOTA).
 
 ## ResNet Skip Connection Study (M4-Yearly) (2026-03-07)
 - See `experiments/analysis/analysis_reports/resnet_skip_study_analysis.md`
@@ -66,6 +81,28 @@
 - **wavelet-family-selection.md:** Updated from "Haar/DB2/DB3 as safe defaults" to "Symlet20 as universal best (avg rank 2.3/14)" with horizon-dependent tier recommendations.
 - **trend-thetas-dim-selection.md:** Overhauled from "always ttd=3" to horizon-dependent: ttd=3 for H<=10, ttd=5 for H>=50. Prior "always ttd=3" was based on R1 data that mixed convergence speed with final quality.
 - **wavelet-basis-dim-selection.md:** Strengthened from "soft guideline" to "confident recommendation" for eq_fcast. Added V3AELG R3 convergence evidence showing R1 bd_label differences vanish at convergence.
+
+## Pure VAE (AERootBlockVAE) Performance Audit (2026-03-07)
+- **Pure VAE stacks are never competitive.** Across all 4 datasets, no pure-VAE config comes close to winning.
+- **M4-Yearly:** Best pure VAE = TrendVAE+SeasonalityVAE+GenericVAE_ld16 (SMAPE=19.77) vs overall best 13.41. +47% gap. Rank 1547/1842.
+- **Tourism-Yearly:** Best pure VAE = NBEATS-I-VAE (SMAPE=108.83) vs overall best 21.32. +410% gap. Near-total failure for generic VAE blocks (SMAPE~190).
+- **Traffic-96:** Best pure VAE = GenericVAE_ld16 (MSE=0.000701) vs overall best 0.000603. +16% gap. Rank 25/250. This is VAE's best relative showing.
+- **Weather-96:** Best pure VAE = VAE-coif2-coif2/TrendVAE+WaveletV3VAE (MSE=1848) vs overall best 1518. +22% gap. **Rank 4/588** -- VAE's single strongest result. But note: overall #1 (Generic10_activeG) has 50 runs vs VAE's 5.
+- **TrendVAE + deterministic wavelet combos** also underperform: best on M4 is TrendVAE+Haar (SMAPE=15.41, +15% vs best). On Tourism they catastrophically fail (SMAPE 65-72 vs best 21.3).
+- **Backbone hierarchy extended:** RootBlock > AERootBlockLG > AERootBlock >> AERootBlockVAE. VAE is strictly worst across all datasets.
+- **One exception worth noting:** On Weather, TrendVAE+WaveletV3VAE (VAE-coif2-coif2, MSE=1848) beat the AELG equivalent (AELG-coif2-coif2, MSE=2132) in the same AsymWavelet study. But AELG-sym20-coif2 (MSE=1804) still beat VAE.
+- **KL divergence penalty likely too aggressive** for the residual N-BEATS architecture. The stochastic latent disrupts the precise backcast subtraction that N-BEATS relies on.
+
+## TrendWaveletAELG Pure Study (2026-03-07)
+- See `experiments/analysis/analysis_reports/trendwaveletaelg_pure_study_analysis.md`
+- **NEW Tourism-Yearly SOTA:** TrendWaveletAELG coif3_eq_bcast_td3_ld16, SMAPE=20.681 (beats prior 20.930 from TrendAELG+WaveletV3AELG Coif1)
+- **Best on M4-Yearly:** v2 db3_eq_fcast_td3_ld16 (SMAPE=13.463, +0.40% above non-AE SOTA 13.410), v1 db10_eq_fcast_td3_ld8 (SMAPE=13.506)
+- **Wavelet family is a NON-FACTOR:** Kruskal-Wallis p=0.107 with 14 families on M4. AE bottleneck homogenizes bases. 0.18 SMAPE spread across all families.
+- **bd_label matters MORE in TrendWaveletAELG** than alternating stacks: eq_fcast significantly best (p=0.017), 0.37 SMAPE spread at R3.
+- **ld=16 > ld=8** (p=0.042). But DB4+eq_fcast+ld=16 catastrophic (~76 SMAPE).
+- **Traffic-96:** 100% SMAPE=200. Worse than alternating's 86% divergence.
+- **Cross-dataset family rankings uncorrelated** (rho=-0.1). Coif3 best avg rank (1.5).
+- **Architecture recommendation:** TrendWaveletAELG preferred for short-horizon simplicity; beats alternating on Tourism.
 
 ## Critical Methodology Lesson
 - **R1 (early training) data can produce misleading factor rankings.** Both ttd and bd_label showed R1 advantages that reversed or vanished at R3 convergence. Always validate hyperparameter recommendations with converged data. This affected two prior skill recommendations (ttd and bd_label).
