@@ -54,6 +54,9 @@ _EXPERIMENTS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _EXPERIMENTS_DIR)
 sys.path.insert(0, os.path.join(_EXPERIMENTS_DIR, "..", "src"))
 
+# Import meta-forecaster for search-round ranking
+from tools.meta_forecaster import MetaForecaster
+
 # Import shared infrastructure from the unified benchmark
 from run_unified_benchmark import (
     run_single_experiment,
@@ -863,10 +866,12 @@ def rank_configs_for_promotion(
     round_num: int,
     keep_fraction: float = 0.5,
     top_k: int = None,
+    use_meta: bool = False,
 ) -> list:
     """Rank configs from a search round and return promoted config-name strings.
 
-    Ranking metric: median best_val_loss across runs.
+    Ranking metric: median best_val_loss across runs, or
+    min(meta_predicted_best) when *use_meta* is True (Round 1 only).
     Configs with >50 % divergence rate are sent to the bottom.
 
     Returns
@@ -886,6 +891,7 @@ def rank_configs_for_promotion(
     rankings = []
     for name, result_rows in config_results.items():
         val_losses = []
+        meta_preds = []
         n_diverged = 0
         for r in result_rows:
             try:
@@ -894,22 +900,44 @@ def rank_configs_for_promotion(
                     val_losses.append(bvl)
             except (ValueError, TypeError):
                 pass
+
+            if use_meta:
+                try:
+                    mp = float(r.get("meta_predicted_best", "nan"))
+                    if math.isfinite(mp):
+                        meta_preds.append(mp)
+                except (ValueError, TypeError):
+                    pass
+
             if r.get("diverged", "").lower() in ("true", "1"):
                 n_diverged += 1
 
         median_bvl = float(np.median(val_losses)) if val_losses else float("inf")
+        min_meta = min(meta_preds) if meta_preds else float("inf")
         div_rate = n_diverged / len(result_rows) if result_rows else 0.0
+
+        # Use meta predictions for ranking when available
+        if use_meta and math.isfinite(min_meta):
+            rank_metric = min_meta
+        else:
+            rank_metric = median_bvl
+
         rankings.append(
             {
                 "config_name": name,
                 "median_best_val_loss": median_bvl,
+                "meta_predicted_best": min_meta,
+                "rank_metric": rank_metric,
                 "n_runs": len(val_losses),
                 "divergence_rate": div_rate,
             }
         )
 
     rankings.sort(
-        key=lambda r: (r["divergence_rate"] > 0.5, r["median_best_val_loss"])
+        key=lambda r: (
+            r["divergence_rate"] > 0.5,
+            r["rank_metric"] if math.isfinite(r["rank_metric"]) else 1e18,
+        )
     )
     total = len(rankings)
     if top_k is not None:
@@ -920,27 +948,128 @@ def rank_configs_for_promotion(
     promoted = {r["config_name"] for r in rankings[:keep_n]}
 
     # Print ranking table
-    print(f"\n  {'='*65}")
+    rank_label = "MetaPred" if use_meta else "ValLoss"
+    print(f"\n  {'='*75}")
     print(
         f"  Round {round_num} Ranking — {total} configs, "
         f"promoting top {keep_n}"
+        f"{'  [meta-forecaster]' if use_meta else ''}"
     )
-    print(f"  {'='*65}")
+    print(f"  {'='*75}")
     print(
-        f"  {'Rank':<5} {'Config':<42} {'ValLoss':>9} "
-        f"{'Div%':>5} {'Runs':>4}"
+        f"  {'Rank':<5} {'Config':<42} {rank_label:>9} "
+        f"{'ValLoss':>9} {'Div%':>5} {'Runs':>4}"
     )
-    print(f"  {'-'*65}")
+    print(f"  {'-'*75}")
     for i, r in enumerate(rankings[:min(40, total)]):
         marker = " *" if r["config_name"] in promoted else "  "
         div_str = f"{r['divergence_rate'] * 100:.0f}%"
+        meta_str = (
+            f"{r['meta_predicted_best']:>9.4f}"
+            if use_meta and math.isfinite(r["meta_predicted_best"])
+            else f"{'—':>9}"
+        )
+        rank_val = meta_str if use_meta else f"{r['median_best_val_loss']:>9.4f}"
         print(
             f"  {i + 1:<5}{marker} {r['config_name']:<40} "
+            f"{rank_val} "
             f"{r['median_best_val_loss']:>9.4f} {div_str:>5} "
             f"{r['n_runs']:>4}"
         )
 
     return list(promoted)
+
+
+def _init_meta_forecaster(mf_cfg: dict):
+    """Train or load the MetaForecaster from YAML config.
+
+    Returns None (with a warning) if training data is missing or training fails.
+    """
+    training_csvs = [
+        os.path.abspath(p)
+        for p in (mf_cfg.get("training_csvs") or [])
+    ]
+    existing = [p for p in training_csvs if os.path.exists(p)]
+    if not existing:
+        print(
+            "  [META] No existing training CSVs found; "
+            "meta-forecaster disabled (fallback to val_loss ranking)"
+        )
+        return None
+
+    cache_dir = os.path.abspath(
+        str(mf_cfg.get("cache_dir", "experiments/results/.meta_cache"))
+    )
+    mf = MetaForecaster(cache_dir=cache_dir)
+    try:
+        print(f"  [META] Training/loading meta-forecaster from {len(existing)} CSVs")
+        mf.train(existing, force_retrain=bool(mf_cfg.get("force_retrain", False)))
+    except ValueError as exc:
+        print(f"  [WARN] meta-forecaster unavailable: {exc}")
+        return None
+    return mf
+
+
+def _update_meta_predictions(
+    csv_path: str,
+    round_num: int,
+    meta_forecaster,
+):
+    """Re-read CSV, add MetaForecaster predictions to round rows, rewrite."""
+    if not os.path.exists(csv_path):
+        return
+
+    rows = []
+    fieldnames = None
+    with open(csv_path, "r", newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        fieldnames = list(reader.fieldnames or [])
+        rows = list(reader)
+
+    if not rows or not fieldnames:
+        return
+
+    # Ensure meta columns exist in fieldnames
+    for col in ("meta_predicted_best", "meta_convergence_score"):
+        if col not in fieldnames:
+            fieldnames.append(col)
+
+    updated = 0
+    for row in rows:
+        sr = row.get("search_round", "")
+        exp = row.get("experiment", "")
+        if sr != str(round_num) and f"_r{round_num}" not in exp:
+            continue
+
+        raw_curve = row.get("val_loss_curve", "")
+        if not raw_curve or raw_curve == "[]":
+            continue
+        try:
+            curve = [float(v) for v in json.loads(raw_curve)]
+        except (json.JSONDecodeError, ValueError, TypeError):
+            continue
+
+        if len(curve) < MetaForecaster.BACKCAST_LENGTH:
+            continue
+
+        pred = meta_forecaster.predict(curve)
+        pb = pred.get("predicted_best")
+        cs = pred.get("convergence_score")
+        row["meta_predicted_best"] = (
+            f"{pb:.8f}" if pb is not None and math.isfinite(float(pb)) else ""
+        )
+        row["meta_convergence_score"] = (
+            f"{cs:.8f}" if cs is not None and math.isfinite(float(cs)) else ""
+        )
+        updated += 1
+
+    # Rewrite CSV with meta columns
+    with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+    print(f"  [META] Updated {updated} rows with meta predictions (round {round_num})")
 
 
 def _run_successive_halving(
@@ -957,6 +1086,7 @@ def _run_successive_halving(
     csv_columns: list,
     runs_cfg: dict = None,
     dry_run: bool = False,
+    meta_forecaster=None,
 ):
     """Run successive halving over the config list.
 
@@ -970,6 +1100,9 @@ def _run_successive_halving(
         ``max_epochs`` (int), ``n_runs`` (int),
         ``keep_fraction`` (float, default 0.5),
         ``top_k`` (int, optional — overrides keep_fraction for the last round).
+    meta_forecaster : MetaForecaster or None
+        If provided, Round 1 rankings use meta-predicted convergence
+        instead of observed median best_val_loss.
     """
     runs_cfg = runs_cfg or {}
     # Build lookup: config_name → config dict
@@ -1037,6 +1170,15 @@ def _run_successive_halving(
                         dry_run=dry_run,
                     )
 
+        # After round 1, enrich CSV with meta-forecaster predictions
+        use_meta = (
+            round_num == 1
+            and meta_forecaster is not None
+            and not dry_run
+        )
+        if use_meta:
+            _update_meta_predictions(csv_path, round_num, meta_forecaster)
+
         # Promote for next round (skip on last round)
         if not is_last_round and not dry_run:
             promoted = rank_configs_for_promotion(
@@ -1044,6 +1186,7 @@ def _run_successive_halving(
                 round_num=round_num,
                 keep_fraction=keep_fraction,
                 top_k=top_k,
+                use_meta=use_meta,
             )
             if not promoted:
                 print(
@@ -1183,6 +1326,18 @@ def run_experiment(
     use_search = bool(search_cfg.get("enabled", False))
     search_rounds = search_cfg.get("rounds") or []
 
+    # ── Meta-forecaster config (for search Round 1 ranking) ───────────
+    meta_forecaster_cfg = cfg.get("meta_forecaster") or {}
+    meta_forecaster = None
+    if use_search and meta_forecaster_cfg.get("enabled", False) and not dry_run:
+        meta_forecaster = _init_meta_forecaster(meta_forecaster_cfg)
+
+    # Add meta columns to CSV schema when meta-forecaster is active
+    if meta_forecaster is not None:
+        for col in ("meta_predicted_best", "meta_convergence_score"):
+            if col not in csv_columns:
+                csv_columns.append(col)
+
     # ── Dataset / evaluation protocol ────────────────────────────────────
     protocol_cfg = deep_merge(DEFAULT_PROTOCOL, cfg.get("protocol", {}) or {})
 
@@ -1202,6 +1357,8 @@ def run_experiment(
     print(f"  Runs/config: {n_runs}")
     if use_search:
         print(f"  Search:      successive halving, {len(search_rounds)} rounds")
+        if meta_forecaster is not None:
+            print(f"  MetaFcast:   enabled (Round 1 ranking)")
     if dry_run:
         print(f"  *** DRY RUN — no training will occur ***")
     print(f"{'=' * 70}\n")
@@ -1290,6 +1447,7 @@ def run_experiment(
                     csv_columns=csv_columns,
                     runs_cfg=runs_cfg,
                     dry_run=dry_run,
+                    meta_forecaster=meta_forecaster,
                 )
             else:
                 _run_standard(

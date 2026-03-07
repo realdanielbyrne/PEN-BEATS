@@ -2,9 +2,19 @@
 
 ## Core Guideline
 
-When building Trend+Wavelet stacks, **both Trend and TrendAE backbones reach comparable top-tier accuracy**. Prefer TrendAE when parameter efficiency matters; prefer Trend for marginally better average-case performance.
+When building Trend+Wavelet stacks, the **backbone class hierarchy** matters more than individual block choice:
 
-This is a **soft guideline** based on paired statistical tests across two datasets. The practical difference is small (Cohen's d < 0.2).
+**RootBlock (non-AE) > AERootBlockLG (learned-gate AE) >> AERootBlock (plain AE)**
+
+| Full Stack | Backbone | M4-Yearly SMAPE | OWA |
+|---|---|---|---|
+| Trend + WaveletV3 | RootBlock | **13.410** | **0.794** |
+| TrendAELG + WaveletV3AELG | AERootBlockLG | 13.438 | 0.795 |
+| TrendAE + WaveletV3AE | AERootBlock | 15.020 | 0.894 |
+
+The plain AE bottleneck (`AERootBlock`) is **not viable** — it destroys information and homogenizes wavelet families (η²=0.003, ns). The learned gate in `AERootBlockLG` is essential for AE-family competitiveness.
+
+Within the top two tiers (non-AE and AELG), **both Trend and TrendAE companion blocks reach comparable top-tier accuracy**. Prefer TrendAE when parameter efficiency matters; prefer Trend for marginally better average-case performance. This is a **soft guideline** based on paired statistical tests across two datasets (Cohen's d < 0.2).
 
 ---
 
@@ -64,3 +74,5 @@ When running successive halving searches:
 | M4 TrendAE | - | `experiments/results/m4/wavelet_study_3_successive_trendae_results.csv` |
 | Weather Trend | - | `experiments/results/weather/wavelet_study_3_successive_results.csv` |
 | Weather TrendAE | - | `experiments/results/weather/wavelet_study_3_successive_trendae_results.csv` |
+| V3AE backbone hierarchy (332 configs, 995 runs) | `experiments/analysis/analysis_reports/wavelet_v3ae_study_analysis.md` | `experiments/results/m4/wavelet_v3ae_study_results.csv` |
+| V3AELG cross-dataset (4 datasets) | `experiments/analysis/analysis_reports/wavelet_v3aelg_study_analysis.md` | `experiments/results/m4/wavelet_v3aelg_trendaelg_study_results.csv` + 3 others |

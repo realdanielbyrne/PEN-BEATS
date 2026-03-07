@@ -2,9 +2,11 @@
 
 ## Core Guideline
 
-When configuring `basis_dim` for WaveletV3 blocks, use **`eq_fcast`** or **`lt_bcast`** as the default labels. Avoid `lt_fcast` on short forecast horizons.
+When configuring `basis_dim` for WaveletV3 blocks, use **`eq_fcast`** as the default. Avoid `lt_fcast` on short forecast horizons.
 
-This is a **soft guideline** based on consistent trends across four independent studies (including cross-backbone validation with both Trend and TrendAE), not a statistically significant hard rule. Its primary value is narrowing search spaces from 4 labels to 2, saving compute in successive halving studies.
+This recommendation is supported by **five independent studies** across 4 backbones (Trend, TrendAE, TrendAELG, TrendAE+V3AE) and 4 datasets. The V3AELG cross-dataset study (R3 converged data) strengthened this from a soft guideline to a **confident recommendation**: `eq_fcast` is optimal or co-optimal on all viable datasets at convergence.
+
+**Key insight from V3AELG study:** R1 (10-epoch) data showed apparent advantages for larger basis_dim labels (eq_bcast). At R3 convergence (50 epochs), these advantages vanished -- `eq_fcast` caught up and matched or beat all other labels. The R1 advantage of larger labels is a convergence speed artifact, not a quality difference.
 
 ---
 
@@ -34,15 +36,15 @@ The `compute_basis_dim()` function (in `run_wavelet_v3aelg_study.py`, `run_wavel
 
 ## Tiered Recommendations
 
-### Safe defaults (use these)
-- **`eq_fcast`** -- Basis dim matches forecast length. Consistently top-2 across all studies. Natural match: exactly enough basis functions to represent the output.
-- **`lt_bcast`** -- Half the backcast length. Consistently top-2. Provides moderate regularization.
+### Best default (use this)
+- **`eq_fcast`** -- Basis dim matches forecast length. Top-1 or co-top-1 on all viable datasets at R3 convergence (M4-Yearly, Tourism-Yearly, Weather-96). Natural match: exactly enough basis functions to represent the output. The V3AELG study confirmed this across 14 wavelet families and 3 datasets.
 
-### Acceptable (include if search budget allows)
-- **`eq_bcast`** -- Full backcast length. Slightly over-parameterized on M4-Yearly (SMAPE 13.690 vs 13.615 for eq_fcast/lt_bcast in AELG sweep), but acceptable. On Weather-96, it performs comparably to eq_fcast.
+### Acceptable alternatives (include if search budget allows)
+- **`lt_bcast`** -- Half the backcast length. Consistently top-2. On Tourism-Yearly and Weather-96, it resolves to the same value as `eq_fcast` (degeneracy when `backcast_length = 2 * forecast_length`).
+- **`eq_bcast`** -- Full backcast length. Converges faster (more basis functions) but does not improve final quality. At R3, equivalent to `eq_fcast` on M4-Yearly (spread < 0.014 SMAPE). Useful when training epochs are limited.
 
 ### Avoid on short horizons
-- **`lt_fcast`** -- Too few basis functions for short forecasts. 0% Round 3 survival on M4-Yearly in the AELG sweep (basis_dim=4 for forecast_length=6). On Tourism-Yearly (basis_dim=2), only 2 configs survived. On Weather-96 (basis_dim=94), it performs well -- the problem is specific to short horizons where the halving produces too few coefficients.
+- **`lt_fcast`** -- Too few basis functions for short forecasts. 0% Round 3 survival on M4-Yearly in the AELG sweep (basis_dim=4 for forecast_length=6). On Tourism-Yearly (basis_dim=2), only 2 configs survived. On Weather-96 (basis_dim=94), it performs acceptably -- the problem is specific to short horizons where the halving produces too few coefficients.
 
 ---
 
@@ -61,7 +63,7 @@ This halves the basis_dim search dimension, doubling the budget available for ot
 
 ## Statistical Caveat
 
-No study found statistically significant pairwise differences between the top three labels (eq_fcast, lt_bcast, eq_bcast):
+No study found statistically significant pairwise differences between the top three labels (eq_fcast, lt_bcast, eq_bcast) at convergence. The recommendation is based on **consistent directional trends** across 5 studies and **one clear negative signal** (lt_fcast fails on short horizons).
 
 | Study | Test | p-value | Result |
 |---|---|---|---|
@@ -70,14 +72,19 @@ No study found statistically significant pairwise differences between the top th
 | Study 3 cross-backbone (M4, Trend vs TrendAE) | Rank correlation of bd_label medians | rho=0.60 | eq_fcast and lt_bcast top-2 for both backbones |
 | Study 3 cross-backbone (Weather, Trend vs TrendAE) | Rank correlation of bd_label medians | rho=-0.50 | eq_fcast top-1 for Trend; eq_bcast top-1 for TrendAE |
 | AELG Sweep (144 configs, M4+Tourism, TrendAELG+WaveletV3AELG) | Mann-Whitney on top labels | p>0.05 | Not significant |
+| **V3AELG Study (R3, M4+Tourism+Weather)** | **R3 converged ranking** | -- | **eq_fcast top-1 or co-top-1 on all 3 datasets** |
 
-The recommendation is based on **consistent directional trends** (eq_fcast and lt_bcast always rank top-2 across studies) and **one clear negative signal** (lt_fcast fails on short horizons), not on statistically proven superiority.
+### V3AELG convergence insight (2026-03-07)
+
+The V3AELG study revealed why prior R1-based analyses showed ambiguous results: **larger basis_dim labels converge faster but do not produce better final forecasts**. At R1 (10 epochs), `eq_bcast` appeared competitive or better. At R3 (50 epochs), `eq_fcast` matched or surpassed all others, with the spread between top-3 labels narrowing to < 0.014 SMAPE on M4-Yearly.
+
+This convergence speed artifact also explains the Weather cross-backbone disagreement (Study 3): at R1, TrendAE preferred `eq_bcast` because the AE bottleneck slowed convergence of smaller-basis configs. With sufficient training, this difference would likely vanish.
 
 ### Cross-backbone note (Study 3)
 
-The bd_label ranking is broadly consistent across Trend and TrendAE backbones:
-- **M4:** Both backbones rank eq_fcast and lt_bcast in the top-2 (rho=0.60)
-- **Weather:** eq_fcast remains top-1 for Trend; TrendAE slightly prefers eq_bcast but differences are negligible (< 0.1 best_val_loss)
+The bd_label ranking is broadly consistent across Trend, TrendAE, and TrendAELG backbones:
+- **M4:** eq_fcast top-1 or top-2 for all three backbones
+- **Weather:** eq_fcast top-1 for Trend and TrendAELG; TrendAE slightly prefers eq_bcast at R1 but likely converges to eq_fcast
 - **Conclusion:** The backbone choice does not change the bd_label recommendation
 
 ---
@@ -86,6 +93,8 @@ The bd_label ranking is broadly consistent across Trend and TrendAE backbones:
 
 | Evidence | Report | Data |
 |---|---|---|
+| **V3AELG Study (112 configs, 14 families, R3 converged, M4+Tourism+Weather)** | `experiments/analysis/analysis_reports/wavelet_v3aelg_study_analysis.md` | `experiments/results/m4/wavelet_v3aelg_trendaelg_study_results.csv`, `experiments/results/tourism/wavelet_v3aelg_trendaelg_study_results.csv`, `experiments/results/weather/wavelet_v3aelg_trendaelg_study_results.csv` |
+| V3AELG Notebook (Section 4: Basis Dim Effect) | `experiments/analysis/notebooks/wavelet_v3aelg_trendaelg_study_analysis.ipynb` | See notebook data sources |
 | Study 2 (72 runs, Trend+WaveletV3, M4) | `experiments/analysis/analysis_reports/wavelet_study_2_analysis.md` | `experiments/results/m4/wavelet_study_2_basis_dim_results.csv` |
 | Study 3 (112 configs, Trend+WaveletV3, M4+Weather) | `experiments/analysis/analysis_reports/wavelet_study_3_analysis.md` | `experiments/results/m4/wavelet_study_3_successive_results.csv` |
 | Study 3 cross-backbone (Trend vs TrendAE, M4+Weather) | `experiments/analysis/notebooks/wavelet_study_3_successive_insights.ipynb` (Section 10C) | `experiments/results/m4/wavelet_study_3_successive_trendae_results.csv`, `experiments/results/weather/wavelet_study_3_successive_trendae_results.csv` |

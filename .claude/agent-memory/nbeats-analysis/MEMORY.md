@@ -61,3 +61,11 @@
 - **M4-Yearly SOTA unchanged:** Coif2_bd6_eq_fcast_td3 (Trend+WaveletV3, non-AE) SMAPE=13.410, OWA=0.794.
 - **MetaForecaster:** Moderate predictive value (Spearman rho=0.49, p=0.015), 75% top-12 overlap, but ranked eventual winner 15th/24.
 - **Next:** Test skip on non-AE Trend+WaveletV3 SOTA config; test on Traffic/Weather (longer sequences).
+
+## Skill File Updates (2026-03-07)
+- **wavelet-family-selection.md:** Updated from "Haar/DB2/DB3 as safe defaults" to "Symlet20 as universal best (avg rank 2.3/14)" with horizon-dependent tier recommendations.
+- **trend-thetas-dim-selection.md:** Overhauled from "always ttd=3" to horizon-dependent: ttd=3 for H<=10, ttd=5 for H>=50. Prior "always ttd=3" was based on R1 data that mixed convergence speed with final quality.
+- **wavelet-basis-dim-selection.md:** Strengthened from "soft guideline" to "confident recommendation" for eq_fcast. Added V3AELG R3 convergence evidence showing R1 bd_label differences vanish at convergence.
+
+## Critical Methodology Lesson
+- **R1 (early training) data can produce misleading factor rankings.** Both ttd and bd_label showed R1 advantages that reversed or vanished at R3 convergence. Always validate hyperparameter recommendations with converged data. This affected two prior skill recommendations (ttd and bd_label).
