@@ -119,10 +119,10 @@
 - See `experiments/analysis/analysis_reports/trendwavelet_ae_vs_aelg_comprehensive_analysis.md`
 - See notebook: `experiments/analysis/notebooks/trendwavelet_ae_vs_aelg_comprehensive.ipynb`
 - **3,821 rows across 9 CSV files, 4 datasets, 2 block types, 2 study versions**
-- **AELG beats AE on every dataset tested.** M4: Wilcoxon p=0.002, d=0.23 (small). Tourism: MWU p=0.010, d=0.62 (medium). Learned gate adds <0.01% params but consistent improvement.
+- **AELG beats AE on M4** (Wilcoxon p=0.002, d=0.23). **On Tourism, AELG advantage is ld-dependent:** significant at ld=16 (MWU p=0.010 in comprehensive study) but vanishes at ld=8/12 (p=0.24 in v2 tourism study). AE slightly better at smaller latent dims.
 - **Best configs per dataset:**
   - M4-Yearly: AELG v2 db3_eq_fcast_td3_ld16 (SMAPE=13.463, +0.40% vs non-AE SOTA 13.410)
-  - Tourism-Yearly: **AELG coif3_eq_bcast_td3_ld16 (SMAPE=20.681, SOTA)** beats prior 20.930
+  - Tourism-Yearly: AELG coif3_eq_bcast_td3_ld16 (SMAPE=20.864 confirmed with 10 runs, original 3-run estimate was 20.681)
   - Weather-96: AELG db3_eq_fcast_td3_ld16 (MSE=1920, high variance std=603, 3 seeds)
   - Traffic-96: 100% divergence (ALL 80 runs SMAPE=200)
 - **Latent dim is the dominant hyperparameter** (KW p<0.001). ld=2 is catastrophic (d=0.72 vs ld=8). ld=5~ld=8 (d=0.23). ld=12 and ld=16 can improve further but introduce instability (DB4+eq_fcast+ld16 catastrophe).
@@ -144,6 +144,30 @@
 - **TrendAE vs TrendAELG: non-factor** (p=0.85). Haar vs Coif2: non-factor (p>0.5). ld 8 vs 12: non-factor (p=0.59).
 - **Best config:** TrendAE+HaarWaveletV3AE_Alt_ld12 (SMAPE=13.496, OWA=0.800, 965K params). Does NOT beat M4-Yearly SOTA (13.410).
 - **Most parameter-efficient sub-13.55 config to date.**
+
+## TrendWaveletAE v2 Tourism-Yearly Study (2026-03-09)
+- See `experiments/analysis/analysis_reports/trendwaveletae_v2_tourism_analysis.md`
+- See notebook: `experiments/analysis/notebooks/trendwaveletae_v2_tourism_insights.ipynb`
+- **220 rows, 40 configs (R1) -> 20 configs (R2), zero divergence.**
+- **Does NOT beat Tourism SOTA (20.864).** Best: TrendWaveletAE_db20_eq_fcast_td3_ld12 (SMAPE=21.013, +0.72%).
+- **Haar is the best wavelet for Tourism-Yearly** (KW p=0.009, all post-hoc p<0.05). Short-support wavelets suit H=4. Dataset-specific: on M4-Yearly wavelet family is a non-factor.
+- **ld=12 > ld=8** (MWU p=0.020, d=0.40). Continues the pattern: larger ld helps for unified TrendWavelet.
+- **bd_label is a non-factor** (p=0.65). Even bd=2 (lt_fcast) works for 4-step forecasts.
+- **AE vs AELG: no significant difference** (p=0.24). AE edges ahead (21.27 vs 21.38). Reverses the usual "AELG > AE" pattern seen on M4.
+- **Prior comprehensive study finding "AELG beats AE on Tourism" (p=0.010) may have been driven by ld=16 configs** not present in this study. At ld=8/12, AE is equivalent or slightly better.
+- **Next test needed:** ~~Haar at ld=16 on Tourism~~ DONE -- see Haar ld=16 confirmation below.
+
+## Tourism-Yearly Haar ld=16 Confirmation Study (2026-03-09)
+- See `experiments/analysis/analysis_reports/tourism_haar_ld16_confirmation_analysis.md`
+- See notebook: `experiments/analysis/notebooks/tourism_haar_ld16_confirmation.ipynb`
+- **20 rows, 2 configs (AE, AELG) x 10 runs, 50 epochs, zero divergences.**
+- **Does NOT beat Tourism SOTA (20.864).** AE_haar: 20.996 (+0.63%), AELG_haar: 21.057 (+0.93%).
+- **AE vs AELG: no difference** (Wilcoxon p=0.32, MWU p=0.62). Confirms AE=AELG on Tourism at ld>=12.
+- **AE_haar vs SOTA:** MWU p=0.104 (not significant), bootstrap P(better)=5.8%. SOTA wins 8/10 seeds.
+- **AELG_haar vs SOTA:** MWU p=0.031 (significant), bootstrap P(better)=1.2%. SOTA wins 9/10 seeds.
+- **ld=16 IS the best latent dim for Haar on Tourism** (vs ld=12: MWU p=0.0002, d=-1.80). But even at best ld, Haar does not reach coif3 quality.
+- **Coif3's advantage may come from eq_bcast (bd=8) vs eq_fcast (bd=4)**, not the wavelet family itself. Needs ablation.
+- **Tourism-Yearly SOTA confirmed:** TrendWaveletAELG_coif3_eq_bcast_td3_ld16, SMAPE=20.864, 95% CI [20.712, 21.016].
 
 ## Critical Methodology Lesson
 - **R1 (early training) data can produce misleading factor rankings.** Both ttd and bd_label showed R1 advantages that reversed or vanished at R3 convergence. Always validate hyperparameter recommendations with converged data. This affected two prior skill recommendations (ttd and bd_label).
