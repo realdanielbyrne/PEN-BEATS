@@ -13,7 +13,9 @@
 
 Across M4, Tourism, and Weather, AELG (learned-gate autoencoder) is the dominant family. It survives all three halving rounds, achieves the best final-round results, and does so with 4.3M parameters — roughly 8x fewer than NBEATS-I+G while matching or beating its OWA. On Traffic, the roles reverse completely: AELG diverges at a 56% rate and exits the search by Round 3, while VAE provides the only stable high-performing configurations.
 
-The split reflects a meaningful architectural distinction. The AELG gate (`sigmoid(gate) * z`) works when data has learnable structure — it selects which latent dimensions to use. On Traffic's non-stationary sensor data, the gate cannot stabilize, and training collapses. VAE's KL regularization, which is a hindrance on structured data, becomes a stabilizer on Traffic.
+**Note (2026-03-09): The Traffic conclusions below require qualification.** This study used bl=192 (L=2H, `forecast_multiplier=2`), which is insufficient for Traffic-96. A subsequent study (AsymWavelet Diagnostic, 2026-03-08) using bl=480 (L=5H) showed AELG **dominates** VAE on Traffic by 5.6× MSE (p < 1e-6) with only 16% divergence. The AELG failure described below was caused by insufficient backcast horizon, not an inherent architectural incompatibility.
+
+The apparent split reflects the following: The AELG gate (`sigmoid(gate) * z`) works when data has learnable structure. With L=2H (insufficient lookback), AELG training collapses on Traffic while VAE's KL regularization happens to provide a stabilizing effect. With adequate lookback (L≥5H), AELG is clearly preferred.
 
 ---
 
@@ -53,6 +55,7 @@ AELG wins all final-round spots. VAE is present in Round 2 but eliminated before
 Best config: **TrendVAE+Symlet3** (forecast pass) — Val Loss ≈ 14.97
 
 The dataset where everything reverses:
+
 - **AELG divergence rate:** 56% of runs (val_loss ≈ 200, smape ≈ 200%)
 - **VAE divergence rate:** 20% of runs
 - Only VAE configs survive to Round 3
@@ -117,6 +120,7 @@ This confirms that no single configuration generalizes across all four datasets.
 ## Successive Halving as a Diagnostic
 
 The halving procedure correctly identifies the better family on each dataset:
+
 - M4/Tourism/Weather: AELG configs advance through all rounds; VAE exits by Round 2–3
 - Traffic: AELG exits by Round 2 (divergence); VAE advances to Round 3
 
@@ -131,7 +135,7 @@ Three rounds of halving is sufficient to produce reliable winners. Running only 
 | M4 | Lower | Higher | AELG |
 | Tourism | Lower | Higher | AELG |
 | Weather | Lower | Higher | AELG |
-| Traffic | Bimodal (converge or explode) | More consistent | VAE |
+| Traffic | Bimodal at L=2H (converge or explode); stable at L≥5H | More consistent at L=2H (but poor quality) | AELG with L≥5H |
 
 AELG is more reproducible across seeds on structured data. N-BEATS is known for low seed variance, and AELG preserves this property better than VAE.
 
@@ -139,29 +143,35 @@ AELG is more reproducible across seeds on structured data. N-BEATS is known for 
 
 ## Deployment Decision
 
-### Use AELG (TrendAELG+Coif2 or Symlet3) when:
+### Use AELG (TrendAELG+Coif2 or Symlet3) when
+
 - Data has structured seasonal/trend patterns (competition series, economic, energy)
 - Low training variance is important (production systems needing reproducibility)
 - Parameter efficiency matters
 - You are uncertain about dataset type (best default)
 
-### Use VAE (TrendVAE+Symlet3 or Coif2) when:
-- Data is high-frequency sensor data with non-stationarities (traffic, IoT)
-- AELG divergence has been observed in preliminary runs
+### Use VAE (TrendVAE+Symlet3 or Coif2) when
+
+- AELG divergence has been observed in preliminary runs **and** adequate lookback (L≥5H) is confirmed
 - KL regularization is acceptable overhead
+
+**Note:** The original recommendation to use VAE for Traffic/high-frequency sensor data is superseded. With adequate lookback (L≥5H, `forecast_multiplier=5`), AELG is strongly preferred on Traffic (5.6× MSE advantage). The AELG instability observed in this study was caused by insufficient backcast horizon (L=2H), not by Traffic's data characteristics.
 
 ### Decision Tree
 
 ```
-Is the data high-frequency sensor / traffic-like?
-  YES → TrendVAE + Symlet3 or Coif2
-        Expect: ~20% divergence; retrain if needed
+Are you using Traffic-96 (or similar sensor data)?
+  YES → First set forecast_multiplier=5 (backcast_length=480, L=5H)
+        Then use TrendAELG + Coif2 (5.6x better than VAE with adequate lookback)
+        Expect: ~16% divergence at 8 stacks; retrain if needed
 
   NO  → TrendAELG + Coif2 or Symlet3
         M4/Tourism: OWA ~0.801, beats NBEATS-I+G
         Weather: consider GenericAELG if overfitting occurs
         Expect: low variance, stable training, 4.3M params
 ```
+
+**Critical:** The prior "VAE for Traffic" recommendation was based on experiments with `forecast_multiplier=2` (bl=192, L=2H). Traffic-96 requires `forecast_multiplier=5` (bl=480, L=5H) for reliable convergence. All block types — including AELG — fail with insufficient lookback.
 
 ---
 
@@ -177,3 +187,13 @@ Is the data high-frequency sensor / traffic-like?
 *Data sources: `experiments/results/*/lg_vae_study_results.csv`*
 *Pre-generated stats: `experiments/analysis/analysis_reports/lg_vae_study_analysis.md`*
 *Primary artifact: `experiments/analysis/notebooks/lg_vae_study_insights.ipynb`*
+
+---
+
+## Correction Addendum (2026-03-09)
+
+**The AELG-vs-VAE Traffic conclusion requires qualification.** This study used bl=192 (L=2H) and 16 stacks. The 56% AELG divergence rate and the conclusion that "the gate cannot stabilize on Traffic's non-stationary sensor data" were artifacts of insufficient lookback, not an inherent AELG limitation.
+
+A subsequent study (AsymWavelet Diagnostic, 2026-03-08) using L=5H (bl=480) and 8 stacks showed AELG **dominates** VAE on Traffic by 5.6× in MSE (p < 1e-6), with only 16% divergence. VAE configs on Traffic in that study clustered near SMAPE ~66 — effectively failing to learn — while AELG achieved MSE ~0.0006.
+
+The recommendation to "use VAE for Traffic/high-frequency sensor data" should be revised: **AELG is preferred on Traffic when adequate lookback (L≥5H) and moderate stack depth (≤8-10 stacks) are used.** The original VAE advantage was an artifact of AELG being more sensitive to short lookback windows.

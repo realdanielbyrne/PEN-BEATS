@@ -23,12 +23,12 @@ The `compute_basis_dim()` function (in `run_wavelet_v3aelg_study.py`, `run_wavel
 
 ### Resolved Values by Dataset
 
-| Label | M4-Yearly (f=6, b=30) | Tourism-Yearly (f=4, b=8) | Traffic-96 (f=96, b=384) | Weather-96 (f=96, b=384) |
+| Label | M4-Yearly (f=6, b=30) | Tourism-Yearly (f=4, b=8) | Traffic-96 (f=96, b=480, L=5H required) | Weather-96 (f=96, b=384) |
 |---|---|---|---|---|
 | `eq_fcast` | 6 | **4** | 96 | 96 |
 | `lt_fcast` | 4 | 2 | 94 | 94 |
-| `eq_bcast` | 30 | 8 | 384 | 384 |
-| `lt_bcast` | 15 | **4** | 192 | 192 |
+| `eq_bcast` | 30 | 8 | 480 | 384 |
+| `lt_bcast` | 15 | **4** | 240 | 192 |
 
 **Note:** When `backcast_length = 2 * forecast_length` (e.g., Tourism-Yearly), `eq_fcast` and `lt_bcast` collapse to the same value. This is confirmed by identical SMAPE outputs in the AELG sweep.
 

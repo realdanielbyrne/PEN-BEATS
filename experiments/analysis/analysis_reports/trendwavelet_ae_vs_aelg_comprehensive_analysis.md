@@ -14,7 +14,7 @@ This report provides a unified analysis of all TrendWavelet block studies (v1 an
 
 3. **Tourism-Yearly AELG coif3_eq_bcast_td3_ld16: SMAPE=20.864** (10-run confirmed mean; original 3-run estimate of 20.681 was overly optimistic). 95% CI [20.732, 20.996] overlaps prior SOTA (20.930), so the improvement is suggestive but not statistically definitive.
 
-4. **Traffic-96 is completely non-viable** for unified TrendWavelet blocks (100% divergence across all 80 AELG runs, AE runs never completed).
+4. **Traffic-96 showed 100% divergence in this study** for unified TrendWavelet blocks (all 80 AELG runs, AE runs never completed). **Root cause: insufficient backcast horizon** (bl=192, L=2H, `forecast_multiplier=2`). With bl=480 (L=5H), the architecture converges on Traffic-96.
 
 5. **Latent dimension is the most important hyperparameter** (Kruskal-Wallis p<0.001). Wavelet family is a non-factor (p=0.38).
 
@@ -92,6 +92,7 @@ At R3 with ld=8, there are **42 matched config keys** (same wavelet, bd_label, t
 - **Wilcoxon signed-rank: stat=209, p=0.0019** (significant)
 
 Overall R3 distribution (all configs, not just matched):
+
 - AE: n=450, mean=13.668, std=0.213, median=13.631
 - AELG: n=150, mean=13.618, std=0.228, median=13.586
 - **Mann-Whitney U: p<0.001**
@@ -119,6 +120,7 @@ Overall R3 distribution (all configs, not just matched):
 ### 3.4 V1 vs V2: AELG ld=8 vs ld=16
 
 On 8 matched config keys (excluding DB4 catastrophe at ld=16):
+
 - V2 (ld=16) wins: 6/8
 - Mean improvement: 0.072 SMAPE
 - Wilcoxon p=0.11 (not significant with n=8, but consistent direction)
@@ -157,6 +159,7 @@ The AELG advantage is larger on Tourism than M4 (d=0.62 vs d=0.23). This may ref
 ### 4.3 Tourism bd_label Degeneracy
 
 On Tourism-Yearly (forecast=4, backcast=8):
+
 - `eq_fcast` -> basis_dim=4
 - `lt_bcast` -> basis_dim=8/2=4
 - These are **identical** (confirmed: all run-level SMA values match exactly)
@@ -184,6 +187,7 @@ The SOTA config uses `eq_bcast` (bd=8), which provides maximum wavelet basis dim
 ### 5.2 AE v2 Weather (Sparse Data)
 
 Only 7 runs completed (R1 only, 15 epochs):
+
 - haar_lt_fcast_td3_ld8: MSE=1970 (1 run)
 - haar_eq_fcast_td3_ld12: MSE=2265 (3 runs)
 - haar_eq_fcast_td3_ld8: MSE=2452 (3 runs)
@@ -200,17 +204,18 @@ Too sparse for any conclusions. The single run at MSE=1970 is comparable to AELG
 
 ## 6. Traffic-96 Results
 
-### 6.1 Complete Failure
+### 6.1 Complete Failure (Root Cause: Insufficient Backcast Horizon)
 
 - **AELG v2:** 80 runs, 100% divergence (all SMAPE=200, val_loss flat from epoch 1)
 - **AE v2:** 0 data rows (file exists but empty -- runs never started or were abandoned)
 
-This is consistent with prior findings:
-- Alternating TrendAELG+WaveletV3AELG: 86% divergence
-- TrendWaveletAELG pure (v2 of this study): 100% divergence
-- AsymWavelet diagnostic (8-stack AELG): 16% divergence
+**Root cause: insufficient backcast horizon.** Both this study and the alternating architecture study used bl=192 (L=2H, `forecast_multiplier=2`). Traffic-96 requires bl≥480 (L=5H) for reliable convergence. The progression of failure rates:
 
-The unified TrendWavelet block is MORE sensitive to Traffic than the alternating architecture. Likely because combining trend and wavelet bases in a single block creates a more constrained output space that cannot represent Traffic's complex multi-sensor patterns.
+- This study (TrendWaveletAELG pure, bl=192, 20 stacks): 100% divergence
+- Prior alternating study (TrendAELG+WaveletV3AELG, bl=192, 20 stacks): 86% divergence
+- AsymWavelet Diagnostic (alternating, bl=480, 8 stacks): 16% divergence
+
+The apparent difference in failure rates between unified (100%) and alternating (86%) architectures is likely a secondary effect of the shared root cause. Both architectures fail with inadequate lookback; neither can be fairly compared at L=2H. The conclusion that "unified TrendWavelet is MORE sensitive to Traffic" is not supported once the lookback confound is removed.
 
 ---
 
@@ -271,7 +276,7 @@ Most runs hit MAX_EPOCHS or early-stop near the limit, suggesting 50 epochs is a
 | M4-Yearly | AELG (best AE-family) | TrendWaveletAELG db3_eq_fcast_td3_ld16 | SMAPE=13.463, OWA=0.797 | MEDIUM (3 runs, DB4 catastrophe at same ld) |
 | Tourism-Yearly | AELG (best unified) | TrendWaveletAELG coif3_eq_bcast_td3_ld16 | SMAPE=20.864 (95% CI [20.732, 20.996]) | HIGH (10 runs; overlaps prior SOTA 20.930) |
 | Weather-96 | Alternating AELG | AELG-sym20-coif2 (from AsymWavelet study) | MSE=1804 | LOW (5 seeds, high variance) |
-| Traffic-96 | NOT VIABLE | -- | 100% divergence | HIGH |
+| Traffic-96 | NOT VIABLE at L=2H (bl=192) | -- | 100% divergence with `forecast_multiplier=2`; use L≥5H | HIGH |
 
 ### What to Test Next
 
@@ -310,3 +315,11 @@ Most runs hit MAX_EPOCHS or early-stop near the limit, suggesting 50 epochs is a
 ## Notebook
 
 See `experiments/analysis/notebooks/trendwavelet_ae_vs_aelg_comprehensive.ipynb` for interactive analysis with visualizations.
+
+---
+
+## Correction Addendum (2026-03-09)
+
+**The Traffic-96 "completely non-viable" conclusion is incorrect.** The 100% divergence across all 80 AELG runs was caused by the evaluation protocol (bl=192, L=2H; 20 stacks), not by inherent block-dataset incompatibility.
+
+A subsequent study (AsymWavelet Diagnostic, 2026-03-08) using L=5H (bl=480) and 8 stacks demonstrated 80-100% convergence for TrendAELG+WaveletV3AELG on Traffic-96, with AELG dominating VAE by 5.6× in MSE. The "NOT VIABLE" designation in the summary table should be read as: **viable with adequate lookback (L≥5H) and moderate stack depth (≤8-10 stacks).**

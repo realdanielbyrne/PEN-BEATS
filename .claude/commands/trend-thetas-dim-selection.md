@@ -15,16 +15,19 @@ This is a **horizon-dependent rule** that supersedes the prior recommendation of
 ## Recommendations
 
 ### Short horizons (H <= 10): `trend_thetas_dim=3`
+
 - Statistically significant on Tourism-Yearly (H=4, p=0.008)
 - Directionally better on M4-Yearly (H=6, p=0.16 at R3 convergence)
 - Lower polynomial degree provides better regularization when there are few forecast steps
 
 ### Long horizons (H >= 50): `trend_thetas_dim=5`
+
 - Statistically significant on Weather-96 (H=96, p=0.042)
 - Higher-degree polynomial captures more complex trend shapes over longer horizons
 - The quartic term adds meaningful capacity that the wavelet stack cannot compensate for
 
 ### Medium horizons (10 < H < 50): `trend_thetas_dim=3` (tentative default)
+
 - No direct evidence in this range
 - The crossover point has not been identified -- it likely lies somewhere in this range
 - Future experiments on M4-Quarterly (H=8), M4-Monthly (H=18), or Traffic-192 are needed
@@ -40,7 +43,7 @@ This is a **horizon-dependent rule** that supersedes the prior recommendation of
 | M4-Yearly (SMAPE) | H=6 | 13.476 | 13.484 | ttd=3 | 0.16 | No (at convergence) |
 | Tourism-Yearly (SMAPE) | H=4 | 20.98 | 21.12 | ttd=3 | 0.008 | Yes |
 | Weather-96 (MSE) | H=96 | 2088.5 | 2075.1 | ttd=5 | 0.042 | Yes |
-| Traffic-96 | H=96 | -- | -- | -- | -- | 86% divergence, not testable |
+| Traffic-96 | H=96 | -- | -- | -- | -- | 86% divergence at L=2H (not testable); converges at L=5H with 8 stacks |
 
 ### Prior Study 3 (R1 data, 10 epochs) -- Mann-Whitney U tests
 
@@ -64,6 +67,7 @@ On M4-Yearly (short horizon), the R1 advantage of ttd=3 narrows to non-significa
 ## Rationale
 
 The trend thetas dim controls the polynomial degree of the trend basis expansion:
+
 - `ttd=3`: degree-2 polynomial (constant + linear + quadratic)
 - `ttd=5`: degree-4 polynomial (adds cubic + quartic terms)
 

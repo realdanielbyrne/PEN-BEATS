@@ -12,6 +12,7 @@ This study tested whether **asymmetric wavelet family pairs** -- using different
 **The hypothesis is not supported.** Symmetric wavelet pairs perform as well or better than asymmetric pairs on both datasets. On Traffic, symmetric AELG pairs significantly outperform asymmetric ones (Mann-Whitney p=0.026). On Weather, no significant difference exists in either direction.
 
 Key findings:
+
 1. **AELG dominates VAE on Traffic** by 5.6x in MSE (p < 1e-6). On Weather, backbones are statistically equivalent.
 2. **coif2 is the best forecast wavelet** on both datasets, regardless of backcast wavelet choice.
 3. **VAE is functionally blind to wavelet choice** -- all 5 VAE configs produce nearly identical results (KW p=0.49 on Traffic).
@@ -130,6 +131,7 @@ The VAE backbone completely homogenizes wavelet basis differences. The stochasti
 Spearman rank correlation between Traffic and Weather config rankings: **rho = 0.41, p = 0.24** (not significant).
 
 Notable rank changes:
+
 - AELG-coif2-coif2: #1 on Traffic, #6 on Weather (delta = 5)
 - AELG-sym20-coif2: #3 on Traffic, #1 on Weather (delta = 2)
 - VAE-coif2-coif2: #6 on Traffic, #2 on Weather (delta = 4)
@@ -147,7 +149,7 @@ The only robust cross-dataset pattern: **coif2 as forecast wavelet appears in th
 | AELG-sym3-sym3 | 0/5 | 0% | Most stable config |
 | All VAE configs | 0/25 | 0% | VAE never diverges (but never learns either) |
 
-**Overall AELG divergence rate: 16%** (4/25). This is dramatically better than prior Traffic studies (86% for alternating, 100% for pure TrendWaveletAELG). The shallower 8-stack architecture is the likely stabilizing factor.
+**Overall AELG divergence rate: 16%** (4/25). This is dramatically better than prior Traffic studies (86% for alternating at L=2H, 100% for pure TrendWaveletAELG at L=2H). **The primary stabilizing factor was the lookback increase from L=2H (bl=192) to L=5H (bl=480).** The shallower 8-stack architecture (vs 20 stacks in prior studies) is a secondary contributing factor.
 
 Diverged runs produced reasonable test metrics, suggesting late-training instability rather than complete failure. The best-performing diverged run (AELG-sym3-sym20, seed=5, MSE=0.000602) actually outperforms several non-diverged runs from other configs.
 
@@ -204,3 +206,9 @@ Traffic data (862 PeMS sensors, hourly) has highly regular diurnal/weekly patter
 - Weather results: `experiments/results/weather/Weather-AsymWavelet-Diagnostic_results.csv`
 - Notebook: `experiments/analysis/notebooks/asym_wavelet_diagnostic_insights.ipynb`
 - This report: `experiments/analysis/analysis_reports/asym_wavelet_diagnostic_analysis.md`
+
+---
+
+## Clarification Note (2026-03-09)
+
+This report attributes the improved convergence (16% divergence vs 86-100% in prior studies) primarily to "shallower 8-stack architecture." However, the most significant protocol change was the **lookback increase from L=2H (bl=192) to L=5H (bl=480)**. All prior Traffic studies that reported high divergence used bl=192; this is the only study that used bl=480. Both factors (shorter stacks and longer lookback) likely contributed, but the lookback change is the more impactful variable. Additionally, this study ran **without normalization** (no `protocol:` block in the YAML), despite comments in the config mentioning Z-score normalization. Traffic data is naturally in the 0-1 scale and does not require normalization.

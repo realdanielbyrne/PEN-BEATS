@@ -9,7 +9,7 @@ When choosing between TrendWaveletAELG (unified block) and TrendAELG + WaveletV3
 | **Tourism-Yearly** | **TrendWaveletAELG** | New SOTA (20.681 vs 20.930) |
 | Short horizon (H<=10), simplicity preferred | **TrendWaveletAELG** | Simpler architecture, competitive results |
 | M4-Yearly, maximum accuracy | Trend+WaveletV3 (non-AE) | SOTA 13.410, unified is +0.40% |
-| Traffic-96 or Weather-96 | **Neither** -- use Generic/GenericAELG | Both trend+wavelet architectures fail |
+| Traffic-96 or Weather-96 | **TrendAELG+WaveletV3AELG (alternating)** | Requires L≥5H lookback and ≤8-10 stacks; converges with MSE ~0.0006 on Traffic |
 
 ---
 
@@ -18,17 +18,20 @@ When choosing between TrendWaveletAELG (unified block) and TrendAELG + WaveletV3
 When using TrendWaveletAELG:
 
 ### Hyperparameter defaults
+
 - `latent_dim=16` (significantly better than ld=8, p=0.042)
 - `trend_thetas_dim=3` for H<=10 (confirmed, p=0.255 directional)
 - `basis_dim_label=eq_fcast` (significantly best, p=0.017)
 - `n_stacks=10`, `n_blocks_per_stack=1`, `share_weights=True`
 
 ### Wavelet family: does NOT matter
+
 Wavelet family is a non-factor for TrendWaveletAELG (Kruskal-Wallis p=0.107 across 14 families). The AE bottleneck homogenizes basis representations. Use any family; coif3 has best cross-dataset average rank.
 
 **This is the opposite of alternating stacks** where sym20 is the universal best family.
 
 ### Depth scaling (skip study v2, 2026-03-07)
+
 - **TrendWaveletAELG is depth-stable from 10 to 30 stacks.** SMAPE 13.57 at both 10 and 30 stacks (no degradation). CV < 1%.
 - **TrendWaveletAE is equally depth-stable** from 10 to 30 stacks. SMAPE 13.58 at 30 stacks.
 - **Skip connections are NOT needed and slightly hurt** at 30 stacks (+0.09 SMAPE). The integrated polynomial+DWT basis provides sufficient inductive bias to prevent residual decay.
@@ -47,7 +50,8 @@ Wavelet family is a non-factor for TrendWaveletAELG (Kruskal-Wallis p=0.107 acro
 | Wavelet family effect | Non-significant (p=0.107) | Significant (sym20 best) |
 | Basis label sensitivity | High (0.37 SMAPE spread) | Low (0.014 spread at convergence) |
 | Cross-dataset family consistency | Uncorrelated (rho=-0.1) | Correlated (sym20 universal) |
-| Traffic-96 | 100% failure | 86% divergence |
+| Traffic-96 (L=2H, 20 stacks) | 100% failure | 86% divergence |
+| Traffic-96 (L=5H, 8 stacks) | Not tested | 16% divergence, MSE ~0.0006 |
 | Tourism-Yearly | **SOTA** (20.681) | 20.930 |
 | M4-Yearly | 13.463 (+0.40%) | 13.438 (+0.21%) |
 | Architecture simplicity | 1 block type | 2 block types alternating |
