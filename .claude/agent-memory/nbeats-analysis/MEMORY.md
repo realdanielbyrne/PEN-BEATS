@@ -13,12 +13,21 @@
   - Tourism-Yearly: Coif1_eq_fcast_ttd3_ld16 (SMAPE=20.930) -- replicated in V3AELG study
   - Weather-96: Symlet20_eq_fcast_ttd5_ld16 (MSE=2070.61) -- from V3AELG study (3 seeds, high variance)
   - Traffic-96: NOT VIABLE (86% divergence rate)
-- **Wavelet families (updated 2026-03-07):** Symlet20 is the best cross-dataset wavelet (avg rank 2.3 across M4/Tourism/Weather). DB4 excels on short horizons but fails on long ones (#14/14 on Weather). Coif2 and DB10 consistently underperform.
+- **Wavelet families (updated 2026-03-08):** Symlet20 is the best cross-dataset wavelet for M4/Tourism/Weather (avg rank 2.3/14). DB4 excels on short horizons but fails on long ones (#14/14 on Weather). DB10 consistently underperforms. Coif2 underperforms as a backcast wavelet on M4/Tourism but is the **best forecast wavelet** on Traffic-96 and Weather-96 (AsymWavelet study). Context matters: coif2's boundary-vanishing-moment properties benefit short forecast horizons.
 - **Basis labels:** `eq_fcast` (basis_dim=forecast_length) is optimal or co-optimal on all datasets. At convergence (R3), bd_label differences nearly vanish on M4 (spread <0.014 SMAPE).
 - **Tourism/Weather degeneracy:** On Tourism-Yearly (fcast=4, bcast=8) and Weather-96 (fcast=96, bcast=192), `eq_fcast` and `lt_bcast` both resolve to the same basis_dim, producing identical results.
 - **Trend thetas dim is dataset-dependent:** ttd=3 for short horizons (Tourism p=0.008), ttd=5 for long horizons (Weather p=0.042), no difference on M4-Yearly at convergence (p=0.16).
-- **Traffic-96: architecture not viable.** 86.2% divergence rate. DB20 100% diverged, Haar 96%. Only DB2/DB3/DB4 occasionally converge. Do NOT use TrendAELG+WaveletV3AELG for Traffic without major modifications.
+- **Traffic-96: architecture viability is depth-dependent.** Deep configs (repeats=4+) have 86%+ divergence. But 8-stack (repeats=2, 4 alternating pairs) drops divergence to 16% and achieves MSE=0.000603 (AsymWavelet Diagnostic study, 2026-03-08).
 - **Next experiments needed:** Weather confirmation with 10 seeds, M4 other periods, Traffic recovery ablation, ttd crossover point study.
+
+## Asymmetric Wavelet Diagnostic Study (Traffic-96, Weather-96) (2026-03-08)
+- See `experiments/analysis/analysis_reports/asym_wavelet_diagnostic_analysis.md`
+- **Asymmetric wavelet pairs do NOT help.** Symmetric pairs match or beat asymmetric on both datasets. Traffic AELG: symmetric significantly better (MWU p=0.026).
+- **coif2 is the best forecast wavelet** on both Traffic (MSE=0.000607) and Weather (MSE=1968). Appears in #1 config on both datasets.
+- **AELG dominates VAE on Traffic** (5.6x MSE, p<1e-6) but backbones are equivalent on Weather (p=0.85).
+- **VAE is wavelet-blind:** Kruskal-Wallis p=0.49 (Traffic), p=0.33 (Weather). Stochastic bottleneck overwhelms basis.
+- **8-stack AELG on Traffic is viable** (16% divergence vs 86%+ at deeper stacks). Best: AELG-coif2-coif2 MSE=0.000603.
+- **Best configs:** Traffic: AELG-coif2-coif2 (MSE=0.000603), Weather: AELG-sym20-coif2 (MSE=1804, high variance, needs more seeds).
 
 ## Wavelet Study 2: Basis Dimension Sweep (Trend+WaveletV3, M4-Yearly) (2026-03-07)
 - See `experiments/analysis/analysis_reports/wavelet_study_2_basis_dim_analysis.md`
