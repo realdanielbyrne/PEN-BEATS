@@ -1,10 +1,12 @@
 # Persistent Notes
 
 ## Block Architecture
+
 - WaveletV3 now respects `pywt.dwt_max_level(...)=0` and keeps `level=0` instead of forcing an invalid level-1 decomposition.
 - For short targets, prefer short-support wavelets (`haar`, `db2`, `db3`); long-support families (`db20`, `sym20`, `coif10`) can collapse to approximation-only bases on short horizons.
 
 ## TrendAELG + WaveletV3AELG Stack Height Findings (2026-03-05)
+
 - See `experiments/analysis/analysis_reports/v3aelg_stackheight_sweep_analysis.md`
 - **Stack height:** repeats=2 (4 stacks) is always insufficient; repeats=4 (8) and repeats=5 (10) are equivalent after extended training (p>0.1). repeats=4 is more parameter-efficient.
 - **Latent dim:** latent_dim=16 significantly outperforms latent_dim=32 on short-horizon tasks (M4-Yearly, Tourism-Yearly). V1 study (ld=16) top-5 means beat V2 sweep (ld=32) top-5 means (p<0.02 both datasets).
@@ -12,24 +14,26 @@
   - M4-Yearly: Symlet20_eq_fcast_ttd3_ld16 (SMAPE=13.438, OWA=0.795) -- replicated in V3AELG study
   - Tourism-Yearly: Coif1_eq_fcast_ttd3_ld16 (SMAPE=20.930) -- replicated in V3AELG study
   - Weather-96: Symlet20_eq_fcast_ttd5_ld16 (MSE=2070.61) -- from V3AELG study (3 seeds, high variance)
-  - Traffic-96: NOT VIABLE (86% divergence rate)
+  - Traffic-96: VIABLE at L=5H with ≤8 stacks (16% divergence, MSE ~0.0006). Prior "NOT VIABLE" claim was due to L=2H lookback.
 - **Wavelet families (updated 2026-03-08):** Symlet20 is the best cross-dataset wavelet for M4/Tourism/Weather (avg rank 2.3/14). DB4 excels on short horizons but fails on long ones (#14/14 on Weather). DB10 consistently underperforms. Coif2 underperforms as a backcast wavelet on M4/Tourism but is the **best forecast wavelet** on Traffic-96 and Weather-96 (AsymWavelet study). Context matters: coif2's boundary-vanishing-moment properties benefit short forecast horizons.
 - **Basis labels:** `eq_fcast` (basis_dim=forecast_length) is optimal or co-optimal on all datasets. At convergence (R3), bd_label differences nearly vanish on M4 (spread <0.014 SMAPE).
 - **Tourism/Weather degeneracy:** On Tourism-Yearly (fcast=4, bcast=8) and Weather-96 (fcast=96, bcast=192), `eq_fcast` and `lt_bcast` both resolve to the same basis_dim, producing identical results.
 - **Trend thetas dim is dataset-dependent:** ttd=3 for short horizons (Tourism p=0.008), ttd=5 for long horizons (Weather p=0.042), no difference on M4-Yearly at convergence (p=0.16).
-- **Traffic-96: architecture viability is depth-dependent.** Deep configs (repeats=4+) have 86%+ divergence. But 8-stack (repeats=2, 4 alternating pairs) drops divergence to 16% and achieves MSE=0.000603 (AsymWavelet Diagnostic study, 2026-03-08).
+- **Traffic-96: architecture viability is lookback- and depth-dependent.** All studies using L=2H (bl=192) showed 86-100% divergence regardless of stack depth. The AsymWavelet Diagnostic (L=5H, bl=480, 8 stacks) dropped divergence to 16% and achieved MSE=0.000603. **Always use L≥5H for Traffic.**
 - **Next experiments needed:** Weather confirmation with 10 seeds, M4 other periods, Traffic recovery ablation, ttd crossover point study.
 
 ## Asymmetric Wavelet Diagnostic Study (Traffic-96, Weather-96) (2026-03-08)
+
 - See `experiments/analysis/analysis_reports/asym_wavelet_diagnostic_analysis.md`
 - **Asymmetric wavelet pairs do NOT help.** Symmetric pairs match or beat asymmetric on both datasets. Traffic AELG: symmetric significantly better (MWU p=0.026).
 - **coif2 is the best forecast wavelet** on both Traffic (MSE=0.000607) and Weather (MSE=1968). Appears in #1 config on both datasets.
 - **AELG dominates VAE on Traffic** (5.6x MSE, p<1e-6) but backbones are equivalent on Weather (p=0.85).
 - **VAE is wavelet-blind:** Kruskal-Wallis p=0.49 (Traffic), p=0.33 (Weather). Stochastic bottleneck overwhelms basis.
-- **8-stack AELG on Traffic is viable** (16% divergence vs 86%+ at deeper stacks). Best: AELG-coif2-coif2 MSE=0.000603.
+- **AELG on Traffic is viable** with L=5H lookback (16% divergence at 8 stacks). Best: AELG-coif2-coif2 MSE=0.000603. AELG dominates VAE on Traffic by 5.6× in MSE when adequate lookback is used. Prior claims of AELG instability on Traffic were artifacts of L=2H lookback.
 - **Best configs:** Traffic: AELG-coif2-coif2 (MSE=0.000603), Weather: AELG-sym20-coif2 (MSE=1804, high variance, needs more seeds).
 
 ## Wavelet Study 2: Basis Dimension Sweep (Trend+WaveletV3, M4-Yearly) (2026-03-07)
+
 - See `experiments/analysis/analysis_reports/wavelet_study_2_basis_dim_analysis.md`
 - **Best config (non-AE):** Coif2_bd6_eq_fcast_td3 (SMAPE=13.410, OWA=0.794) -- only sub-0.800 mean OWA in sweep
 - **Best single run:** Coif2_bd6_eq_fcast_td3, seed 44, SMAPE=13.293, OWA=0.785
@@ -40,6 +44,7 @@
 - **Parameter counts nearly identical** across all basis_dims (~1.4% spread); select bd purely on quality.
 
 ## WaveletV3AE Study: TrendAE + WaveletV3AE on M4-Yearly (2026-03-07)
+
 - See `experiments/analysis/analysis_reports/wavelet_v3ae_study_analysis.md`
 - **332 configs, 995 runs (14 wavelet families x 4 bd_labels x 2 ttd x 3 ld), 10 epochs only**
 - **V3AE substantially underperforms baselines:** Best SMAPE=15.020 vs non-AE 13.410 (+12%). Plain AE bottleneck is harmful.
@@ -52,6 +57,7 @@
 - **Recommendation:** Do NOT use TrendAE+WaveletV3AE for production. Use Trend+WaveletV3 or TrendAELG+WaveletV3AELG.
 
 ## AE Backbone Hierarchy (M4-Yearly, updated 2026-03-07)
+
 - **RootBlock (non-AE) > AERootBlockLG > AERootBlock >> AERootBlockVAE** for wavelet blocks.
 - Non-AE Trend+WaveletV3: SMAPE=13.410, OWA=0.794, ~1.4M params
 - TrendAELG+WaveletV3AELG: SMAPE=13.438, OWA=0.795, ~4.3M params
@@ -61,6 +67,7 @@
 - TrendAE backbone does NOT improve over plain Trend even with non-AE WaveletV3 blocks.
 
 ## TrendAE + WaveletV3 Comparison Study (M4-Yearly) (2026-03-07)
+
 - See `experiments/analysis/analysis_reports/wavelet_trendae_comparison_analysis.md`
 - **30 configs, 90 runs (8 wavelet families x ~3 bd_labels x 3 latent_dims), 50 epochs**
 - **TrendAE does NOT improve over plain Trend.** Best OWA=0.797 vs non-AE SOTA 0.794, with 3x more params.
@@ -74,6 +81,7 @@
 - **Prior analysis report was unreliable:** Recommended LD=2 (wrong), BD=30 (unreliable), claimed TrendAE was "clear winner" (wrong vs non-AE SOTA).
 
 ## ResNet Skip Connection Study v1 (M4-Yearly) (2026-03-07)
+
 - See `experiments/analysis/analysis_reports/resnet_skip_study_analysis.md`
 - **Skip connections should NOT be a default setting.** Only beneficial for unstable architectures.
 - **GenericAELG collapses at depth >= 20** (bimodal convergence: ~2/3 seeds stuck at SMAPE ~48). Skip connections (skip_distance=5, alpha=0.1) rescue convergence, reducing SMAPE from 36 to 13.8. Skip_distance=10 is insufficient.
@@ -85,26 +93,31 @@
 - **M4-Yearly SOTA unchanged:** Coif2_bd6_eq_fcast_td3 (Trend+WaveletV3, non-AE) SMAPE=13.410, OWA=0.794.
 - **MetaForecaster:** Moderate predictive value (Spearman rho=0.49, p=0.015), 75% top-12 overlap, but ranked eventual winner 15th/24.
 
-## ResNet Skip Connection Study v2 (M4-Yearly) (2026-03-07)
-- See `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.md`
-- See notebook: `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.ipynb`
-- **36 configs, 207 runs, 3-round successive halving (15/30/100 epochs).** Tests GenericAE, TrendWaveletAE, TrendWaveletAELG, double-VAE, double-VAE2, and TrendVAE+HaarWaveletV3.
-- **Winner: TWALG30_no_skip** (TrendWaveletAELG, 30 stacks, NO skip) SMAPE=13.568 ± 0.131, OWA=0.805. Matches v1 winner (13.521) within noise.
-- **TrendWavelet blocks are depth-stable:** No degradation from 10 to 30 stacks for both TrendWaveletAE and TrendWaveletAELG. Skip connections don't help (and slightly hurt at 30 stacks).
-- **GenericAE does NOT degrade at depth** (unlike GenericAELG): SMAPE 15.2 at 30 stacks vs GenericAELG's collapse to 36. The learned gate (AERootBlockLG) is the source of depth instability, not the AE bottleneck itself.
-- **Double-VAE pairing is catastrophically bad:** TrendVAE+WaveletV3VAE (SMAPE 29-31) and TrendVAE2+WaveletV3VAE2 (SMAPE 37-44). Compounded reparameterization noise corrupts backcast residuals. Skip connections cannot rescue this.
-- **Single-VAE + deterministic wavelet works but underperforms:** TrendVAE+HaarWaveletV3 (SMAPE 15.3 at 10 stacks) is 2x better than double-VAE but still ~12% worse than TrendWaveletAE (13.6). Uses 3x more parameters (4.4M vs 1.5M).
-- **skip_distance=2 is too frequent.** Eliminated in R2 for all architectures. Sweet spot remains 3-5.
-- **Unified TrendWavelet matches alternating architecture:** SMAPE 13.57 (unified, 4.5M params) vs 13.52 (alternating TrendAELG+WaveletV3AELG, ~13M params at matched depth). 3x parameter efficiency advantage.
-- **All R3 configs early-stopped** (39-64 epochs of 100 max). Most stable: TWA30_no_skip (CV=0.5%).
-- **Backbone hierarchy updated:** RootBlock > AERootBlockLG ≈ AERootBlock (at depth) >> AERootBlockVAE. Key insight: GenericAE (AERootBlock) is depth-stable while GenericAELG (AERootBlockLG) collapses, reversing the usual LG > non-LG ordering specifically for depth scaling.
+## ResNet Skip Connection Study v1+v2 (M4, Tourism, Weather) (2026-03-07/09)
+
+- See `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.md` (updated with tourism/weather)
+- See notebook: `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.ipynb` (updated with sections 13-20)
+- Also see v1 report: `experiments/analysis/analysis_reports/resnet_skip_study_analysis.md`
+- **M4 v2 winner: TWALG30_no_skip** (SMAPE=13.568). **Tourism v2 winner: GAE10_no_skip** (SMAPE=20.526). **Weather v1 winner: TW16_no_skip** (SMAPE=40.245).
+- **Skip connections are NEVER optimal for TrendWavelet** across all 3 datasets. On Tourism, skip actively hurts TWA (MWU p=0.001).
+- **GenericAELG bimodal collapse is M4-specific.** Tourism shows milder form (1/3 seeds at 30 stacks). Weather shows NO collapse at any depth. Normalization and longer sequences stabilize the learned gate.
+- **GenericAE is depth-stable** on all datasets. No bimodal failures.
+- **Double-VAE catastrophe severity inversely scales with horizon:** Tourism (H=4): SMAPE 143-181 (near random). M4 (H=6): 29-44. Weather (H=96): 41-46 (~1.1x deterministic).
+- **Optimal depth scales with horizon:** Tourism (H=4): 10 stacks. M4 (H=6): 10-30 (flat). Weather (H=96): 16-20.
+- **GenericAE outperforms TrendWavelet on Tourism** (20.53 vs 21.10). Only dataset where this occurs. Short horizon (H=4) favors flexible basis over rigid polynomial+DWT.
+- **Tourism GAE10 (SMAPE 20.53) is competitive with Tourism SOTA** (20.864). Worth further investigation.
+- **Fixed alpha=0.1 wins overall** (Tourism 4/6, M4 4/5). Weather favors learnable (4/6).
+- **Weather v2 R3 is incomplete** (only 2/9 configs completed). Rankings rely on R2 data.
+- **skip_distance=2 always hurts.** Confirmed on all datasets. Sweet spot: d=3-5.
 
 ## Skill File Updates (2026-03-07)
+
 - **wavelet-family-selection.md:** Updated from "Haar/DB2/DB3 as safe defaults" to "Symlet20 as universal best (avg rank 2.3/14)" with horizon-dependent tier recommendations.
 - **trend-thetas-dim-selection.md:** Overhauled from "always ttd=3" to horizon-dependent: ttd=3 for H<=10, ttd=5 for H>=50. Prior "always ttd=3" was based on R1 data that mixed convergence speed with final quality.
 - **wavelet-basis-dim-selection.md:** Strengthened from "soft guideline" to "confident recommendation" for eq_fcast. Added V3AELG R3 convergence evidence showing R1 bd_label differences vanish at convergence.
 
 ## Pure VAE (AERootBlockVAE) Performance Audit (2026-03-07)
+
 - **Pure VAE stacks are never competitive.** Across all 4 datasets, no pure-VAE config comes close to winning.
 - **M4-Yearly:** Best pure VAE = TrendVAE+SeasonalityVAE+GenericVAE_ld16 (SMAPE=19.77) vs overall best 13.41. +47% gap. Rank 1547/1842.
 - **Tourism-Yearly:** Best pure VAE = NBEATS-I-VAE (SMAPE=108.83) vs overall best 21.32. +410% gap. Near-total failure for generic VAE blocks (SMAPE~190).
@@ -116,6 +129,7 @@
 - **KL divergence penalty likely too aggressive** for the residual N-BEATS architecture. The stochastic latent disrupts the precise backcast subtraction that N-BEATS relies on.
 
 ## TrendWaveletAE vs TrendWaveletAELG Comprehensive Study (2026-03-08)
+
 - See `experiments/analysis/analysis_reports/trendwavelet_ae_vs_aelg_comprehensive_analysis.md`
 - See notebook: `experiments/analysis/notebooks/trendwavelet_ae_vs_aelg_comprehensive.ipynb`
 - **3,821 rows across 9 CSV files, 4 datasets, 2 block types, 2 study versions**
@@ -124,7 +138,7 @@
   - M4-Yearly: AELG v2 db3_eq_fcast_td3_ld16 (SMAPE=13.463, +0.40% vs non-AE SOTA 13.410)
   - Tourism-Yearly: AELG coif3_eq_bcast_td3_ld16 (SMAPE=20.864 confirmed with 10 runs, original 3-run estimate was 20.681)
   - Weather-96: AELG db3_eq_fcast_td3_ld16 (MSE=1920, high variance std=603, 3 seeds)
-  - Traffic-96: 100% divergence (ALL 80 runs SMAPE=200)
+  - Traffic-96: 100% divergence at L=2H/20 stacks (ALL 80 runs SMAPE=200). Root cause: insufficient backcast horizon (`forecast_multiplier=2`). Subsequent AsymWavelet Diagnostic proved convergence at L=5H/8 stacks (`forecast_multiplier=5` required).
 - **Latent dim is the dominant hyperparameter** (KW p<0.001). ld=2 is catastrophic (d=0.72 vs ld=8). ld=5~ld=8 (d=0.23). ld=12 and ld=16 can improve further but introduce instability (DB4+eq_fcast+ld16 catastrophe).
 - **Wavelet family is a NON-FACTOR** for both AE (p=0.38) and AELG (p=0.11). AE bottleneck homogenizes bases. Spread <0.10 SMAPE across 14 families.
 - **Trend dim is a non-factor** on M4-Yearly (p=0.71). td=3 and td=5 identical.
@@ -135,6 +149,7 @@
 - **Key gaps:** No v1 data outside M4. AE v2 Traffic empty, AE v2 Weather 7 rows only. No TrendWaveletAE at ld=16.
 
 ## Trend-Seasonality-Wavelet Comparison Study (M4-Yearly) (2026-03-08)
+
 - See `experiments/analysis/analysis_reports/trend_seas_wav_comparison_analysis.md`
 - See notebook: `experiments/analysis/notebooks/trend_seas_wav_comparison_insights.ipynb`
 - **200 runs, 40 configs, 5 seeds.** Trend(AE/AELG) + Second(SeasonalityAE/AELG/VAE, HaarWavAE, Coif2WavAE, HaarWavAELG, Coif2WavAELG) x I-style(2 stacks) vs alternating(10 stacks) x ld(8,12).
@@ -146,6 +161,7 @@
 - **Most parameter-efficient sub-13.55 config to date.**
 
 ## TrendWaveletAE v2 Tourism-Yearly Study (2026-03-09)
+
 - See `experiments/analysis/analysis_reports/trendwaveletae_v2_tourism_analysis.md`
 - See notebook: `experiments/analysis/notebooks/trendwaveletae_v2_tourism_insights.ipynb`
 - **220 rows, 40 configs (R1) -> 20 configs (R2), zero divergence.**
@@ -158,6 +174,7 @@
 - **Next test needed:** ~~Haar at ld=16 on Tourism~~ DONE -- see Haar ld=16 confirmation below.
 
 ## Tourism-Yearly Haar ld=16 Confirmation Study (2026-03-09)
+
 - See `experiments/analysis/analysis_reports/tourism_haar_ld16_confirmation_analysis.md`
 - See notebook: `experiments/analysis/notebooks/tourism_haar_ld16_confirmation.ipynb`
 - **20 rows, 2 configs (AE, AELG) x 10 runs, 50 epochs, zero divergences.**
@@ -170,4 +187,5 @@
 - **Tourism-Yearly SOTA confirmed:** TrendWaveletAELG_coif3_eq_bcast_td3_ld16, SMAPE=20.864, 95% CI [20.712, 21.016].
 
 ## Critical Methodology Lesson
+
 - **R1 (early training) data can produce misleading factor rankings.** Both ttd and bd_label showed R1 advantages that reversed or vanished at R3 convergence. Always validate hyperparameter recommendations with converged data. This affected two prior skill recommendations (ttd and bd_label).
