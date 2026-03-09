@@ -7,7 +7,7 @@
 # forecast (H=96) paths improves performance.
 #
 # Protocol: Same as Traffic study
-#   - Z-score normalization
+#   - No normalization (not required; N-BEATS handles raw scale)
 #   - 70/10/20 train/val/test split
 #   - MSE loss
 #   - L = 5*H lookback (480 for H=96)

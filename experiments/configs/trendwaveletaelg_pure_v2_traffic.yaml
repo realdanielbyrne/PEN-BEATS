@@ -1,13 +1,18 @@
-study_name: trendwaveletaelg_pure_v2_study_traffic
+study_name: trendwaveletaelg_pure_v2_study_traffic_f5
 
 dataset: traffic
 period: Traffic-96
+# IMPORTANT: Traffic-96 requires forecast_multiplier >= 5 (backcast_length=480, L=5H) for reliable
+# convergence. The default forecast_multiplier=2 (backcast_length=192, L=2H) causes 86-100%
+# divergence across all block types. This was identified as the root cause of all pre-2026-03-09
+# Traffic failures. See AsymWavelet Diagnostic study for confirmation.
 
 architecture:
   block_type: TrendWaveletAELG
   repeats: 20
 
 training:
+  forecast_multiplier: 5  # L=5H required for Traffic convergence
   active_g: false
   sum_losses: false
   activation: ReLU

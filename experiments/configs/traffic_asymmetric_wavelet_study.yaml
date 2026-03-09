@@ -6,7 +6,7 @@
 # Traffic performance inversion relative to M4/Tourism/Weather.
 #
 # Protocol: NHiTS-style Traffic regime
-#   - Z-score normalization
+#   - No normalization (Traffic data is naturally 0-1 scale)
 #   - 70/10/20 train/val/test split
 #   - MSE loss
 #   - L = 5*H lookback (480 for H=96)

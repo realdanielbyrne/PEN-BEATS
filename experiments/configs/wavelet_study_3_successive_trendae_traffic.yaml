@@ -2,13 +2,17 @@
 # Successive halving search over WaveletV3 families, basis_dims, and trend_thetas_dim
 # Backbone: [Trend, <WaveletV3>] * 10 (20 stacks) — LARGE_STACK_DATASETS
 # Dataset: Traffic-96 (horizon=96, backcast=192, forecast_multiplier=2)
+# WARNING: This config used forecast_multiplier=2 (backcast=192, L=2H) which caused 86-100%
+# divergence. Traffic-96 requires forecast_multiplier >= 5 (backcast=480, L=5H).
+# All Traffic failures attributed to block/architecture incompatibility were actually caused
+# by this insufficient backcast horizon. See AsymWavelet Diagnostic study (2026-03-08).
 # basis_dims: eq_fcast=96, lt_fcast=94 (max(48,94)), eq_bcast=192
 #   NOTE: lt_bcast=96 collides with eq_fcast=96 → deduplicated to 3 unique values
 # Mirrors: experiments/run_wavelet_study_3_successive.py (Traffic pass)
 # 84 configs per pass × 2 passes = 168 total configs
 # Successive halving: 3 rounds → 7 / 15 / 50 epochs, keep top 33% each round
 
-experiment_name: wavelet_study_3_successive_trendae_traffic
+experiment_name: wavelet_study_3_successive_trendae_traffic_f5
 description: >
   WaveletV3 successive halving search on Traffic-96 (TrendAE backbone).
   14 wavelet families × 3 basis_dims × 2 trend_thetas_dims = 84 configs per pass.
@@ -26,6 +30,7 @@ runs:
   base_seed: 42
 
 training:
+  forecast_multiplier: 5  # L=5H required for Traffic convergence
   max_epochs: 50
   patience: 10
   learning_rate: 0.001
