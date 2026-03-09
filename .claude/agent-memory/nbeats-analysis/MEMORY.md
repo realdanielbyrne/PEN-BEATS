@@ -115,16 +115,35 @@
 - **One exception worth noting:** On Weather, TrendVAE+WaveletV3VAE (VAE-coif2-coif2, MSE=1848) beat the AELG equivalent (AELG-coif2-coif2, MSE=2132) in the same AsymWavelet study. But AELG-sym20-coif2 (MSE=1804) still beat VAE.
 - **KL divergence penalty likely too aggressive** for the residual N-BEATS architecture. The stochastic latent disrupts the precise backcast subtraction that N-BEATS relies on.
 
-## TrendWaveletAELG Pure Study (2026-03-07)
-- See `experiments/analysis/analysis_reports/trendwaveletaelg_pure_study_analysis.md`
-- **NEW Tourism-Yearly SOTA:** TrendWaveletAELG coif3_eq_bcast_td3_ld16, SMAPE=20.681 (beats prior 20.930 from TrendAELG+WaveletV3AELG Coif1)
-- **Best on M4-Yearly:** v2 db3_eq_fcast_td3_ld16 (SMAPE=13.463, +0.40% above non-AE SOTA 13.410), v1 db10_eq_fcast_td3_ld8 (SMAPE=13.506)
-- **Wavelet family is a NON-FACTOR:** Kruskal-Wallis p=0.107 with 14 families on M4. AE bottleneck homogenizes bases. 0.18 SMAPE spread across all families.
-- **bd_label matters MORE in TrendWaveletAELG** than alternating stacks: eq_fcast significantly best (p=0.017), 0.37 SMAPE spread at R3.
-- **ld=16 > ld=8** (p=0.042). But DB4+eq_fcast+ld=16 catastrophic (~76 SMAPE).
-- **Traffic-96:** 100% SMAPE=200. Worse than alternating's 86% divergence.
-- **Cross-dataset family rankings uncorrelated** (rho=-0.1). Coif3 best avg rank (1.5).
-- **Architecture recommendation:** TrendWaveletAELG preferred for short-horizon simplicity; beats alternating on Tourism.
+## TrendWaveletAE vs TrendWaveletAELG Comprehensive Study (2026-03-08)
+- See `experiments/analysis/analysis_reports/trendwavelet_ae_vs_aelg_comprehensive_analysis.md`
+- See notebook: `experiments/analysis/notebooks/trendwavelet_ae_vs_aelg_comprehensive.ipynb`
+- **3,821 rows across 9 CSV files, 4 datasets, 2 block types, 2 study versions**
+- **AELG beats AE on every dataset tested.** M4: Wilcoxon p=0.002, d=0.23 (small). Tourism: MWU p=0.010, d=0.62 (medium). Learned gate adds <0.01% params but consistent improvement.
+- **Best configs per dataset:**
+  - M4-Yearly: AELG v2 db3_eq_fcast_td3_ld16 (SMAPE=13.463, +0.40% vs non-AE SOTA 13.410)
+  - Tourism-Yearly: **AELG coif3_eq_bcast_td3_ld16 (SMAPE=20.681, SOTA)** beats prior 20.930
+  - Weather-96: AELG db3_eq_fcast_td3_ld16 (MSE=1920, high variance std=603, 3 seeds)
+  - Traffic-96: 100% divergence (ALL 80 runs SMAPE=200)
+- **Latent dim is the dominant hyperparameter** (KW p<0.001). ld=2 is catastrophic (d=0.72 vs ld=8). ld=5~ld=8 (d=0.23). ld=12 and ld=16 can improve further but introduce instability (DB4+eq_fcast+ld16 catastrophe).
+- **Wavelet family is a NON-FACTOR** for both AE (p=0.38) and AELG (p=0.11). AE bottleneck homogenizes bases. Spread <0.10 SMAPE across 14 families.
+- **Trend dim is a non-factor** on M4-Yearly (p=0.71). td=3 and td=5 identical.
+- **bd_label is marginal** for AE (p=0.096) but significant for AELG (p=0.017). eq_fcast best for both.
+- **Tourism bd_label degeneracy confirmed:** eq_fcast and lt_bcast resolve to identical bd=4, producing identical results (verified at run level).
+- **V1 vs V2:** V2 (ld=16) beats V1 (ld=8) on 6/8 matched AELG configs, but not significant (p=0.11, n=8).
+- **Architecture recommendation:** AELG preferred over AE universally. For Tourism, use unified TrendWaveletAELG. For M4 max accuracy, use non-AE Trend+WaveletV3.
+- **Key gaps:** No v1 data outside M4. AE v2 Traffic empty, AE v2 Weather 7 rows only. No TrendWaveletAE at ld=16.
+
+## Trend-Seasonality-Wavelet Comparison Study (M4-Yearly) (2026-03-08)
+- See `experiments/analysis/analysis_reports/trend_seas_wav_comparison_analysis.md`
+- See notebook: `experiments/analysis/notebooks/trend_seas_wav_comparison_insights.ipynb`
+- **200 runs, 40 configs, 5 seeds.** Trend(AE/AELG) + Second(SeasonalityAE/AELG/VAE, HaarWavAE, Coif2WavAE, HaarWavAELG, Coif2WavAELG) x I-style(2 stacks) vs alternating(10 stacks) x ld(8,12).
+- **Wavelet blocks are highly depth-sensitive (20x more than seasonality).** Wavelet I-style SMAPE=14.08 (worst), wavelet alternating SMAPE=13.54 (best). Seasonality: 13.85 vs 13.83 (negligible). Never use wavelet blocks in <6 stacks.
+- **Alternating wavelet configs are Pareto-optimal:** SMAPE 13.50 with 965K params vs seasonality's 13.54 with 11.3M params (12x more).
+- **arch_style is the dominant factor** (KW H=50.3, p<0.0001, eta^2=0.25). second_backbone significant (p=0.0001). All other factors ns.
+- **TrendAE vs TrendAELG: non-factor** (p=0.85). Haar vs Coif2: non-factor (p>0.5). ld 8 vs 12: non-factor (p=0.59).
+- **Best config:** TrendAE+HaarWaveletV3AE_Alt_ld12 (SMAPE=13.496, OWA=0.800, 965K params). Does NOT beat M4-Yearly SOTA (13.410).
+- **Most parameter-efficient sub-13.55 config to date.**
 
 ## Critical Methodology Lesson
 - **R1 (early training) data can produce misleading factor rankings.** Both ttd and bd_label showed R1 advantages that reversed or vanished at R3 convergence. Always validate hyperparameter recommendations with converged data. This affected two prior skill recommendations (ttd and bd_label).
