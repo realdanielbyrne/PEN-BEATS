@@ -5,7 +5,7 @@ Aligns our pipeline with the NHiTS evaluation protocol, then benchmarks
 our best novel block types through both NBeatsNet and NHiTSNet.
 
 Protocol differences addressed:
-  1. Z-score normalized data (train on normalized, evaluate on normalized)
+  1. Dataset-dependent normalization: Weather=Z-score, Traffic=none (0-1 scaled)
   2. 70/10/20 train/val/test split (vs our 80/20)
   3. All columns including OT target (21 Weather cols, 862 Traffic cols)
   4. MSE loss (vs our SMAPE)
@@ -112,8 +112,8 @@ LEARNING_RATE = 1e-3
 BATCH_SIZE = 256
 FORECAST_MULTIPLIER = 5   # L = 5*H
 THETAS_DIM = 5
-LATENT_DIM = 4
-BASIS_DIM = 128
+LATENT_DIM = 16            # Research-confirmed optimal (significantly better than ld=4/8)
+# BASIS_DIM is set dynamically to forecast_length (eq_fcast) per horizon
 MAX_EPOCHS = 100
 PATIENCE = 10
 N_RUNS = 8
@@ -143,10 +143,23 @@ CSV_COLUMNS = [
 # ---------------------------------------------------------------------------
 
 def get_benchmark_configs():
-    """Return the 13 benchmark configurations."""
+    """Return the 7 Tier-1 benchmark configurations.
+
+    Selection rationale (evidence-based):
+      NBeatsNet (4 configs, 10 stacks each):
+        1. GenericAELG-10          — pure generic baseline
+        2. BottleneckGenericAELG-10 — promoted; consistent convergence on Traffic
+        3. TrendAELG+Sym20V3AELG   — alternating; Sym20 is universal best wavelet
+        4. TrendWaveletAELG-10     — unified trend+wavelet block
+
+      NHiTSNet (3 configs, 3 stacks, hierarchical pooling):
+        5. NHiTS-GenericAELG                     — NHiTS generic baseline
+        6. NHiTS-TrendAELG+Coif2V3AELG+GenericAELG — Coif2 is best forecast wavelet
+        7. NHiTS-TrendWaveletAELG                — unified in NHiTS framework
+    """
     configs = []
 
-    # --- NBeatsNet configs (6) ---
+    # --- NBeatsNet configs (4) ---
     configs.append({
         "model_type": "NBeatsNet",
         "config_name": "GenericAELG-10",
@@ -155,26 +168,14 @@ def get_benchmark_configs():
     })
     configs.append({
         "model_type": "NBeatsNet",
-        "config_name": "TrendAELG+HaarV3AELG",
-        "stack_types": ["TrendAELG", "HaarWaveletV3AELG"] * 5,
+        "config_name": "BottleneckGenericAELG-10",
+        "stack_types": ["BottleneckGenericAELG"] * 10,
         "n_blocks_per_stack": 1,
     })
     configs.append({
         "model_type": "NBeatsNet",
-        "config_name": "TrendAELG+DB2V3AELG",
-        "stack_types": ["TrendAELG", "DB2WaveletV3AELG"] * 5,
-        "n_blocks_per_stack": 1,
-    })
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "TrendAELG+Coif1V3AELG",
-        "stack_types": ["TrendAELG", "Coif1WaveletV3AELG"] * 5,
-        "n_blocks_per_stack": 1,
-    })
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "TrendAELG+Symlet2V3AELG",
-        "stack_types": ["TrendAELG", "Symlet2WaveletV3AELG"] * 5,
+        "config_name": "TrendAELG+Sym20V3AELG",
+        "stack_types": ["TrendAELG", "Symlet20WaveletV3AELG"] * 5,
         "n_blocks_per_stack": 1,
     })
     configs.append({
@@ -184,7 +185,7 @@ def get_benchmark_configs():
         "n_blocks_per_stack": 1,
     })
 
-    # --- NHiTSNet configs (7) ---
+    # --- NHiTSNet configs (3) ---
     configs.append({
         "model_type": "NHiTSNet",
         "config_name": "NHiTS-GenericAELG",
@@ -195,32 +196,8 @@ def get_benchmark_configs():
     })
     configs.append({
         "model_type": "NHiTSNet",
-        "config_name": "NHiTS-TrendAELG+HaarV3AELG",
-        "stack_types": ["TrendAELG", "HaarWaveletV3AELG", "GenericAELG"],
-        "n_blocks_per_stack": 1,
-        "n_pools_kernel_size": [8, 4, 1],
-        "n_freq_downsample": [24, 12, 1],
-    })
-    configs.append({
-        "model_type": "NHiTSNet",
-        "config_name": "NHiTS-TrendAELG+DB2V3AELG",
-        "stack_types": ["TrendAELG", "DB2WaveletV3AELG", "GenericAELG"],
-        "n_blocks_per_stack": 1,
-        "n_pools_kernel_size": [8, 4, 1],
-        "n_freq_downsample": [24, 12, 1],
-    })
-    configs.append({
-        "model_type": "NHiTSNet",
-        "config_name": "NHiTS-TrendAELG+Coif1V3AELG",
-        "stack_types": ["TrendAELG", "Coif1WaveletV3AELG", "GenericAELG"],
-        "n_blocks_per_stack": 1,
-        "n_pools_kernel_size": [8, 4, 1],
-        "n_freq_downsample": [24, 12, 1],
-    })
-    configs.append({
-        "model_type": "NHiTSNet",
-        "config_name": "NHiTS-TrendAELG+Symlet2V3AELG",
-        "stack_types": ["TrendAELG", "Symlet2WaveletV3AELG", "GenericAELG"],
+        "config_name": "NHiTS-TrendAELG+Coif2V3AELG",
+        "stack_types": ["TrendAELG", "Coif2WaveletV3AELG", "GenericAELG"],
         "n_blocks_per_stack": 1,
         "n_pools_kernel_size": [8, 4, 1],
         "n_freq_downsample": [24, 12, 1],
@@ -504,6 +481,9 @@ def run_single_experiment(
     else:
         precision = "32-true"
 
+    # basis_dim = eq_fcast: match basis dimension to forecast horizon
+    basis_dim = forecast_length
+
     # Create model
     model_kwargs = dict(
         backcast_length=backcast_length,
@@ -517,7 +497,7 @@ def run_single_experiment(
         sum_losses=False,
         activation="ReLU",
         latent_dim=LATENT_DIM,
-        basis_dim=BASIS_DIM,
+        basis_dim=basis_dim,
         learning_rate=LEARNING_RATE,
         optimizer_name="Adam",
         no_val=False,
@@ -533,7 +513,11 @@ def run_single_experiment(
     model = ModelClass(**model_kwargs)
     n_params = count_parameters(model)
 
-    # Data modules — NHiTS protocol: normalize=True, val_ratio=0.1
+    # Data modules — normalize per dataset:
+    #   Weather: Z-score normalization (21 meteorological features, varied scales)
+    #   Traffic: no normalization (PeMS occupancy rates are naturally 0-1 scaled)
+    normalize = (dataset_name == "weather")
+
     train_data = dataset.train_data
     test_data = dataset.test_data
 
@@ -543,7 +527,7 @@ def run_single_experiment(
         forecast_length=forecast_length,
         batch_size=batch_size,
         no_val=False,
-        normalize=True,
+        normalize=normalize,
         val_ratio=VAL_RATIO,
     )
 
@@ -658,7 +642,7 @@ def run_single_experiment(
         "stopping_reason": stopping_reason,
         "best_val_loss": f"{best_val_loss:.8f}" if math.isfinite(best_val_loss) else "nan",
         "loss_function": LOSS,
-        "normalize": True,
+        "normalize": normalize,
         "train_ratio": TRAIN_RATIO,
         "val_ratio": VAL_RATIO,
         "include_target": True,
@@ -816,7 +800,9 @@ def main():
     print(f"  Runs/cfg:   {args.n_runs}")
     print(f"  Total jobs: {total_jobs}")
     print(f"  CSV path:   {csv_path}")
-    print(f"  Protocol:   normalize=True, train_ratio={TRAIN_RATIO}, "
+    norm_desc = ", ".join(f"{d}={'yes' if d == 'weather' else 'no'}"
+                         for d in args.dataset)
+    print(f"  Protocol:   normalize=[{norm_desc}], train_ratio={TRAIN_RATIO}, "
           f"val_ratio={VAL_RATIO}, loss={LOSS}, L=5H")
     print()
 

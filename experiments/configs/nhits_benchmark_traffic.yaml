@@ -2,11 +2,11 @@
 # NHiTS-Protocol Benchmark — Traffic Dataset
 #
 # Aligns evaluation with the NHiTS paper protocol:
-#   - Z-score normalization (train on normalized data)
+#   - No normalization (PeMS occupancy rates are naturally 0-1 scaled)
 #   - 70/10/20 train/val/test split
 #   - All 862 columns including OT target
 #   - MSE loss
-#   - L = 5*H lookback
+#   - L = 5*H lookback (critical for stability; L=2H causes divergence)
 #   - 8 runs per config (seeds 1-8)
 #   - Batch size 256
 #
@@ -26,13 +26,15 @@ dataset: traffic
 horizons: [96, 192, 336, 720]
 
 # NHiTS evaluation protocol
+# Note: Traffic (PeMS) data is naturally 0-1 scaled occupancy rates.
+# Normalization is not required (confirmed by AsymWavelet Diagnostic study).
 protocol:
-  normalize: true
+  normalize: false
   train_ratio: 0.7
   val_ratio: 0.1
   include_target: true     # 862 columns (with OT)
   loss: MSELoss
-  forecast_multiplier: 5   # L = 5*H
+  forecast_multiplier: 5   # L = 5*H (mandatory; L=2H causes divergence)
   batch_size: 256
 
 # NHiTS published baselines for comparison (Table 1)
@@ -43,61 +45,38 @@ baselines:
     Traffic-336: {mse: 0.423, mae: 0.278}
     Traffic-720: {mse: 0.461, mae: 0.299}
 
-# Block configurations to benchmark (same as Weather)
+# Tier-1 benchmark configurations (7 configs)
+# Selection rationale:
+#   NBeatsNet: GenericAELG, BottleneckGenericAELG, TrendAELG+Sym20V3AELG, TrendWaveletAELG
+#   NHiTSNet:  GenericAELG, TrendAELG+Coif2V3AELG+GenericAELG, TrendWaveletAELG
 configs:
-  # --- NBeatsNet (10-stack) ---
+  # --- NBeatsNet (10-stack, 4 configs) ---
   - name: GenericAELG-10
     model: NBeatsNet
     stack_types: ['GenericAELG'] * 10
 
-  - name: TrendAELG+HaarV3AELG
+  - name: BottleneckGenericAELG-10
     model: NBeatsNet
-    stack_types: "['TrendAELG', 'HaarWaveletV3AELG'] * 5"
+    stack_types: ['BottleneckGenericAELG'] * 10
 
-  - name: TrendAELG+DB2V3AELG
+  - name: TrendAELG+Sym20V3AELG
     model: NBeatsNet
-    stack_types: "['TrendAELG', 'DB2WaveletV3AELG'] * 5"
-
-  - name: TrendAELG+Coif1V3AELG
-    model: NBeatsNet
-    stack_types: "['TrendAELG', 'Coif1WaveletV3AELG'] * 5"
-
-  - name: TrendAELG+Symlet2V3AELG
-    model: NBeatsNet
-    stack_types: "['TrendAELG', 'Symlet2WaveletV3AELG'] * 5"
+    stack_types: "['TrendAELG', 'Symlet20WaveletV3AELG'] * 5"
 
   - name: TrendWaveletAELG-10
     model: NBeatsNet
     stack_types: ['TrendWaveletAELG'] * 10
 
-  # --- NHiTSNet (3-stack with hierarchical pooling) ---
+  # --- NHiTSNet (3-stack with hierarchical pooling, 3 configs) ---
   - name: NHiTS-GenericAELG
     model: NHiTSNet
     stack_types: ['GenericAELG', 'GenericAELG', 'GenericAELG']
     n_pools_kernel_size: [8, 4, 1]
     n_freq_downsample: [24, 12, 1]
 
-  - name: NHiTS-TrendAELG+HaarV3AELG
+  - name: NHiTS-TrendAELG+Coif2V3AELG
     model: NHiTSNet
-    stack_types: ['TrendAELG', 'HaarWaveletV3AELG', 'GenericAELG']
-    n_pools_kernel_size: [8, 4, 1]
-    n_freq_downsample: [24, 12, 1]
-
-  - name: NHiTS-TrendAELG+DB2V3AELG
-    model: NHiTSNet
-    stack_types: ['TrendAELG', 'DB2WaveletV3AELG', 'GenericAELG']
-    n_pools_kernel_size: [8, 4, 1]
-    n_freq_downsample: [24, 12, 1]
-
-  - name: NHiTS-TrendAELG+Coif1V3AELG
-    model: NHiTSNet
-    stack_types: ['TrendAELG', 'Coif1WaveletV3AELG', 'GenericAELG']
-    n_pools_kernel_size: [8, 4, 1]
-    n_freq_downsample: [24, 12, 1]
-
-  - name: NHiTS-TrendAELG+Symlet2V3AELG
-    model: NHiTSNet
-    stack_types: ['TrendAELG', 'Symlet2WaveletV3AELG', 'GenericAELG']
+    stack_types: ['TrendAELG', 'Coif2WaveletV3AELG', 'GenericAELG']
     n_pools_kernel_size: [8, 4, 1]
     n_freq_downsample: [24, 12, 1]
 
@@ -120,5 +99,5 @@ training:
 
 block_params:
   thetas_dim: 5
-  latent_dim: 4
-  basis_dim: 128
+  latent_dim: 16           # Research-confirmed optimal (ld=16 >> ld=4/8)
+  basis_dim: eq_fcast      # Dynamic: set to forecast_length per horizon
