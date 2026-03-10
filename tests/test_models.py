@@ -68,6 +68,11 @@ class TestWidthSelection:
         block = model.stacks[0][0]
         assert block.units == 32
 
+    def test_trend_wavelet_uses_t_width(self):
+        model = _make_model(["TrendWavelet"], g_width=64, s_width=128, t_width=32, ae_width=96)
+        block = model.stacks[0][0]
+        assert block.units == 32
+
     def test_autoencoder_uses_ae_width(self):
         model = _make_model(["AutoEncoder"], g_width=64, s_width=128, t_width=32, ae_width=96)
         block = model.stacks[0][0]
@@ -374,7 +379,7 @@ class TestForecastBasisDim:
 # --- trend_thetas_dim tests ---
 
 class TestTrendThetasDim:
-    """Verify trend_thetas_dim routes only to Trend/TrendAE blocks."""
+    """Verify trend_thetas_dim routes only to trend-family blocks."""
 
     def test_trend_thetas_dim_overrides_trend_block(self):
         """Trend block should use trend_thetas_dim instead of global thetas_dim."""
@@ -390,6 +395,14 @@ class TestTrendThetasDim:
         block = model.stacks[0][0]
         assert block.backcast_linear.out_features == 2
         assert block.forecast_linear.out_features == 2
+
+    def test_trend_thetas_dim_overrides_trend_wavelet_block(self):
+        """TrendWavelet should use trend_thetas_dim instead of global thetas_dim."""
+        model = _make_model(["TrendWavelet"], t_width=32, basis_dim=7, trend_thetas_dim=2)
+        block = model.stacks[0][0]
+        assert block.trend_dim == 2
+        assert block.backcast_linear.out_features == 2 + min(7, 20)
+        assert block.forecast_linear.out_features == 2 + min(7, 5)
 
     def test_trend_thetas_dim_does_not_affect_bottleneck_generic(self):
         """BottleneckGeneric block should still use global thetas_dim."""
@@ -447,7 +460,13 @@ class TestTrendThetasDim:
 # --- wavelet_type forwarding tests ---
 
 class TestWaveletTypeForwarding:
-    """Verify wavelet_type is forwarded to TrendWaveletAE/TrendWaveletAELG blocks."""
+    """Verify wavelet_type is forwarded to TrendWavelet-family blocks."""
+
+    def test_wavelet_type_forwarded_to_trendwavelet(self):
+        """TrendWavelet blocks should receive the wavelet_type parameter."""
+        model = _make_model(["TrendWavelet"], t_width=64, wavelet_type='haar')
+        block = model.stacks[0][0]
+        assert block.wavelet_type == 'haar'
 
     def test_wavelet_type_forwarded_to_trendwaveletae(self):
         """TrendWaveletAE blocks should receive the wavelet_type parameter."""
@@ -463,13 +482,13 @@ class TestWaveletTypeForwarding:
 
     def test_wavelet_type_default_is_db3(self):
         """Default wavelet_type should be 'db3'."""
-        model = _make_model(["TrendWaveletAE"], g_width=64)
+        model = _make_model(["TrendWavelet"], t_width=64)
         block = model.stacks[0][0]
         assert block.wavelet_type == 'db3'
 
     def test_wavelet_type_forward_pass(self):
         """Forward pass works with non-default wavelet_type."""
-        model = _make_model(["TrendWaveletAE"] * 2, g_width=64, wavelet_type='haar')
+        model = _make_model(["TrendWavelet"] * 2, t_width=64, wavelet_type='haar')
         x = torch.randn(4, 20)
         backcast, forecast = model(x)
         assert backcast.shape == (4, 20)
@@ -712,6 +731,17 @@ class TestNHiTSNetParameters:
         assert block.backcast_linear.out_features == 3
         assert block.forecast_linear.out_features == 3
 
+    def test_trend_wavelet_thetas_dim_routing(self):
+        """TrendWavelet blocks in NHiTSNet should respect trend_thetas_dim."""
+        model = _make_nhits(
+            ["TrendWavelet"], t_width=32, basis_dim=8, trend_thetas_dim=3,
+            n_pools_kernel_size=[1], n_freq_downsample=[1],
+        )
+        block = model.stacks[0][0]
+        assert block.trend_dim == 3
+        assert block.backcast_linear.out_features == 3 + min(8, 24)
+        assert block.forecast_linear.out_features == 3 + min(8, 6)
+
 
 
 # --- Asymmetric wavelet forwarding tests ---
@@ -746,6 +776,15 @@ class TestAsymmetricWaveletForwarding:
         assert block.backcast_wavelet_type == "sym20"
         assert block.forecast_wavelet_type == "coif2"
 
+    def test_nbeats_forwards_asymmetric_wavelet_to_trendwavelet(self):
+        """TrendWavelet blocks should receive asymmetric wavelet params."""
+        model = _make_model(
+            ["TrendWavelet"], t_width=64,
+            backcast_wavelet_type="sym20", forecast_wavelet_type="coif2")
+        block = model.stacks[0][0]
+        assert block.backcast_wavelet_type == "sym20"
+        assert block.forecast_wavelet_type == "coif2"
+
     def test_nbeats_asymmetric_forward_pass(self):
         """Forward pass with asymmetric wavelet params produces correct shapes."""
         model = _make_model(
@@ -769,6 +808,16 @@ class TestAsymmetricWaveletForwarding:
         """NHiTSNet should forward asymmetric wavelet params to wavelet blocks."""
         model = _make_nhits(
             ["WaveletV3AELG"], g_width=64,
+            n_pools_kernel_size=[1], n_freq_downsample=[1],
+            backcast_wavelet_type="sym20", forecast_wavelet_type="coif2")
+        block = model.stacks[0][0]
+        assert block.backcast_wavelet_type == "sym20"
+        assert block.forecast_wavelet_type == "coif2"
+
+    def test_nhits_forwards_asymmetric_wavelet_to_trendwavelet(self):
+        """NHiTSNet should forward asymmetric wavelet params to TrendWavelet."""
+        model = _make_nhits(
+            ["TrendWavelet"], t_width=64,
             n_pools_kernel_size=[1], n_freq_downsample=[1],
             backcast_wavelet_type="sym20", forecast_wavelet_type="coif2")
         block = model.stacks[0][0]

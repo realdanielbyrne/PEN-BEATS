@@ -1158,6 +1158,187 @@ class TrendAE(AERootBlock):
     return backcast, forecast
 
 
+class TrendWavelet(RootBlock):
+  def __init__(self, units, backcast_length, forecast_length,
+               trend_dim=4, wavelet_dim=16, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g=False,
+               wavelet_type='db3', forecast_basis_dim=None,
+               backcast_wavelet_type=None, forecast_wavelet_type=None):
+    """TrendWavelet merges polynomial and orthonormal DWT basis expansions.
+
+    Mirrors TrendWaveletAE/TrendWaveletAELG after the shared backbone, but uses
+    the standard RootBlock trunk instead of an AE-style bottleneck.
+    """
+    super(TrendWavelet, self).__init__(backcast_length, units, activation)
+    self.trend_dim = trend_dim
+    self.active_g = active_g
+    self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
+
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
+
+    eff_back_wave = min(wavelet_dim, backcast_length - min(basis_offset, backcast_length - 1))
+    fore_wavelet_dim = forecast_basis_dim if forecast_basis_dim is not None else wavelet_dim
+    eff_fore_wave = min(fore_wavelet_dim, forecast_length - min(basis_offset, forecast_length - 1))
+
+    total_backcast_dim = trend_dim + eff_back_wave
+    total_forecast_dim = trend_dim + eff_fore_wave
+
+    if share_weights and total_backcast_dim == total_forecast_dim:
+      self.backcast_linear = self.forecast_linear = nn.Linear(units, total_backcast_dim)
+    else:
+      self.backcast_linear = nn.Linear(units, total_backcast_dim)
+      self.forecast_linear = nn.Linear(units, total_forecast_dim)
+
+    self.backcast_trend_g = _TrendGenerator(trend_dim, backcast_length)
+    self.forecast_trend_g = _TrendGenerator(trend_dim, forecast_length)
+
+    self.backcast_wavelet_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
+                                                  basis_dim=eff_back_wave, basis_offset=basis_offset)
+    self.forecast_wavelet_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
+                                                  basis_dim=eff_fore_wave, basis_offset=basis_offset)
+
+  def forward(self, x):
+    x = super(TrendWavelet, self).forward(x)
+
+    backcast_coeffs = self.backcast_linear(x)
+    forecast_coeffs = self.forecast_linear(x)
+
+    backcast_trend_theta = backcast_coeffs[:, :self.trend_dim]
+    backcast_wavelet_theta = backcast_coeffs[:, self.trend_dim:]
+    forecast_trend_theta = forecast_coeffs[:, :self.trend_dim]
+    forecast_wavelet_theta = forecast_coeffs[:, self.trend_dim:]
+
+    backcast = self.backcast_trend_g(backcast_trend_theta) + self.backcast_wavelet_g(backcast_wavelet_theta)
+    forecast = self.forecast_trend_g(forecast_trend_theta) + self.forecast_wavelet_g(forecast_wavelet_theta)
+
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+
+    return backcast, forecast
+
+
+class TrendWaveletGeneric(RootBlock):
+  def __init__(self, units, backcast_length, forecast_length,
+               trend_dim=4, wavelet_dim=16, generic_dim=5, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g=False,
+               wavelet_type='db3', forecast_basis_dim=None,
+               backcast_wavelet_type=None, forecast_wavelet_type=None):
+    """Three-way additive decomposition: trend + wavelet + learned generic basis.
+
+    Extends TrendWavelet by adding a third parallel path — a learned (data-driven)
+    basis expansion identical to BottleneckGeneric's ``backcast_g``/``forecast_g``.
+    The three coefficient vectors are produced by splitting a single linear head,
+    then each set is expanded through its respective basis and summed:
+
+        output = trend_component + wavelet_component + generic_component
+
+    The trend and wavelet bases are frozen (Vandermonde polynomials and orthonormal
+    DWT respectively), while the generic basis is a trainable ``nn.Linear`` (no bias)
+    providing a rank-``generic_dim`` learned factorization.
+
+    Args:
+        units (int): Width of the fully connected layers in the RootBlock backbone.
+        backcast_length (int): Length of the historical input sequence.
+        forecast_length (int): Length of the forecast horizon.
+        trend_dim (int, optional): Polynomial degree (number of Vandermonde basis vectors).
+            Defaults to 4.
+        wavelet_dim (int, optional): Number of DWT basis rows. Defaults to 16.
+        generic_dim (int, optional): Rank of the learned generic basis expansion.
+            Defaults to 5.
+        basis_offset (int, optional): Row offset into SVD-ordered DWT basis for
+            frequency-band selection.  0 = lowest/smoothest.  Defaults to 0.
+        share_weights (bool, optional): Share the projection head between backcast and
+            forecast paths when their total coefficient dimensions match. Defaults to False.
+        activation (str, optional): Activation function for the backbone. Defaults to 'ReLU'.
+        active_g (bool or str, optional): Apply activation after basis expansion.
+            False = no activation.  True = both paths.
+            'backcast'/'forecast' = single path.  Defaults to False.
+        wavelet_type (str, optional): PyWavelets wavelet family string. Defaults to 'db3'.
+        forecast_basis_dim (int, optional): Override for wavelet basis dim on the forecast
+            path. Defaults to None (both paths use wavelet_dim).
+        backcast_wavelet_type (str, optional): Override wavelet family for the backcast
+            path only.  Defaults to None (uses ``wavelet_type``).
+        forecast_wavelet_type (str, optional): Override wavelet family for the forecast
+            path only.  Defaults to None (uses ``wavelet_type``).
+    """
+    super(TrendWaveletGeneric, self).__init__(backcast_length, units, activation)
+    self.trend_dim = trend_dim
+    self.generic_dim = generic_dim
+    self.active_g = active_g
+    self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
+
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
+
+    eff_back_wave = min(wavelet_dim, backcast_length - min(basis_offset, backcast_length - 1))
+    fore_wavelet_dim = forecast_basis_dim if forecast_basis_dim is not None else wavelet_dim
+    eff_fore_wave = min(fore_wavelet_dim, forecast_length - min(basis_offset, forecast_length - 1))
+    self.eff_back_wave = eff_back_wave
+    self.eff_fore_wave = eff_fore_wave
+
+    total_backcast_dim = trend_dim + eff_back_wave + generic_dim
+    total_forecast_dim = trend_dim + eff_fore_wave + generic_dim
+
+    if share_weights and total_backcast_dim == total_forecast_dim:
+      self.backcast_linear = self.forecast_linear = nn.Linear(units, total_backcast_dim)
+    else:
+      self.backcast_linear = nn.Linear(units, total_backcast_dim)
+      self.forecast_linear = nn.Linear(units, total_forecast_dim)
+
+    # Frozen polynomial (Vandermonde) basis generators
+    self.backcast_trend_g = _TrendGenerator(trend_dim, backcast_length)
+    self.forecast_trend_g = _TrendGenerator(trend_dim, forecast_length)
+
+    # Frozen orthonormal DWT basis generators
+    self.backcast_wavelet_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
+                                                  basis_dim=eff_back_wave, basis_offset=basis_offset)
+    self.forecast_wavelet_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
+                                                  basis_dim=eff_fore_wave, basis_offset=basis_offset)
+
+    # Learned (trainable) generic basis expansion — rank-d factorized matrix
+    self.backcast_generic_g = nn.Linear(generic_dim, backcast_length, bias=False)
+    self.forecast_generic_g = nn.Linear(generic_dim, forecast_length, bias=False)
+
+  def forward(self, x):
+    x = super(TrendWaveletGeneric, self).forward(x)
+
+    backcast_coeffs = self.backcast_linear(x)
+    forecast_coeffs = self.forecast_linear(x)
+
+    # Three-way split: trend | wavelet | generic
+    b_trend   = backcast_coeffs[:, :self.trend_dim]
+    b_wavelet = backcast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_back_wave]
+    b_generic = backcast_coeffs[:, self.trend_dim + self.eff_back_wave:]
+
+    f_trend   = forecast_coeffs[:, :self.trend_dim]
+    f_wavelet = forecast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_fore_wave]
+    f_generic = forecast_coeffs[:, self.trend_dim + self.eff_fore_wave:]
+
+    # Additive decomposition: structured + structured + learned
+    backcast = (self.backcast_trend_g(b_trend)
+              + self.backcast_wavelet_g(b_wavelet)
+              + self.backcast_generic_g(b_generic))
+    forecast = (self.forecast_trend_g(f_trend)
+              + self.forecast_wavelet_g(f_wavelet)
+              + self.forecast_generic_g(f_generic))
+
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+
+    return backcast, forecast
+
+
 class TrendWaveletAE(AERootBlock):
   def __init__(self, units, backcast_length, forecast_length,
                trend_dim=4, wavelet_dim=16, basis_offset=0,
@@ -1363,6 +1544,263 @@ class TrendWaveletAELG(AERootBlockLG):
         forecast = self.activation(forecast)
 
     return backcast, forecast
+
+
+class TrendWaveletGenericAE(AERootBlock):
+  def __init__(self, units, backcast_length, forecast_length,
+               trend_dim=4, wavelet_dim=16, generic_dim=5, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g=False,
+               wavelet_type='db3', latent_dim=5, forecast_basis_dim=None,
+               backcast_wavelet_type=None, forecast_wavelet_type=None):
+    """Three-way additive decomposition (trend + wavelet + generic) with AE backbone.
+
+    Extends TrendWaveletAE by adding a third parallel path — a learned (data-driven)
+    basis expansion (rank-``generic_dim`` ``nn.Linear``, no bias).  The three coefficient
+    vectors are produced by splitting a single linear head, expanded through their
+    respective bases, and summed.
+
+    Args:
+        units (int): Width of the fully connected layers in the AE backbone.
+        backcast_length (int): Length of the historical input sequence.
+        forecast_length (int): Length of the forecast horizon.
+        trend_dim (int, optional): Polynomial degree. Defaults to 4.
+        wavelet_dim (int, optional): Number of DWT basis rows. Defaults to 16.
+        generic_dim (int, optional): Rank of the learned generic basis. Defaults to 5.
+        basis_offset (int, optional): DWT basis row offset. Defaults to 0.
+        share_weights (bool, optional): Share projection heads when dims match. Defaults to False.
+        activation (str, optional): Activation function. Defaults to 'ReLU'.
+        active_g (bool or str, optional): Activation after basis expansion. Defaults to False.
+        wavelet_type (str, optional): PyWavelets wavelet family. Defaults to 'db3'.
+        latent_dim (int, optional): AE bottleneck dimensionality. Defaults to 5.
+        forecast_basis_dim (int, optional): Override wavelet basis dim for forecast. Defaults to None.
+        backcast_wavelet_type (str, optional): Override wavelet family for backcast. Defaults to None.
+        forecast_wavelet_type (str, optional): Override wavelet family for forecast. Defaults to None.
+    """
+    super(TrendWaveletGenericAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.trend_dim = trend_dim
+    self.generic_dim = generic_dim
+    self.active_g = active_g
+    self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
+
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
+
+    eff_back_wave = min(wavelet_dim, backcast_length - min(basis_offset, backcast_length - 1))
+    fore_wavelet_dim = forecast_basis_dim if forecast_basis_dim is not None else wavelet_dim
+    eff_fore_wave = min(fore_wavelet_dim, forecast_length - min(basis_offset, forecast_length - 1))
+    self.eff_back_wave = eff_back_wave
+    self.eff_fore_wave = eff_fore_wave
+
+    total_backcast_dim = trend_dim + eff_back_wave + generic_dim
+    total_forecast_dim = trend_dim + eff_fore_wave + generic_dim
+
+    if share_weights and total_backcast_dim == total_forecast_dim:
+      self.backcast_linear = self.forecast_linear = nn.Linear(units, total_backcast_dim)
+    else:
+      self.backcast_linear = nn.Linear(units, total_backcast_dim)
+      self.forecast_linear = nn.Linear(units, total_forecast_dim)
+
+    self.backcast_trend_g = _TrendGenerator(trend_dim, backcast_length)
+    self.forecast_trend_g = _TrendGenerator(trend_dim, forecast_length)
+
+    self.backcast_wavelet_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
+                                                   basis_dim=eff_back_wave, basis_offset=basis_offset)
+    self.forecast_wavelet_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
+                                                   basis_dim=eff_fore_wave, basis_offset=basis_offset)
+
+    self.backcast_generic_g = nn.Linear(generic_dim, backcast_length, bias=False)
+    self.forecast_generic_g = nn.Linear(generic_dim, forecast_length, bias=False)
+
+  def forward(self, x):
+    x = super(TrendWaveletGenericAE, self).forward(x)
+
+    backcast_coeffs = self.backcast_linear(x)
+    forecast_coeffs = self.forecast_linear(x)
+
+    b_trend   = backcast_coeffs[:, :self.trend_dim]
+    b_wavelet = backcast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_back_wave]
+    b_generic = backcast_coeffs[:, self.trend_dim + self.eff_back_wave:]
+
+    f_trend   = forecast_coeffs[:, :self.trend_dim]
+    f_wavelet = forecast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_fore_wave]
+    f_generic = forecast_coeffs[:, self.trend_dim + self.eff_fore_wave:]
+
+    backcast = (self.backcast_trend_g(b_trend)
+              + self.backcast_wavelet_g(b_wavelet)
+              + self.backcast_generic_g(b_generic))
+    forecast = (self.forecast_trend_g(f_trend)
+              + self.forecast_wavelet_g(f_wavelet)
+              + self.forecast_generic_g(f_generic))
+
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+
+    return backcast, forecast
+
+
+class TrendWaveletGenericAELG(AERootBlockLG):
+  def __init__(self, units, backcast_length, forecast_length,
+               trend_dim=4, wavelet_dim=16, generic_dim=5, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g=False,
+               wavelet_type='db3', latent_dim=5, forecast_basis_dim=None,
+               backcast_wavelet_type=None, forecast_wavelet_type=None):
+    """Three-way additive decomposition (trend + wavelet + generic) with Learned-Gate AE backbone.
+
+    Extends TrendWaveletAELG by adding a third parallel path — a learned generic basis.
+
+    Args: same as TrendWaveletGenericAE.
+    """
+    super(TrendWaveletGenericAELG, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.trend_dim = trend_dim
+    self.generic_dim = generic_dim
+    self.active_g = active_g
+    self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
+
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
+
+    eff_back_wave = min(wavelet_dim, backcast_length - min(basis_offset, backcast_length - 1))
+    fore_wavelet_dim = forecast_basis_dim if forecast_basis_dim is not None else wavelet_dim
+    eff_fore_wave = min(fore_wavelet_dim, forecast_length - min(basis_offset, forecast_length - 1))
+    self.eff_back_wave = eff_back_wave
+    self.eff_fore_wave = eff_fore_wave
+
+    total_backcast_dim = trend_dim + eff_back_wave + generic_dim
+    total_forecast_dim = trend_dim + eff_fore_wave + generic_dim
+
+    if share_weights and total_backcast_dim == total_forecast_dim:
+      self.backcast_linear = self.forecast_linear = nn.Linear(units, total_backcast_dim)
+    else:
+      self.backcast_linear = nn.Linear(units, total_backcast_dim)
+      self.forecast_linear = nn.Linear(units, total_forecast_dim)
+
+    self.backcast_trend_g = _TrendGenerator(trend_dim, backcast_length)
+    self.forecast_trend_g = _TrendGenerator(trend_dim, forecast_length)
+
+    self.backcast_wavelet_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
+                                                   basis_dim=eff_back_wave, basis_offset=basis_offset)
+    self.forecast_wavelet_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
+                                                   basis_dim=eff_fore_wave, basis_offset=basis_offset)
+
+    self.backcast_generic_g = nn.Linear(generic_dim, backcast_length, bias=False)
+    self.forecast_generic_g = nn.Linear(generic_dim, forecast_length, bias=False)
+
+  def forward(self, x):
+    x = super(TrendWaveletGenericAELG, self).forward(x)
+
+    backcast_coeffs = self.backcast_linear(x)
+    forecast_coeffs = self.forecast_linear(x)
+
+    b_trend   = backcast_coeffs[:, :self.trend_dim]
+    b_wavelet = backcast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_back_wave]
+    b_generic = backcast_coeffs[:, self.trend_dim + self.eff_back_wave:]
+
+    f_trend   = forecast_coeffs[:, :self.trend_dim]
+    f_wavelet = forecast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_fore_wave]
+    f_generic = forecast_coeffs[:, self.trend_dim + self.eff_fore_wave:]
+
+    backcast = (self.backcast_trend_g(b_trend)
+              + self.backcast_wavelet_g(b_wavelet)
+              + self.backcast_generic_g(b_generic))
+    forecast = (self.forecast_trend_g(f_trend)
+              + self.forecast_wavelet_g(f_wavelet)
+              + self.forecast_generic_g(f_generic))
+
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+
+    return backcast, forecast
+
+
+class TrendWaveletGenericVAE(AERootBlockVAE):
+  def __init__(self, units, backcast_length, forecast_length,
+               trend_dim=4, wavelet_dim=16, generic_dim=5, basis_offset=0,
+               share_weights=False, activation='ReLU', active_g=False,
+               wavelet_type='db3', latent_dim=5, forecast_basis_dim=None,
+               backcast_wavelet_type=None, forecast_wavelet_type=None):
+    """Three-way additive decomposition (trend + wavelet + generic) with VAE backbone.
+
+    Extends TrendWaveletGenericAE with the variational AE backbone (reparameterization
+    trick). KL loss is stored in ``self.kl_loss`` and collected by ``NBeatsNet.training_step()``.
+
+    Args: same as TrendWaveletGenericAE.
+    """
+    super(TrendWaveletGenericVAE, self).__init__(backcast_length, units, activation, latent_dim=latent_dim)
+    self.trend_dim = trend_dim
+    self.generic_dim = generic_dim
+    self.active_g = active_g
+    self.wavelet_type = wavelet_type
+    self.backcast_wavelet_type = backcast_wavelet_type
+    self.forecast_wavelet_type = forecast_wavelet_type
+
+    eff_back_wavelet = backcast_wavelet_type if backcast_wavelet_type is not None else wavelet_type
+    eff_fore_wavelet = forecast_wavelet_type if forecast_wavelet_type is not None else wavelet_type
+
+    eff_back_wave = min(wavelet_dim, backcast_length - min(basis_offset, backcast_length - 1))
+    fore_wavelet_dim = forecast_basis_dim if forecast_basis_dim is not None else wavelet_dim
+    eff_fore_wave = min(fore_wavelet_dim, forecast_length - min(basis_offset, forecast_length - 1))
+    self.eff_back_wave = eff_back_wave
+    self.eff_fore_wave = eff_fore_wave
+
+    total_backcast_dim = trend_dim + eff_back_wave + generic_dim
+    total_forecast_dim = trend_dim + eff_fore_wave + generic_dim
+
+    if share_weights and total_backcast_dim == total_forecast_dim:
+      self.backcast_linear = self.forecast_linear = nn.Linear(units, total_backcast_dim)
+    else:
+      self.backcast_linear = nn.Linear(units, total_backcast_dim)
+      self.forecast_linear = nn.Linear(units, total_forecast_dim)
+
+    self.backcast_trend_g = _TrendGenerator(trend_dim, backcast_length)
+    self.forecast_trend_g = _TrendGenerator(trend_dim, forecast_length)
+
+    self.backcast_wavelet_g = _WaveletGeneratorV3(backcast_length, wavelet_type=eff_back_wavelet,
+                                                   basis_dim=eff_back_wave, basis_offset=basis_offset)
+    self.forecast_wavelet_g = _WaveletGeneratorV3(forecast_length, wavelet_type=eff_fore_wavelet,
+                                                   basis_dim=eff_fore_wave, basis_offset=basis_offset)
+
+    self.backcast_generic_g = nn.Linear(generic_dim, backcast_length, bias=False)
+    self.forecast_generic_g = nn.Linear(generic_dim, forecast_length, bias=False)
+
+  def forward(self, x):
+    x = super(TrendWaveletGenericVAE, self).forward(x)
+
+    backcast_coeffs = self.backcast_linear(x)
+    forecast_coeffs = self.forecast_linear(x)
+
+    b_trend   = backcast_coeffs[:, :self.trend_dim]
+    b_wavelet = backcast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_back_wave]
+    b_generic = backcast_coeffs[:, self.trend_dim + self.eff_back_wave:]
+
+    f_trend   = forecast_coeffs[:, :self.trend_dim]
+    f_wavelet = forecast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_fore_wave]
+    f_generic = forecast_coeffs[:, self.trend_dim + self.eff_fore_wave:]
+
+    backcast = (self.backcast_trend_g(b_trend)
+              + self.backcast_wavelet_g(b_wavelet)
+              + self.backcast_generic_g(b_generic))
+    forecast = (self.forecast_trend_g(f_trend)
+              + self.forecast_wavelet_g(f_wavelet)
+              + self.forecast_generic_g(f_generic))
+
+    if self.active_g:
+      if self.active_g != 'forecast':
+        backcast = self.activation(backcast)
+      if self.active_g != 'backcast':
+        forecast = self.activation(forecast)
+
+    return backcast, forecast
+
 
 class SeasonalityAE(AERootBlock):
   def __init__(self, units, backcast_length, forecast_length,  thetas_dim=5,

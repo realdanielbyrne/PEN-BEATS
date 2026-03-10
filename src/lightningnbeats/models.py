@@ -170,6 +170,7 @@ class NBeatsNet(_NBeatsBase):
       backcast_wavelet_type:str = None,
       forecast_wavelet_type:str = None,
       trend_thetas_dim:int | None = 3,
+      generic_dim:int = 5,
       lr_scheduler_config:dict = None,
       skip_distance:int = 0,
       skip_alpha: float | str = 0.0,
@@ -330,6 +331,7 @@ class NBeatsNet(_NBeatsBase):
     self.backcast_wavelet_type = backcast_wavelet_type
     self.forecast_wavelet_type = forecast_wavelet_type
     self.trend_thetas_dim = self.thetas_dim if trend_thetas_dim is None else trend_thetas_dim
+    self.generic_dim = generic_dim
     self.skip_distance = skip_distance
     self.skip_alpha = skip_alpha
 
@@ -376,7 +378,9 @@ class NBeatsNet(_NBeatsBase):
           elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityVAE",
                               "SeasonalityVAE2"]:
             units = self.s_width
-          elif stack_type in ["Trend", "TrendAE", "TrendAELG", "TrendVAE", "TrendVAE2"]:
+          elif stack_type in ["Trend", "TrendAE", "TrendWavelet", "TrendAELG", "TrendVAE", "TrendVAE2",
+                              "TrendWaveletGeneric", "TrendWaveletGenericAE",
+                              "TrendWaveletGenericAELG", "TrendWaveletGenericVAE"]:
             units = self.t_width
           elif stack_type in ["AutoEncoder", "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderVAE",
                               "VAE", "VAE2"]:
@@ -385,7 +389,9 @@ class NBeatsNet(_NBeatsBase):
             units = self.g_width
 
           # Use trend_thetas_dim for Trend/TrendAE when set, else global thetas_dim
-          if stack_type in ("Trend", "TrendAE", "TrendAELG", "TrendVAE", "TrendVAE2"):
+          if stack_type in ("Trend", "TrendAE", "TrendWavelet", "TrendAELG", "TrendVAE", "TrendVAE2",
+                          "TrendWaveletGeneric", "TrendWaveletGenericAE",
+                          "TrendWaveletGenericAELG", "TrendWaveletGenericVAE"):
             effective_td = self.trend_thetas_dim
           else:
             effective_td = self.thetas_dim
@@ -400,11 +406,45 @@ class NBeatsNet(_NBeatsBase):
               # VAE2 derivative (non-wavelet) blocks
               "GenericVAE2", "TrendVAE2", "SeasonalityVAE2", "VAE2",
           )
-          if stack_type in ("TrendWaveletAE", "TrendWaveletAELG"):
+          if stack_type == "TrendWavelet":
             block = getattr(b, stack_type)(
                 units, self.backcast_length, self.forecast_length,
                 trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
                 basis_offset=effective_offset,
+                share_weights=self.share_weights, activation=self.activation,
+                active_g=self.active_g,
+                forecast_basis_dim=self.forecast_basis_dim,
+                wavelet_type=self.wavelet_type,
+                backcast_wavelet_type=self.backcast_wavelet_type,
+                forecast_wavelet_type=self.forecast_wavelet_type)
+          elif stack_type == "TrendWaveletGeneric":
+            block = getattr(b, stack_type)(
+                units, self.backcast_length, self.forecast_length,
+                trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
+                generic_dim=self.generic_dim, basis_offset=effective_offset,
+                share_weights=self.share_weights, activation=self.activation,
+                active_g=self.active_g,
+                forecast_basis_dim=self.forecast_basis_dim,
+                wavelet_type=self.wavelet_type,
+                backcast_wavelet_type=self.backcast_wavelet_type,
+                forecast_wavelet_type=self.forecast_wavelet_type)
+          elif stack_type in ("TrendWaveletAE", "TrendWaveletAELG"):
+            block = getattr(b, stack_type)(
+                units, self.backcast_length, self.forecast_length,
+                trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
+                basis_offset=effective_offset,
+                share_weights=self.share_weights, activation=self.activation,
+                active_g=self.active_g, latent_dim=self.latent_dim,
+                forecast_basis_dim=self.forecast_basis_dim,
+                wavelet_type=self.wavelet_type,
+                backcast_wavelet_type=self.backcast_wavelet_type,
+                forecast_wavelet_type=self.forecast_wavelet_type)
+          elif stack_type in ("TrendWaveletGenericAE", "TrendWaveletGenericAELG",
+                              "TrendWaveletGenericVAE"):
+            block = getattr(b, stack_type)(
+                units, self.backcast_length, self.forecast_length,
+                trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
+                generic_dim=self.generic_dim, basis_offset=effective_offset,
                 share_weights=self.share_weights, activation=self.activation,
                 active_g=self.active_g, latent_dim=self.latent_dim,
                 forecast_basis_dim=self.forecast_basis_dim,
@@ -594,6 +634,7 @@ class NHiTSNet(_NBeatsBase):
       backcast_wavelet_type: str = None,
       forecast_wavelet_type: str = None,
       trend_thetas_dim: int | None = 3,
+      generic_dim: int = 5,
       lr_scheduler_config: dict = None,
       skip_distance: int = 0,
       skip_alpha: float | str = 0.0,
@@ -662,6 +703,7 @@ class NHiTSNet(_NBeatsBase):
     self.backcast_wavelet_type = backcast_wavelet_type
     self.forecast_wavelet_type = forecast_wavelet_type
     self.trend_thetas_dim = self.thetas_dim if trend_thetas_dim is None else trend_thetas_dim
+    self.generic_dim = generic_dim
     self.skip_distance = skip_distance
     self.skip_alpha = skip_alpha
 
@@ -742,7 +784,9 @@ class NHiTSNet(_NBeatsBase):
           units = self.g_width
         elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityVAE"]:
           units = self.s_width
-        elif stack_type in ["Trend", "TrendAE", "TrendAELG", "TrendVAE"]:
+        elif stack_type in ["Trend", "TrendAE", "TrendWavelet", "TrendAELG", "TrendVAE",
+                            "TrendWaveletGeneric", "TrendWaveletGenericAE",
+                            "TrendWaveletGenericAELG", "TrendWaveletGenericVAE"]:
           units = self.t_width
         elif stack_type in ["AutoEncoder", "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderVAE", "VAE"]:
           units = self.ae_width
@@ -750,17 +794,56 @@ class NHiTSNet(_NBeatsBase):
           units = self.g_width
 
         # Trend blocks use trend_thetas_dim; all others use thetas_dim
-        if stack_type in ("Trend", "TrendAE", "TrendAELG", "TrendVAE"):
+        if stack_type in ("Trend", "TrendAE", "TrendWavelet", "TrendAELG", "TrendVAE",
+                         "TrendWaveletGeneric", "TrendWaveletGenericAE",
+                         "TrendWaveletGenericAELG", "TrendWaveletGenericVAE"):
           effective_td = self.trend_thetas_dim
         else:
           effective_td = self.thetas_dim
 
         # --- Block instantiation (same dispatch as NBeatsNet.create_stack) ---
-        if stack_type in ("TrendWaveletAE", "TrendWaveletAELG"):
+        if stack_type == "TrendWavelet":
           block = getattr(b, stack_type)(
               units, effective_backcast_length, effective_forecast_length,
               trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
               basis_offset=effective_offset,
+              share_weights=self.share_weights, activation=self.activation,
+              active_g=self.active_g,
+              forecast_basis_dim=self.forecast_basis_dim,
+              wavelet_type=self.wavelet_type,
+              backcast_wavelet_type=self.backcast_wavelet_type,
+              forecast_wavelet_type=self.forecast_wavelet_type,
+          )
+        elif stack_type == "TrendWaveletGeneric":
+          block = getattr(b, stack_type)(
+              units, effective_backcast_length, effective_forecast_length,
+              trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
+              generic_dim=self.generic_dim, basis_offset=effective_offset,
+              share_weights=self.share_weights, activation=self.activation,
+              active_g=self.active_g,
+              forecast_basis_dim=self.forecast_basis_dim,
+              wavelet_type=self.wavelet_type,
+              backcast_wavelet_type=self.backcast_wavelet_type,
+              forecast_wavelet_type=self.forecast_wavelet_type,
+          )
+        elif stack_type in ("TrendWaveletAE", "TrendWaveletAELG"):
+          block = getattr(b, stack_type)(
+              units, effective_backcast_length, effective_forecast_length,
+              trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
+              basis_offset=effective_offset,
+              share_weights=self.share_weights, activation=self.activation,
+              active_g=self.active_g, latent_dim=self.latent_dim,
+              forecast_basis_dim=self.forecast_basis_dim,
+              wavelet_type=self.wavelet_type,
+              backcast_wavelet_type=self.backcast_wavelet_type,
+              forecast_wavelet_type=self.forecast_wavelet_type,
+          )
+        elif stack_type in ("TrendWaveletGenericAE", "TrendWaveletGenericAELG",
+                            "TrendWaveletGenericVAE"):
+          block = getattr(b, stack_type)(
+              units, effective_backcast_length, effective_forecast_length,
+              trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
+              generic_dim=self.generic_dim, basis_offset=effective_offset,
               share_weights=self.share_weights, activation=self.activation,
               active_g=self.active_g, latent_dim=self.latent_dim,
               forecast_basis_dim=self.forecast_basis_dim,

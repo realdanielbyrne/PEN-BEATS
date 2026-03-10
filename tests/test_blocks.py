@@ -403,6 +403,73 @@ class TestTrendAEDefaults:
         assert block.backcast_linear is not block.forecast_linear
 
 
+class TestTrendWaveletProperties:
+    """Verify TrendWavelet matches AE-family constructor and routing semantics."""
+
+    def test_forward_pass(self):
+        block = b.TrendWavelet(
+            units=UNITS, backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH, trend_dim=THETAS_DIM,
+            wavelet_dim=BASIS_DIM, activation="ReLU")
+        x = torch.randn(4, BACKCAST_LENGTH)
+        backcast, forecast = block(x)
+        assert backcast.shape == (4, BACKCAST_LENGTH)
+        assert forecast.shape == (4, FORECAST_LENGTH)
+
+    def test_share_weights_requires_equal_total_dims(self):
+        shared = b.TrendWavelet(
+            units=UNITS, backcast_length=8, forecast_length=8,
+            trend_dim=THETAS_DIM, wavelet_dim=3, share_weights=True)
+        unshared = b.TrendWavelet(
+            units=UNITS, backcast_length=BACKCAST_LENGTH, forecast_length=FORECAST_LENGTH,
+            trend_dim=THETAS_DIM, wavelet_dim=BASIS_DIM, share_weights=True)
+        assert shared.backcast_linear is shared.forecast_linear
+        assert unshared.backcast_linear is not unshared.forecast_linear
+
+    def test_wavelet_type_defaults_and_overrides(self):
+        default_block = b.TrendWavelet(
+            units=UNITS, backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH, trend_dim=THETAS_DIM,
+            wavelet_dim=BASIS_DIM)
+        override_block = b.TrendWavelet(
+            units=UNITS, backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH, trend_dim=THETAS_DIM,
+            wavelet_dim=BASIS_DIM, wavelet_type="haar")
+        assert default_block.wavelet_type == "db3"
+        assert override_block.wavelet_type == "haar"
+
+    def test_asymmetric_wavelet_types_are_stored(self):
+        block = b.TrendWavelet(
+            units=UNITS, backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH, trend_dim=THETAS_DIM,
+            wavelet_dim=BASIS_DIM, wavelet_type="db3",
+            backcast_wavelet_type="sym20", forecast_wavelet_type="coif2")
+        assert block.backcast_wavelet_type == "sym20"
+        assert block.forecast_wavelet_type == "coif2"
+
+    def test_effective_wavelet_dims_respect_forecast_basis_dim_and_basis_offset(self):
+        block = b.TrendWavelet(
+            units=UNITS, backcast_length=20, forecast_length=5,
+            trend_dim=THETAS_DIM, wavelet_dim=16, forecast_basis_dim=4,
+            basis_offset=3)
+        assert block.backcast_linear.out_features == THETAS_DIM + min(16, 20 - 3)
+        assert block.forecast_linear.out_features == THETAS_DIM + min(4, 5 - 3)
+
+    def test_expected_generators_and_linear_sizes_exist(self):
+        block = b.TrendWavelet(
+            units=UNITS, backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH, trend_dim=THETAS_DIM,
+            wavelet_dim=BASIS_DIM)
+        assert block.backcast_linear.in_features == UNITS
+        assert block.forecast_linear.in_features == UNITS
+        assert block.backcast_linear.out_features == THETAS_DIM + min(BASIS_DIM, BACKCAST_LENGTH)
+        assert block.forecast_linear.out_features == THETAS_DIM + min(BASIS_DIM, FORECAST_LENGTH)
+        assert hasattr(block, "backcast_trend_g")
+        assert hasattr(block, "forecast_trend_g")
+        assert hasattr(block, "backcast_wavelet_g")
+        assert hasattr(block, "forecast_wavelet_g")
+
+
 # --- Seasonality block bias tests ---
 
 class TestSeasonalityBias:
@@ -463,7 +530,7 @@ class TestAllBlocksOutputShapes:
     @pytest.mark.parametrize("block_name", [
         "Generic", "BottleneckGeneric", "GenericAE", "BottleneckGenericAE",
         "GenericAEBackcast", "GenericAEBackcastAE",
-        "Trend", "TrendAE", "Seasonality", "SeasonalityAE",
+        "Trend", "TrendAE", "TrendWavelet", "Seasonality", "SeasonalityAE",
         "AutoEncoder", "AutoEncoderAE",
         # VAE block (RootBlock backbone)
         "VAE",
@@ -479,9 +546,16 @@ class TestAllBlocksOutputShapes:
         "DB10WaveletV3", "DB20WaveletV3",
         "Coif1WaveletV3", "Coif2WaveletV3", "Coif3WaveletV3", "Coif10WaveletV3",
         "Symlet2WaveletV3", "Symlet3WaveletV3", "Symlet10WaveletV3", "Symlet20WaveletV3",
+        # TrendWavelet family — merged polynomial + DWT basis
+        "TrendWavelet",
         # TrendWaveletAE family — merged polynomial + DWT basis (AE backbone, Option A)
         "TrendWaveletAE",
         "TrendWaveletAELG",
+        # TrendWaveletGeneric family — three-way additive: trend + wavelet + learned generic basis
+        "TrendWaveletGeneric",
+        "TrendWaveletGenericAE",
+        "TrendWaveletGenericAELG",
+        "TrendWaveletGenericVAE",
         # V3AE Wavelet blocks (orthonormal DWT basis, AE bottleneck backbone, Option B)
         "WaveletV3AE",
         "HaarWaveletV3AE", "DB2WaveletV3AE", "DB3WaveletV3AE", "DB4WaveletV3AE",
@@ -524,6 +598,10 @@ class TestAllBlocksOutputShapes:
                           # TrendWaveletAE family and V3AE variants (AE backbone)
                           "TrendWaveletAE",
                           "TrendWaveletAELG",
+                          # TrendWaveletGeneric AE/LG/VAE variants
+                          "TrendWaveletGenericAE",
+                          "TrendWaveletGenericAELG",
+                          "TrendWaveletGenericVAE",
                           "WaveletV3AE",
                           "HaarWaveletV3AE", "DB2WaveletV3AE", "DB3WaveletV3AE", "DB4WaveletV3AE",
                           "DB10WaveletV3AE", "DB20WaveletV3AE",
@@ -548,10 +626,14 @@ class TestAllBlocksOutputShapes:
         if block_name in ae_root_blocks:
             kwargs["latent_dim"] = LATENT_DIM
 
-        if block_name in ("TrendWaveletAE", "TrendWaveletAELG"):
-            # TrendWaveletAE family uses trend_dim + wavelet_dim instead of thetas_dim/basis_dim
+        if block_name in ("TrendWavelet", "TrendWaveletAE", "TrendWaveletAELG",
+                         "TrendWaveletGeneric", "TrendWaveletGenericAE",
+                         "TrendWaveletGenericAELG", "TrendWaveletGenericVAE"):
+            # TrendWavelet family uses trend_dim + wavelet_dim instead of thetas_dim/basis_dim
             kwargs["trend_dim"] = THETAS_DIM
             kwargs["wavelet_dim"] = BASIS_DIM
+            if "Generic" in block_name:
+                kwargs["generic_dim"] = 5
         elif "Wavelet" in block_name:
             kwargs["basis_dim"] = BASIS_DIM
         else:
@@ -562,8 +644,10 @@ class TestAllBlocksOutputShapes:
                          "GenericAEBackcastAELG", "GenericAEBackcastVAE",
                          "VAE", "VAE2"]:
             kwargs["share_weights"] = False
-        elif block_name in ["Trend", "TrendAE", "TrendAELG", "TrendVAE", "TrendVAE2",
-                            "TrendWaveletAE", "TrendWaveletAELG"]:
+        elif block_name in ["Trend", "TrendAE", "TrendWavelet", "TrendAELG", "TrendVAE", "TrendVAE2",
+                            "TrendWaveletAE", "TrendWaveletAELG",
+                            "TrendWaveletGeneric", "TrendWaveletGenericAE",
+                            "TrendWaveletGenericAELG", "TrendWaveletGenericVAE"]:
             kwargs["share_weights"] = False
 
         block = block_class(**kwargs)
@@ -923,6 +1007,9 @@ ACTIVE_G_BLOCK_CONFIGS = [
                      "share_weights": False}),
     ("WaveletV3", {"units": UNITS, "backcast_length": BACKCAST_LENGTH,
                    "forecast_length": FORECAST_LENGTH, "basis_dim": BASIS_DIM}),
+    ("TrendWavelet", {"units": UNITS, "backcast_length": BACKCAST_LENGTH,
+                      "forecast_length": FORECAST_LENGTH, "trend_dim": THETAS_DIM,
+                      "wavelet_dim": BASIS_DIM}),
 ]
 
 
