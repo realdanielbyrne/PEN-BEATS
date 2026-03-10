@@ -52,7 +52,7 @@ configs:
   # --- Reference baselines (vanilla blocks, same pipeline) ---
   - name: Generic-10
     model: NBeatsNet
-    stack_types: ['Generic'] * 10
+    stack_types: "['Generic'] * 10"
 
   - name: NHiTS-Generic
     model: NHiTSNet
@@ -63,24 +63,50 @@ configs:
   # --- NBeatsNet novel (10-stack, 4 configs) ---
   - name: GenericAELG-10
     model: NBeatsNet
-    stack_types: ['GenericAELG'] * 10
+    stack_types: "['GenericAELG'] * 10"
+
+  - name: GenericAE-10
+    model: NBeatsNet
+    stack_types: "['GenericAE'] * 10"
 
   - name: BottleneckGenericAELG-10
     model: NBeatsNet
-    stack_types: ['BottleneckGenericAELG'] * 10
+    stack_types: "['BottleneckGenericAELG'] * 10"
+
+  - name: BottleneckGenericAE-10
+    model: NBeatsNet
+    stack_types: "['BottleneckGenericAE'] * 10"
 
   - name: TrendAELG+Sym20V3AELG
     model: NBeatsNet
     stack_types: "['TrendAELG', 'Symlet20WaveletV3AELG'] * 5"
 
+  - name: TrendAE+Sym20V3AE
+    model: NBeatsNet
+    stack_types: "['TrendAE', 'Symlet20WaveletV3AE'] * 5"
+
   - name: TrendWaveletAELG-10
     model: NBeatsNet
-    stack_types: ['TrendWaveletAELG'] * 10
+    stack_types: "['TrendWaveletAELG'] * 10"
+
+  - name: TrendWaveletAE-10
+    model: NBeatsNet
+    stack_types: "['TrendWaveletAE'] * 10"
+
+  - name: TrendWavelet-10
+    model: NBeatsNet
+    stack_types: "['TrendWavelet'] * 10"
 
   # --- NHiTSNet (3-stack with hierarchical pooling, 3 configs) ---
   - name: NHiTS-GenericAELG
     model: NHiTSNet
     stack_types: ['GenericAELG', 'GenericAELG', 'GenericAELG']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  - name: NHiTS-GenericAE
+    model: NHiTSNet
+    stack_types: ['GenericAE', 'GenericAE', 'GenericAE']
     n_pools_kernel_size: [8, 4, 1]
     n_freq_downsample: [24, 12, 1]
 
@@ -90,9 +116,27 @@ configs:
     n_pools_kernel_size: [8, 4, 1]
     n_freq_downsample: [24, 12, 1]
 
+  - name: NHiTS-TrendAE+Coif2V3AE
+    model: NHiTSNet
+    stack_types: ['TrendAE', 'Coif2WaveletV3AE', 'GenericAE']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
   - name: NHiTS-TrendWaveletAELG
     model: NHiTSNet
     stack_types: ['TrendWaveletAELG', 'TrendWaveletAELG', 'TrendWaveletAELG']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  - name: NHiTS-TrendWaveletAE
+    model: NHiTSNet
+    stack_types: ['TrendWaveletAE', 'TrendWaveletAE', 'TrendWaveletAE']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  - name: NHiTS-TrendWavelet
+    model: NHiTSNet
+    stack_types: ['TrendWavelet', 'TrendWavelet', 'TrendWavelet']
     n_pools_kernel_size: [8, 4, 1]
     n_freq_downsample: [24, 12, 1]
 

@@ -1,0 +1,114 @@
+# ============================================================
+# NHiTS active_g=forecast Benchmark — Weather Dataset
+#
+# Tests active_g=forecast on Generic-family blocks ONLY.
+# Evidence from Wavelet Study 3 and Unified Benchmark shows
+# active_g=forecast is neutral-to-harmful for TrendWavelet
+# blocks (~+0.1 SMAPE), but provides ~11.6% OWA improvement
+# for Generic-family blocks.
+#
+# Baseline (active_g=false) results come from the main
+# NHiTS benchmark (nhits_benchmark_weather.yaml). This file
+# runs ONLY the active_g=forecast variants.
+#
+# Usage:
+#   python experiments/run_nhits_benchmark.py --dataset weather \
+#       --configs Generic-10-agF GenericAELG-10-agF GenericAE-10-agF \
+#               BottleneckGenericAELG-10-agF BottleneckGenericAE-10-agF \
+#               NHiTS-Generic-agF NHiTS-GenericAELG-agF NHiTS-GenericAE-agF
+#
+#   # Or run all configs (baseline + agF) together:
+#   python experiments/run_nhits_benchmark.py --dataset weather
+#
+#   # Dry-run to verify plan:
+#   python experiments/run_nhits_benchmark.py --dataset weather \
+#       --configs Generic-10-agF GenericAELG-10-agF --dry-run
+# ============================================================
+
+experiment_name: NHiTS-Protocol-Weather-ActiveG
+description: >
+  active_g=forecast study on Generic-family blocks within the NHiTS
+  evaluation protocol (Weather dataset). Complements the main NHiTS
+  benchmark by adding active_g=forecast variants for blocks where
+  prior evidence shows a stabilization/accuracy benefit.
+
+dataset: weather
+horizons: [96, 192, 336, 720]
+
+# NHiTS evaluation protocol (same as main benchmark)
+protocol:
+  normalize: true
+  train_ratio: 0.7
+  val_ratio: 0.1
+  include_target: true     # 21 columns (with OT)
+  loss: MSELoss
+  forecast_multiplier: 5   # L = 5*H
+  batch_size: 256
+
+# Configs: Generic-family only, all with active_g=forecast
+# Baselines (active_g=false) already exist from nhits_benchmark_weather.yaml
+configs:
+  # --- NBeatsNet (10-stack) ---
+  - name: Generic-10-agF
+    model: NBeatsNet
+    stack_types: "['Generic'] * 10"
+    active_g: forecast
+
+  - name: GenericAELG-10-agF
+    model: NBeatsNet
+    stack_types: "['GenericAELG'] * 10"
+    active_g: forecast
+
+  - name: GenericAE-10-agF
+    model: NBeatsNet
+    stack_types: "['GenericAE'] * 10"
+    active_g: forecast
+
+  - name: BottleneckGenericAELG-10-agF
+    model: NBeatsNet
+    stack_types: "['BottleneckGenericAELG'] * 10"
+    active_g: forecast
+
+  - name: BottleneckGenericAE-10-agF
+    model: NBeatsNet
+    stack_types: "['BottleneckGenericAE'] * 10"
+    active_g: forecast
+
+  # --- NHiTSNet (3-stack with hierarchical pooling) ---
+  - name: NHiTS-Generic-agF
+    model: NHiTSNet
+    stack_types: ['Generic', 'Generic', 'Generic']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+    active_g: forecast
+
+  - name: NHiTS-GenericAELG-agF
+    model: NHiTSNet
+    stack_types: ['GenericAELG', 'GenericAELG', 'GenericAELG']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+    active_g: forecast
+
+  - name: NHiTS-GenericAE-agF
+    model: NHiTSNet
+    stack_types: ['GenericAE', 'GenericAE', 'GenericAE']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+    active_g: forecast
+
+runs:
+  n_runs: 8
+  base_seed: 1
+
+training:
+  max_epochs: 100
+  patience: 10
+  activation: ReLU
+  active_g: forecast       # All configs in this file use active_g=forecast
+  sum_losses: false
+
+block_params:
+  thetas_dim: 5
+  latent_dim: 16           # Research-confirmed optimal
+  basis_dim: eq_fcast      # Dynamic: set to forecast_length per horizon
+

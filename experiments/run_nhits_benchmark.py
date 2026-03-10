@@ -20,11 +20,13 @@ Usage:
 """
 
 import argparse
+import ast
 import csv
 import gc
 import json
 import math
 import os
+import re
 import shutil
 import signal
 import sys
@@ -64,6 +66,7 @@ else:
 import numpy as np
 import pandas as pd
 import torch
+import yaml
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 
@@ -135,7 +138,7 @@ CSV_COLUMNS = [
     "mse", "mae", "norm_mse", "norm_mae", "smape",
     "n_params", "training_time_seconds", "epochs_trained",
     "stopping_reason", "best_val_loss",
-    "loss_function", "normalize", "train_ratio", "val_ratio",
+    "loss_function", "active_g", "normalize", "train_ratio", "val_ratio",
     "include_target", "stack_types",
 ]
 
@@ -233,7 +236,203 @@ def get_benchmark_configs():
         "n_freq_downsample": [24, 12, 1],
     })
 
+    # --- active_g=forecast variants (Generic-family only) ---
+    # Evidence: active_g=forecast provides ~11.6% OWA improvement for Generic blocks
+    # but is neutral-to-harmful for TrendWavelet blocks (see wavelet_study_3).
+    configs.append({
+        "model_type": "NBeatsNet",
+        "config_name": "Generic-10-agF",
+        "stack_types": ["Generic"] * 10,
+        "n_blocks_per_stack": 1,
+        "active_g": "forecast",
+    })
+    configs.append({
+        "model_type": "NBeatsNet",
+        "config_name": "GenericAELG-10-agF",
+        "stack_types": ["GenericAELG"] * 10,
+        "n_blocks_per_stack": 1,
+        "active_g": "forecast",
+    })
+    configs.append({
+        "model_type": "NBeatsNet",
+        "config_name": "GenericAE-10-agF",
+        "stack_types": ["GenericAE"] * 10,
+        "n_blocks_per_stack": 1,
+        "active_g": "forecast",
+    })
+    configs.append({
+        "model_type": "NBeatsNet",
+        "config_name": "BottleneckGenericAELG-10-agF",
+        "stack_types": ["BottleneckGenericAELG"] * 10,
+        "n_blocks_per_stack": 1,
+        "active_g": "forecast",
+    })
+    configs.append({
+        "model_type": "NBeatsNet",
+        "config_name": "BottleneckGenericAE-10-agF",
+        "stack_types": ["BottleneckGenericAE"] * 10,
+        "n_blocks_per_stack": 1,
+        "active_g": "forecast",
+    })
+    configs.append({
+        "model_type": "NHiTSNet",
+        "config_name": "NHiTS-Generic-agF",
+        "stack_types": ["Generic"] * 3,
+        "n_blocks_per_stack": 1,
+        "n_pools_kernel_size": [8, 4, 1],
+        "n_freq_downsample": [24, 12, 1],
+        "active_g": "forecast",
+    })
+    configs.append({
+        "model_type": "NHiTSNet",
+        "config_name": "NHiTS-GenericAELG-agF",
+        "stack_types": ["GenericAELG"] * 3,
+        "n_blocks_per_stack": 1,
+        "n_pools_kernel_size": [8, 4, 1],
+        "n_freq_downsample": [24, 12, 1],
+        "active_g": "forecast",
+    })
+    configs.append({
+        "model_type": "NHiTSNet",
+        "config_name": "NHiTS-GenericAE-agF",
+        "stack_types": ["GenericAE"] * 3,
+        "n_blocks_per_stack": 1,
+        "n_pools_kernel_size": [8, 4, 1],
+        "n_freq_downsample": [24, 12, 1],
+        "active_g": "forecast",
+    })
+
     return configs
+
+
+# ---------------------------------------------------------------------------
+# YAML Config Loading
+# ---------------------------------------------------------------------------
+
+def parse_stack_types(raw):
+    """Parse stack_types from YAML, handling both list and string expression forms.
+
+    Supports:
+      - Already a list: ['Generic', 'Generic', 'Generic']
+      - Python expression string: "['Generic'] * 10"
+      - Python expression string: "['TrendAELG', 'Symlet20WaveletV3AELG'] * 5"
+    """
+    if isinstance(raw, list):
+        return raw
+
+    if not isinstance(raw, str):
+        raise ValueError(f"stack_types must be a list or string expression, got {type(raw)}")
+
+    raw = raw.strip()
+
+    # Handle "['X'] * N" or "['A', 'B'] * N" patterns safely
+    # Split on ' * ' to separate list literal from multiplier
+    match = re.match(r'^(\[.*\])\s*\*\s*(\d+)$', raw)
+    if match:
+        list_part = ast.literal_eval(match.group(1))
+        multiplier = int(match.group(2))
+        return list_part * multiplier
+
+    # Try parsing as a plain list literal: "['A', 'B', 'C']"
+    try:
+        result = ast.literal_eval(raw)
+        if isinstance(result, list):
+            return result
+    except (ValueError, SyntaxError):
+        pass
+
+    raise ValueError(f"Cannot parse stack_types expression: {raw!r}")
+
+
+def load_yaml_configs(yaml_path):
+    """Load benchmark configs from a YAML file.
+
+    Returns:
+        dict with keys: configs, protocol, training, block_params, runs,
+                        dataset, horizons, experiment_name
+    """
+    with open(yaml_path, "r") as f:
+        yaml_data = yaml.safe_load(f)
+
+    # --- Extract protocol settings (with defaults matching hardcoded constants) ---
+    protocol_raw = yaml_data.get("protocol", {})
+    protocol = {
+        "train_ratio": protocol_raw.get("train_ratio", TRAIN_RATIO),
+        "val_ratio": protocol_raw.get("val_ratio", VAL_RATIO),
+        "loss": protocol_raw.get("loss", LOSS),
+        "forecast_multiplier": protocol_raw.get("forecast_multiplier", FORECAST_MULTIPLIER),
+        "batch_size": protocol_raw.get("batch_size", BATCH_SIZE),
+        "normalize": protocol_raw.get("normalize", None),  # None = auto-detect by dataset
+        "include_target": protocol_raw.get("include_target", True),
+    }
+
+    # --- Extract training settings ---
+    training_raw = yaml_data.get("training", {})
+    training = {
+        "max_epochs": training_raw.get("max_epochs", MAX_EPOCHS),
+        "patience": training_raw.get("patience", PATIENCE),
+        "activation": training_raw.get("activation", "ReLU"),
+        "active_g": training_raw.get("active_g", False),
+        "sum_losses": training_raw.get("sum_losses", False),
+    }
+
+    # --- Extract block params ---
+    block_params_raw = yaml_data.get("block_params", {})
+    block_params = {
+        "thetas_dim": block_params_raw.get("thetas_dim", THETAS_DIM),
+        "latent_dim": block_params_raw.get("latent_dim", LATENT_DIM),
+        "basis_dim": block_params_raw.get("basis_dim", "eq_fcast"),
+    }
+
+    # --- Extract runs settings ---
+    runs_raw = yaml_data.get("runs", {})
+    runs = {
+        "n_runs": runs_raw.get("n_runs", N_RUNS),
+        "base_seed": runs_raw.get("base_seed", BASE_SEED),
+    }
+
+    # --- Extract dataset and horizons ---
+    dataset = yaml_data.get("dataset", None)
+    horizons = yaml_data.get("horizons", None)
+    experiment_name = yaml_data.get("experiment_name", "yaml_experiment")
+
+    # --- Parse configs ---
+    configs_raw = yaml_data.get("configs", [])
+    configs = []
+    for cfg in configs_raw:
+        stack_types = parse_stack_types(cfg["stack_types"])
+
+        parsed = {
+            "config_name": cfg["name"],
+            "model_type": cfg.get("model", "NBeatsNet"),
+            "stack_types": stack_types,
+            "n_blocks_per_stack": cfg.get("n_blocks_per_stack", 1),
+        }
+
+        # Per-config active_g override (falls back to training-level default)
+        if "active_g" in cfg:
+            parsed["active_g"] = cfg["active_g"]
+        elif training["active_g"]:
+            parsed["active_g"] = training["active_g"]
+
+        # NHiTSNet-specific pooling params
+        if "n_pools_kernel_size" in cfg:
+            parsed["n_pools_kernel_size"] = cfg["n_pools_kernel_size"]
+        if "n_freq_downsample" in cfg:
+            parsed["n_freq_downsample"] = cfg["n_freq_downsample"]
+
+        configs.append(parsed)
+
+    return {
+        "configs": configs,
+        "protocol": protocol,
+        "training": training,
+        "block_params": block_params,
+        "runs": runs,
+        "dataset": dataset,
+        "horizons": horizons,
+        "experiment_name": experiment_name,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -526,6 +725,10 @@ def run_single_experiment(
     patience=PATIENCE,
     batch_size=BATCH_SIZE,
     worker_id="",
+    protocol=None,
+    block_params=None,
+    training=None,
+    runs=None,
 ):
     """Run a single NHiTS-protocol experiment."""
     global _shutdown_requested
@@ -550,6 +753,8 @@ def run_single_experiment(
         _run_experiment_body(
             config, dataset_name, horizon, run_idx, csv_path,
             max_epochs, patience, batch_size, worker_id,
+            protocol=protocol, block_params=block_params,
+            training=training, runs=runs,
         )
     except Exception as e:
         print(f"  [ERROR] {config_name} / {dataset_name}-{horizon} / run {run_idx}: {e}")
@@ -560,26 +765,49 @@ def run_single_experiment(
 def _run_experiment_body(
     config, dataset_name, horizon, run_idx, csv_path,
     max_epochs, patience, batch_size, worker_id,
+    protocol=None, block_params=None, training=None, runs=None,
 ):
     """Inner body of run_single_experiment (wrapped in try/finally for claim safety)."""
+    # Resolve protocol/block/training/runs params — use provided dicts or fall back to globals
+    p_train_ratio = protocol["train_ratio"] if protocol else TRAIN_RATIO
+    p_val_ratio = protocol["val_ratio"] if protocol else VAL_RATIO
+    p_loss = protocol["loss"] if protocol else LOSS
+    p_forecast_multiplier = protocol["forecast_multiplier"] if protocol else FORECAST_MULTIPLIER
+    p_include_target = protocol["include_target"] if protocol else True
+
+    # Normalize: use protocol value if explicitly set, otherwise auto-detect by dataset
+    if protocol and protocol.get("normalize") is not None:
+        p_normalize = protocol["normalize"]
+    else:
+        p_normalize = (dataset_name == "weather")
+
+    bp_thetas_dim = block_params["thetas_dim"] if block_params else THETAS_DIM
+    bp_latent_dim = block_params["latent_dim"] if block_params else LATENT_DIM
+    bp_basis_dim_spec = block_params["basis_dim"] if block_params else "eq_fcast"
+
+    t_activation = training["activation"] if training else "ReLU"
+    t_sum_losses = training["sum_losses"] if training else False
+
+    r_base_seed = runs["base_seed"] if runs else BASE_SEED
+
     config_name = config["config_name"]
     model_type = config["model_type"]
 
-    seed = BASE_SEED + run_idx
+    seed = r_base_seed + run_idx
     set_seed(seed)
 
-    # Load dataset with NHiTS protocol params
+    # Load dataset with protocol params
     if dataset_name == "weather":
         dataset = WeatherDataset(
-            horizon, train_ratio=TRAIN_RATIO, include_target=True)
+            horizon, train_ratio=p_train_ratio, include_target=p_include_target)
     elif dataset_name == "traffic":
         dataset = TrafficDataset(
-            horizon, train_ratio=TRAIN_RATIO, include_target=True)
+            horizon, train_ratio=p_train_ratio, include_target=p_include_target)
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")
 
     forecast_length = dataset.forecast_length
-    backcast_length = forecast_length * FORECAST_MULTIPLIER
+    backcast_length = forecast_length * p_forecast_multiplier
 
     stack_types = config["stack_types"]
     n_stacks = len(stack_types)
@@ -595,8 +823,11 @@ def _run_experiment_body(
     else:
         precision = "32-true"
 
-    # basis_dim = eq_fcast: match basis dimension to forecast horizon
-    basis_dim = forecast_length
+    # basis_dim: "eq_fcast" means match to forecast_length, otherwise use the integer value
+    if bp_basis_dim_spec == "eq_fcast":
+        basis_dim = forecast_length
+    else:
+        basis_dim = int(bp_basis_dim_spec)
 
     # Create model
     model_kwargs = dict(
@@ -605,12 +836,12 @@ def _run_experiment_body(
         stack_types=stack_types,
         n_blocks_per_stack=n_blocks_per_stack,
         share_weights=True,
-        thetas_dim=THETAS_DIM,
-        loss=LOSS,
-        active_g=False,
-        sum_losses=False,
-        activation="ReLU",
-        latent_dim=LATENT_DIM,
+        thetas_dim=bp_thetas_dim,
+        loss=p_loss,
+        active_g=config.get("active_g", False),
+        sum_losses=t_sum_losses,
+        activation=t_activation,
+        latent_dim=bp_latent_dim,
         basis_dim=basis_dim,
         learning_rate=LEARNING_RATE,
         optimizer_name="Adam",
@@ -627,11 +858,6 @@ def _run_experiment_body(
     model = ModelClass(**model_kwargs)
     n_params = count_parameters(model)
 
-    # Data modules — normalize per dataset:
-    #   Weather: Z-score normalization (21 meteorological features, varied scales)
-    #   Traffic: no normalization (PeMS occupancy rates are naturally 0-1 scaled)
-    normalize = (dataset_name == "weather")
-
     train_data = dataset.train_data
     test_data = dataset.test_data
 
@@ -641,8 +867,8 @@ def _run_experiment_body(
         forecast_length=forecast_length,
         batch_size=batch_size,
         no_val=False,
-        normalize=normalize,
-        val_ratio=VAL_RATIO,
+        normalize=p_normalize,
+        val_ratio=p_val_ratio,
     )
 
     # We need to call setup() on dm first to get normalization stats
@@ -755,11 +981,12 @@ def _run_experiment_body(
         "epochs_trained": epochs_trained,
         "stopping_reason": stopping_reason,
         "best_val_loss": f"{best_val_loss:.8f}" if math.isfinite(best_val_loss) else "nan",
-        "loss_function": LOSS,
-        "normalize": normalize,
-        "train_ratio": TRAIN_RATIO,
-        "val_ratio": VAL_RATIO,
-        "include_target": True,
+        "loss_function": p_loss,
+        "active_g": str(config.get("active_g", False)),
+        "normalize": p_normalize,
+        "train_ratio": p_train_ratio,
+        "val_ratio": p_val_ratio,
+        "include_target": p_include_target,
         "stack_types": str(list(dict.fromkeys(stack_types))),
     }
     append_result(csv_path, row)
@@ -856,18 +1083,20 @@ def analyze_results(csv_path):
 def main():
     parser = argparse.ArgumentParser(
         description="NHiTS-Protocol Benchmark for Novel Block Types")
+    parser.add_argument("--yaml", type=str, default=None,
+                        help="Path to YAML config file (overrides hardcoded configs)")
     parser.add_argument("--dataset", type=str, nargs="+",
-                        default=["weather", "traffic"],
+                        default=None,
                         choices=["weather", "traffic"],
-                        help="Dataset(s) to benchmark")
+                        help="Dataset(s) to benchmark (default: weather traffic)")
     parser.add_argument("--horizons", type=int, nargs="+",
-                        default=[96, 192, 336, 720],
-                        help="Forecast horizons to test")
-    parser.add_argument("--n-runs", type=int, default=N_RUNS,
+                        default=None,
+                        help="Forecast horizons to test (default: 96 192 336 720)")
+    parser.add_argument("--n-runs", type=int, default=None,
                         help="Number of runs per config (default: 8)")
-    parser.add_argument("--max-epochs", type=int, default=MAX_EPOCHS,
+    parser.add_argument("--max-epochs", type=int, default=None,
                         help="Maximum training epochs")
-    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE,
+    parser.add_argument("--batch-size", type=int, default=None,
                         help="Batch size")
     parser.add_argument("--configs", type=str, nargs="*", default=None,
                         help="Filter to specific config names")
@@ -894,20 +1123,78 @@ def main():
         analyze_results(csv_path)
         return
 
-    all_configs = get_benchmark_configs()
+    # --- Load configs: from YAML or hardcoded defaults ---
+    yaml_data = None
+    protocol = None
+    block_params = None
+    training = None
+    runs = None
+
+    if args.yaml:
+        yaml_data = load_yaml_configs(args.yaml)
+        all_configs = yaml_data["configs"]
+        protocol = yaml_data["protocol"]
+        block_params = yaml_data["block_params"]
+        training = yaml_data["training"]
+        runs = yaml_data["runs"]
+    else:
+        all_configs = get_benchmark_configs()
+
+    # --- Resolve CLI overrides (CLI > YAML > hardcoded defaults) ---
+    datasets = args.dataset
+    if datasets is None:
+        if yaml_data and yaml_data.get("dataset"):
+            # YAML dataset can be a string or list
+            ds = yaml_data["dataset"]
+            datasets = [ds] if isinstance(ds, str) else list(ds)
+        else:
+            datasets = ["weather", "traffic"]
+
+    horizons = args.horizons
+    if horizons is None:
+        if yaml_data and yaml_data.get("horizons"):
+            horizons = yaml_data["horizons"]
+        else:
+            horizons = [96, 192, 336, 720]
+
+    n_runs = args.n_runs
+    if n_runs is None:
+        if runs:
+            n_runs = runs["n_runs"]
+        else:
+            n_runs = N_RUNS
+
+    max_epochs = args.max_epochs
+    if max_epochs is None:
+        if training:
+            max_epochs = training["max_epochs"]
+        else:
+            max_epochs = MAX_EPOCHS
+
+    batch_size = args.batch_size
+    if batch_size is None:
+        if protocol:
+            batch_size = protocol["batch_size"]
+        else:
+            batch_size = BATCH_SIZE
+
+    # Filter configs by name if requested
     if args.configs:
         all_configs = [c for c in all_configs if c["config_name"] in args.configs]
         if not all_configs:
+            available = ([c["config_name"] for c in load_yaml_configs(args.yaml)["configs"]]
+                         if args.yaml else
+                         [c["config_name"] for c in get_benchmark_configs()])
             print(f"No configs matched: {args.configs}")
-            print(f"Available: {[c['config_name'] for c in get_benchmark_configs()]}")
+            print(f"Available: {available}")
             return
 
     # Build job list
     jobs = []
-    for dataset_name in args.dataset:
-        for horizon in args.horizons:
+    for dataset_name in datasets:
+        for horizon in horizons:
             for config in all_configs:
-                for run_idx in range(args.n_runs):
+                for run_idx in range(n_runs):
                     jobs.append({
                         "config": config,
                         "dataset_name": dataset_name,
@@ -917,19 +1204,29 @@ def main():
 
     total_jobs = len(jobs)
     worker_label = f" (worker: {args.worker_id})" if args.worker_id else ""
-    print(f"\nNHiTS-Protocol Benchmark{worker_label}")
-    print(f"  Datasets:   {args.dataset}")
-    print(f"  Horizons:   {args.horizons}")
+    source_label = f" [YAML: {args.yaml}]" if args.yaml else " [hardcoded]"
+    print(f"\nNHiTS-Protocol Benchmark{worker_label}{source_label}")
+    print(f"  Datasets:   {datasets}")
+    print(f"  Horizons:   {horizons}")
     print(f"  Configs:    {len(all_configs)}")
-    print(f"  Runs/cfg:   {args.n_runs}")
+    print(f"  Runs/cfg:   {n_runs}")
     print(f"  Total jobs: {total_jobs}")
     print(f"  CSV path:   {csv_path}")
     if args.gpu is not None:
         print(f"  GPU:        {args.gpu}")
-    norm_desc = ", ".join(f"{d}={'yes' if d == 'weather' else 'no'}"
-                         for d in args.dataset)
-    print(f"  Protocol:   normalize=[{norm_desc}], train_ratio={TRAIN_RATIO}, "
-          f"val_ratio={VAL_RATIO}, loss={LOSS}, L=5H")
+
+    # Protocol summary
+    p_train_ratio = protocol["train_ratio"] if protocol else TRAIN_RATIO
+    p_val_ratio = protocol["val_ratio"] if protocol else VAL_RATIO
+    p_loss = protocol["loss"] if protocol else LOSS
+    p_fcast_mult = protocol["forecast_multiplier"] if protocol else FORECAST_MULTIPLIER
+    if protocol and protocol.get("normalize") is not None:
+        norm_desc = f"all={'yes' if protocol['normalize'] else 'no'}"
+    else:
+        norm_desc = ", ".join(f"{d}={'yes' if d == 'weather' else 'no'}"
+                             for d in datasets)
+    print(f"  Protocol:   normalize=[{norm_desc}], train_ratio={p_train_ratio}, "
+          f"val_ratio={p_val_ratio}, loss={p_loss}, L={p_fcast_mult}H")
     print()
 
     if args.dry_run:
@@ -956,9 +1253,13 @@ def main():
             horizon=job["horizon"],
             run_idx=job["run_idx"],
             csv_path=csv_path,
-            max_epochs=args.max_epochs,
-            batch_size=args.batch_size,
+            max_epochs=max_epochs,
+            batch_size=batch_size,
             worker_id=args.worker_id,
+            protocol=protocol,
+            block_params=block_params,
+            training=training,
+            runs=runs,
         )
         completed += 1
 
