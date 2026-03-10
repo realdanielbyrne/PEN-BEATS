@@ -1,4 +1,5 @@
 # project
+.claims
 .llm_cache/
 .DS_Store
 *.lock
