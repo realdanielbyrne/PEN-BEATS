@@ -121,6 +121,8 @@ BASE_SEED = 1              # Seeds 1-8 matching NHiTS
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 CSV_FILENAME = "nhits_benchmark_results.csv"
+CLAIMS_DIR = os.path.join(RESULTS_DIR, ".claims")
+STALE_CLAIM_SECONDS = 7200  # 2 hours — assume crashed worker
 
 # ---------------------------------------------------------------------------
 # CSV Schema
@@ -405,6 +407,72 @@ def result_exists(path, config_name, dataset, horizon, run):
 
 
 # ---------------------------------------------------------------------------
+# Claim-based Job Locking (parallel-safe)
+# ---------------------------------------------------------------------------
+
+def _claim_key(config_name, dataset, horizon, run):
+    """Deterministic filename for a job's claim file."""
+    return f"{config_name}__{dataset}__{horizon}__run{run}.claim"
+
+
+def claim_job(config_name, dataset, horizon, run, worker_id=""):
+    """Atomically claim a job. Returns True if this process won the claim.
+
+    Uses O_CREAT | O_EXCL for race-free file creation. Writes worker_id
+    and timestamp so stale claims can be detected.
+    """
+    os.makedirs(CLAIMS_DIR, exist_ok=True)
+    claim_path = os.path.join(CLAIMS_DIR, _claim_key(config_name, dataset, horizon, run))
+    try:
+        fd = os.open(claim_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps({
+                "worker_id": worker_id,
+                "pid": os.getpid(),
+                "claimed_at": time.time(),
+                "config_name": config_name,
+                "dataset": dataset,
+                "horizon": horizon,
+                "run": run,
+            }))
+        return True
+    except FileExistsError:
+        # Another worker already claimed it — check for staleness
+        try:
+            mtime = os.path.getmtime(claim_path)
+            if time.time() - mtime > STALE_CLAIM_SECONDS:
+                print(f"  [STALE] Reclaiming stale job: {config_name}/{dataset}-{horizon}/run{run}")
+                os.unlink(claim_path)
+                return claim_job(config_name, dataset, horizon, run, worker_id)
+        except OSError:
+            pass
+        return False
+
+
+def release_claim(config_name, dataset, horizon, run):
+    """Remove claim file after job completes (CSV row is the permanent record)."""
+    claim_path = os.path.join(CLAIMS_DIR, _claim_key(config_name, dataset, horizon, run))
+    try:
+        os.unlink(claim_path)
+    except OSError:
+        pass
+
+
+def job_is_claimed(config_name, dataset, horizon, run):
+    """Check if another worker has claimed this job (non-stale)."""
+    claim_path = os.path.join(CLAIMS_DIR, _claim_key(config_name, dataset, horizon, run))
+    if not os.path.exists(claim_path):
+        return False
+    try:
+        mtime = os.path.getmtime(claim_path)
+        if time.time() - mtime > STALE_CLAIM_SECONDS:
+            return False  # stale claim
+    except OSError:
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Inference
 # ---------------------------------------------------------------------------
 
@@ -437,6 +505,7 @@ def run_single_experiment(
     max_epochs=MAX_EPOCHS,
     patience=PATIENCE,
     batch_size=BATCH_SIZE,
+    worker_id="",
 ):
     """Run a single NHiTS-protocol experiment."""
     global _shutdown_requested
@@ -446,10 +515,35 @@ def run_single_experiment(
     config_name = config["config_name"]
     model_type = config["model_type"]
 
-    # Check resumability
+    # Check resumability — already completed in CSV
     if result_exists(csv_path, config_name, dataset_name, horizon, run_idx):
         print(f"  [SKIP] {config_name} / {dataset_name}-{horizon} / run {run_idx}")
         return
+
+    # Claim-based locking — attempt atomic claim for parallel workers
+    if not claim_job(config_name, dataset_name, horizon, run_idx, worker_id):
+        print(f"  [CLAIMED] {config_name} / {dataset_name}-{horizon} / run {run_idx} "
+              f"(another worker)")
+        return
+
+    try:
+        _run_experiment_body(
+            config, dataset_name, horizon, run_idx, csv_path,
+            max_epochs, patience, batch_size, worker_id,
+        )
+    except Exception as e:
+        print(f"  [ERROR] {config_name} / {dataset_name}-{horizon} / run {run_idx}: {e}")
+        release_claim(config_name, dataset_name, horizon, run_idx)
+        raise
+
+
+def _run_experiment_body(
+    config, dataset_name, horizon, run_idx, csv_path,
+    max_epochs, patience, batch_size, worker_id,
+):
+    """Inner body of run_single_experiment (wrapped in try/finally for claim safety)."""
+    config_name = config["config_name"]
+    model_type = config["model_type"]
 
     seed = BASE_SEED + run_idx
     set_seed(seed)
@@ -649,6 +743,7 @@ def run_single_experiment(
         "stack_types": str(list(dict.fromkeys(stack_types))),
     }
     append_result(csv_path, row)
+    release_claim(config_name, dataset_name, horizon, run_idx)
 
     # Cleanup
     del model, trainer, dm, test_dm
@@ -762,8 +857,16 @@ def main():
                         help="Analyze existing results and print comparison table")
     parser.add_argument("--csv-path", type=str, default=None,
                         help="Override CSV output path")
+    parser.add_argument("--worker-id", type=str, default="",
+                        help="Worker identifier for parallel execution (logged in claim files)")
+    parser.add_argument("--gpu", type=int, default=None,
+                        help="GPU index to use (sets CUDA_VISIBLE_DEVICES)")
 
     args = parser.parse_args()
+
+    # Pin to specific GPU if requested
+    if args.gpu is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
     csv_path = args.csv_path or os.path.join(RESULTS_DIR, CSV_FILENAME)
 
@@ -793,13 +896,16 @@ def main():
                     })
 
     total_jobs = len(jobs)
-    print(f"\nNHiTS-Protocol Benchmark")
+    worker_label = f" (worker: {args.worker_id})" if args.worker_id else ""
+    print(f"\nNHiTS-Protocol Benchmark{worker_label}")
     print(f"  Datasets:   {args.dataset}")
     print(f"  Horizons:   {args.horizons}")
     print(f"  Configs:    {len(all_configs)}")
     print(f"  Runs/cfg:   {args.n_runs}")
     print(f"  Total jobs: {total_jobs}")
     print(f"  CSV path:   {csv_path}")
+    if args.gpu is not None:
+        print(f"  GPU:        {args.gpu}")
     norm_desc = ", ".join(f"{d}={'yes' if d == 'weather' else 'no'}"
                          for d in args.dataset)
     print(f"  Protocol:   normalize=[{norm_desc}], train_ratio={TRAIN_RATIO}, "
@@ -832,6 +938,7 @@ def main():
             csv_path=csv_path,
             max_epochs=args.max_epochs,
             batch_size=args.batch_size,
+            worker_id=args.worker_id,
         )
         completed += 1
 
