@@ -145,23 +145,43 @@ CSV_COLUMNS = [
 # ---------------------------------------------------------------------------
 
 def get_benchmark_configs():
-    """Return the 7 Tier-1 benchmark configurations.
+    """Return the 9 benchmark configurations.
 
     Selection rationale (evidence-based):
-      NBeatsNet (4 configs, 10 stacks each):
-        1. GenericAELG-10          — pure generic baseline
-        2. BottleneckGenericAELG-10 — promoted; consistent convergence on Traffic
-        3. TrendAELG+Sym20V3AELG   — alternating; Sym20 is universal best wavelet
-        4. TrendWaveletAELG-10     — unified trend+wavelet block
+      Reference baselines (2 configs — vanilla blocks, same pipeline):
+        1. Generic-10              — original N-BEATS-G (10×Generic)
+        2. NHiTS-Generic           — original NHiTS-G (3×Generic + pooling)
 
-      NHiTSNet (3 configs, 3 stacks, hierarchical pooling):
-        5. NHiTS-GenericAELG                     — NHiTS generic baseline
-        6. NHiTS-TrendAELG+Coif2V3AELG+GenericAELG — Coif2 is best forecast wavelet
-        7. NHiTS-TrendWaveletAELG                — unified in NHiTS framework
+      NBeatsNet novel blocks (4 configs, 10 stacks each):
+        3. GenericAELG-10          — pure generic baseline
+        4. BottleneckGenericAELG-10 — promoted; consistent convergence on Traffic
+        5. TrendAELG+Sym20V3AELG   — alternating; Sym20 is universal best wavelet
+        6. TrendWaveletAELG-10     — unified trend+wavelet block
+
+      NHiTSNet novel blocks (3 configs, 3 stacks, hierarchical pooling):
+        7. NHiTS-GenericAELG                     — NHiTS generic baseline
+        8. NHiTS-TrendAELG+Coif2V3AELG+GenericAELG — Coif2 is best forecast wavelet
+        9. NHiTS-TrendWaveletAELG                — unified in NHiTS framework
     """
     configs = []
 
-    # --- NBeatsNet configs (4) ---
+    # --- Reference baselines (vanilla blocks, same pipeline) ---
+    configs.append({
+        "model_type": "NBeatsNet",
+        "config_name": "Generic-10",
+        "stack_types": ["Generic"] * 10,
+        "n_blocks_per_stack": 1,
+    })
+    configs.append({
+        "model_type": "NHiTSNet",
+        "config_name": "NHiTS-Generic",
+        "stack_types": ["Generic"] * 3,
+        "n_blocks_per_stack": 1,
+        "n_pools_kernel_size": [8, 4, 1],
+        "n_freq_downsample": [24, 12, 1],
+    })
+
+    # --- NBeatsNet novel configs (4) ---
     configs.append({
         "model_type": "NBeatsNet",
         "config_name": "GenericAELG-10",

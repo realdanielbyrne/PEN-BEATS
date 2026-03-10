@@ -45,12 +45,24 @@ baselines:
     Traffic-336: {mse: 0.423, mae: 0.278}
     Traffic-720: {mse: 0.461, mae: 0.299}
 
-# Tier-1 benchmark configurations (7 configs)
+# Benchmark configurations (9 configs)
 # Selection rationale:
+#   Reference baselines: Generic (N-BEATS-G), NHiTS-Generic (NHiTS-G)
 #   NBeatsNet: GenericAELG, BottleneckGenericAELG, TrendAELG+Sym20V3AELG, TrendWaveletAELG
 #   NHiTSNet:  GenericAELG, TrendAELG+Coif2V3AELG+GenericAELG, TrendWaveletAELG
 configs:
-  # --- NBeatsNet (10-stack, 4 configs) ---
+  # --- Reference baselines (vanilla blocks, same pipeline) ---
+  - name: Generic-10
+    model: NBeatsNet
+    stack_types: ['Generic'] * 10
+
+  - name: NHiTS-Generic
+    model: NHiTSNet
+    stack_types: ['Generic', 'Generic', 'Generic']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  # --- NBeatsNet novel (10-stack, 4 configs) ---
   - name: GenericAELG-10
     model: NBeatsNet
     stack_types: ['GenericAELG'] * 10
