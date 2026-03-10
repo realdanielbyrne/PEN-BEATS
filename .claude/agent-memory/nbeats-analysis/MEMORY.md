@@ -98,16 +98,18 @@
 - See `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.md` (updated with tourism/weather)
 - See notebook: `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.ipynb` (updated with sections 13-20)
 - Also see v1 report: `experiments/analysis/analysis_reports/resnet_skip_study_analysis.md`
-- **M4 v2 winner: TWALG30_no_skip** (SMAPE=13.568). **Tourism v2 winner: GAE10_no_skip** (SMAPE=20.526). **Weather v1 winner: TW16_no_skip** (SMAPE=40.245).
-- **Skip connections are NEVER optimal for TrendWavelet** across all 3 datasets. On Tourism, skip actively hurts TWA (MWU p=0.001).
+- **M4 v2 winner: TWALG30_no_skip** (SMAPE=13.568). **Tourism v2 winner: GAE10_no_skip** (SMAPE=20.526). **Weather v1 winner: TW16_no_skip** (SMAPE=40.245). **Weather v2 winner (bl=480): TVH20_skip5_a01** (MSE=0.133, SMAPE=41.76; not sig. vs TVH10_no_skip p=0.69).
+- **Best architecture is dataset-dependent:** TrendWavelet → M4, GenericAE → Tourism, TrendVAE+Haar → Weather (bl=480).
+- **Skip connections are NEVER optimal for unified TrendWavelet** across all 3 datasets. On Tourism, skip actively hurts unified TWA (MWU p=0.001). Alternating TW v1 (TrendAELG+WaveletV3AELG) on Tourism sees marginal skip benefit (p=0.016) — architecture matters.
 - **GenericAELG bimodal collapse is M4-specific.** Tourism shows milder form (1/3 seeds at 30 stacks). Weather shows NO collapse at any depth. Normalization and longer sequences stabilize the learned gate.
 - **GenericAE is depth-stable** on all datasets. No bimodal failures.
 - **Double-VAE catastrophe severity inversely scales with horizon:** Tourism (H=4): SMAPE 143-181 (near random). M4 (H=6): 29-44. Weather (H=96): 41-46 (~1.1x deterministic).
-- **Optimal depth scales with horizon:** Tourism (H=4): 10 stacks. M4 (H=6): 10-30 (flat). Weather (H=96): 16-20.
+- **Optimal depth scales with horizon:** Tourism (H=4): 10 stacks. M4 (H=6): 10-30 (flat). Weather (H=96): 10-20 stacks.
 - **GenericAE outperforms TrendWavelet on Tourism** (20.53 vs 21.10). Only dataset where this occurs. Short horizon (H=4) favors flexible basis over rigid polynomial+DWT.
-- **Tourism GAE10 (SMAPE 20.53) is competitive with Tourism SOTA** (20.864). Worth further investigation.
-- **Fixed alpha=0.1 wins overall** (Tourism 4/6, M4 4/5). Weather favors learnable (4/6).
-- **Weather v2 R3 is incomplete** (only 2/9 configs completed). Rankings rely on R2 data.
+- **Tourism GAE10 (SMAPE 20.526) challenges Tourism SOTA** (20.864). Requires head-to-head ≥10 seeds to confirm.
+- **Fixed alpha=0.1 wins overall** (Tourism 4/6, M4 4/5, Weather 3/6). No strong alpha preference.
+- **Weather v2 R3 is now complete** (9/9 configs × 5 runs for both bl=192 and bl=480). Prior reports of "R3 incomplete" are obsolete.
+- **bl=480 (L=5H) is essential for Weather-96.** bl=192 gives SMAPE ~66-68 vs ~41-44 for bl=480.
 - **skip_distance=2 always hurts.** Confirmed on all datasets. Sweet spot: d=3-5.
 
 ## Skill File Updates (2026-03-07)

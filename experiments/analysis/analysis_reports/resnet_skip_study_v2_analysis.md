@@ -145,7 +145,7 @@ The halving correctly eliminated all double-VAE configs in R1 and all GenericAE/
 
 ## Cross-Dataset Extension: Tourism-Yearly & Weather-96
 
-**Date:** 2026-03-09 | **Notebook:** `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.ipynb`
+**Date:** 2026-03-10 | **Notebook:** `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.ipynb`
 
 The M4-Yearly findings above were tested on two additional datasets to assess generalizability:
 
@@ -205,58 +205,82 @@ The M4-Yearly findings above were tested on two additional datasets to assess ge
 | 3 | TW16_skip4_a01 | TrendAELG+WaveletV3AELG | 16 | d=4 | 41.065 | 0.089 |
 | 4 | TW16_skip8_learn | TrendAELG+WaveletV3AELG | 16 | d=8 | 41.083 | 0.113 |
 
-**v2 Top Rankings (R2, 3 runs -- R3 incomplete):**
+**v2 Final Rankings — bl=480 (R3, 5 runs):**
 
-| Rank | Config | Architecture | Stacks | Skip | SMAPE | MSE |
-|------|--------|-------------|--------|------|-------|-----|
-| 1 (SMAPE) | TVH10_no_skip | TrendVAE+HaarWaveletV3 | 10 | -- | 37.964 | 0.123 |
-| 2 | TWALG20_skip3_a01 | TrendWaveletAELG | 20 | d=3 | 38.762 | 0.089 |
-| 3 | TWA20_no_skip | TrendWaveletAE | 20 | -- | 38.853 | 0.107 |
-| 1 (MSE) | TWALG20_skip3_a01 | TrendWaveletAELG | 20 | d=3 | 38.762 | 0.089 |
+| Rank | Config | Architecture | Stacks | Skip | MSE | Std | SMAPE | Params |
+|------|--------|-------------|--------|------|-----|-----|-------|--------|
+| 1 | TVH20_skip5_a01 | TrendVAE+HaarWaveletV3 | 20 | d=5, α=0.1 | 0.133 | 0.025 | 41.76 | 12.6M |
+| 2 | TVH10_no_skip | TrendVAE+HaarWaveletV3 | 10 | -- | 0.142 | 0.029 | 41.30 | 6.3M |
+| 3 | TVH20_no_skip | TrendVAE+HaarWaveletV3 | 20 | -- | 0.147 | 0.037 | 41.05 | 12.6M |
+| 4 | TVH30_skip5_a01 | TrendVAE+HaarWaveletV3 | 30 | d=5, α=0.1 | 0.163 | 0.021 | 43.41 | 18.9M |
+| 5 | TVH30_no_skip | TrendVAE+HaarWaveletV3 | 30 | -- | 0.166 | 0.057 | 43.67 | 18.9M |
+| 6 | GAE20_skip5_a01 | GenericAE | 20 | d=5, α=0.1 | 0.172 | 0.029 | 45.48 | 11.2M |
+| 7 | GAE10_no_skip | GenericAE | 10 | -- | 0.174 | 0.024 | 46.09 | 5.6M |
+| 8 | GAE20_no_skip | GenericAE | 20 | -- | 0.196 | 0.042 | 46.54 | 11.2M |
+| 9 | GAE30_skip5_a01 | GenericAE | 30 | d=5, α=0.1 | 0.207 | 0.034 | 48.44 | 16.7M |
+
+**v2 Final Rankings — bl=192 (R3, 5 runs):**
+
+| Rank | Config | Architecture | Stacks | Skip | MSE | Std | SMAPE |
+|------|--------|-------------|--------|------|-----|-----|-------|
+| 1 | TVH30_skip3_a01 | TrendVAE+HaarWaveletV3 | 30 | d=3, α=0.1 | 2,140 | 588 | ~66 |
+| 2 | TVH20_skip5_a01 | TrendVAE+HaarWaveletV3 | 20 | d=5, α=0.1 | 2,227 | 561 | ~67 |
+| 3 | TVH30_skip5_a01 | TrendVAE+HaarWaveletV3 | 30 | d=5, α=0.1 | 2,269 | 1,138 | ~68 |
+| 4 | GAE10_no_skip | GenericAE | 10 | -- | 2,278 | 510 | ~65 |
+
+Note: bl=192 MSE values are in raw (unnormalized) units, hence 4 orders of magnitude larger than bl=480. SMAPE comparison confirms bl=480 is essential (~41 vs ~66).
+
+All TVH and GAE configs surviving to R3 have complete data (9 configs × 5 runs, both bl variants).
 
 **Weather-specific findings:**
 
-1. **No architecture benefits from skip on Weather** (all MWU p > 0.25 for TrendWav/GenericAELG/Generic in v1). In v2, skip actually hurts TrendVAE2+WaveletV3VAE2 (p=0.013) and TrendVAE+Haar (p=0.034).
+1. **Skip is marginally beneficial for TVH on Weather bl=480** but not significant (MWU p=0.69, TVH20_skip5 vs TVH10_no_skip). In v1, skip showed no benefit for TrendWav/GenericAELG (all p > 0.25). The v2 R3 winner does use skip (TVH20_skip5_a01, MSE=0.133), but the effect is not statistically distinguishable from no-skip at this sample size.
 
-2. **GenericAELG does NOT collapse on Weather.** No bimodal failure at any depth (10-30 stacks). Weather's data normalization and longer sequences likely stabilize the learned gate's gradient flow.
+2. **TrendVAE+Haar (TVH) dominates v2 R3 on Weather.** All top-5 bl=480 configs are TVH, pushing GenericAE (MSE=0.172-0.207) to positions 6-9. This reverses the M4/Tourism finding where TVH was inferior. Weather's 21-feature multivariate structure and H=96 horizon favor TVH's higher capacity (6.3-18.9M params).
 
-3. **SMAPE and MSE rankings diverge.** TVH10 wins SMAPE (37.96) but TWALG20_skip3 wins MSE (0.089). For normalized Weather data, MSE is arguably more meaningful.
+3. **GenericAELG does NOT collapse on Weather.** No bimodal failure at any depth (10-30 stacks). Weather's data normalization and longer sequences likely stabilize the learned gate's gradient flow.
 
-4. **GAELG10 has catastrophic MSE on Weather** (~2700) despite moderate SMAPE (~66). At 10 stacks, GenericAELG produces forecasts with roughly correct shape but wildly wrong scale.
+4. **bl=480 is essential for Weather-96.** bl=192 SMAPE ~66-68 vs bl=480 SMAPE ~41-44 — a 25-point SMAPE penalty for insufficient lookback. This confirms the L=5H requirement established in the AsymWavelet Diagnostic study.
 
-5. **TrendWavelet at 16-20 stacks is optimal for Weather.** Both v1 and v2 converge on moderate depth as optimal.
+5. **GAELG10 has catastrophic MSE on Weather** (~2700) despite moderate SMAPE (~66). At 10 stacks, GenericAELG produces forecasts with roughly correct shape but wildly wrong scale.
 
-6. **Double-VAE is much less catastrophic on Weather** (SMAPE 41-46 vs 38-43 for deterministic, ratio ~1.1x). On longer horizons, reparameterization noise averages out.
+6. **Optimal depth for TVH on Weather is 10-20 stacks.** TVH30 consistently underperforms TVH10/20 across both skip and no-skip variants.
 
-7. **Weather v2 R3 is incomplete** (only 2 of ~9 expected configs completed). Rankings are based on R2 data (30 epochs, 3 runs).
+7. **Double-VAE is much less catastrophic on Weather** (SMAPE 41-46 vs 38-43 for deterministic, ratio ~1.1x). On longer horizons, reparameterization noise averages out.
+
+8. **Weather v2 R3 is now complete** (9/9 configs × 5 runs for both bl=192 and bl=480 variants, previously only 2/9 configs had completed).
 
 ### Cross-Dataset Skip Connection Matrix
 
-| Architecture | M4-Yearly (H=6) | Tourism-Yearly (H=4) | Weather-96 (H=96) |
+| Architecture | M4-Yearly (H=6) | Tourism-Yearly (H=4) | Weather-96 (H=96, bl=480) |
 |---|---|---|---|
-| **TrendWaveletAE** | No effect (ns) | **NO-SKIP better** (p=0.001) | No effect (ns) |
-| **TrendWaveletAELG** | No effect (ns) | No effect (ns) | No effect (ns) |
-| **GenericAE** | No effect (ns) | **NO-SKIP better** (p=0.011) | No effect (ns) |
+| **TrendWaveletAE** | No effect (ns) | **NO-SKIP better** (p=0.001) | Not in R3 |
+| **TrendWaveletAELG** | No effect (ns) | No effect (ns) | Not in R3 |
+| **GenericAE** | No effect (ns) | **NO-SKIP better** (p=0.011) | Skip marginal (ns, p=0.22) |
 | **GenericAELG** | **SKIP rescues** at depth>=20 | Skip marginal (ns) | No effect (ns) |
 | **Generic** | No effect (ns) | **SKIP helps** (p=0.014) | No effect (ns) |
+| **TrendVAE+Haar** | Not in R3 | Not in R3 | Skip marginal (ns, p=0.69) |
 | **Double-VAE** | Skip reduces severity (ns) | Skip reduces severity (p<0.01) | No effect / hurts |
 
 ### Cross-Dataset Conclusions
 
-1. **Skip connections are NEVER optimal for TrendWavelet blocks** across all 3 datasets. The polynomial+DWT basis provides inherent depth stability that skip cannot improve and may degrade.
+1. **Skip connections are NEVER reliably optimal for TrendWavelet blocks** across all 3 datasets. The polynomial+DWT basis provides inherent depth stability that skip cannot improve and may degrade (especially unified TrendWaveletAE on Tourism, p=0.001). Note: v1 alternating TrendAELG+WaveletV3AELG on Tourism does see marginal benefits from skip (p=0.016), but this is a different architecture from the unified block.
 
 2. **The GenericAELG rescue effect is M4-specific.** The dramatic bimodal collapse only fully manifests on M4-Yearly. Tourism shows a milder form; Weather shows no collapse. The mechanism depends on horizon length and data normalization.
 
-3. **Optimal depth scales with forecast horizon.** Tourism (H=4): 10 stacks. M4 (H=6): 10-30 stacks (flat). Weather (H=96): 16-20 stacks. Rough heuristic: `optimal_stacks ~ max(10, H)`.
+3. **Optimal depth scales with forecast horizon.** Tourism (H=4): 10 stacks. M4 (H=6): 10-30 stacks (flat). Weather (H=96): 10-20 stacks. Rough heuristic: `optimal_stacks ~ max(10, min(H/5, 30))`.
 
-4. **Double-VAE catastrophe severity scales inversely with horizon.** Tourism (H=4): 7-8x worse. M4 (H=6): 2-3x worse. Weather (H=96): ~1.1x worse.
+4. **Best architecture is dataset-dependent.** TrendWavelet dominates M4. GenericAE dominates Tourism. TrendVAE+Haar dominates Weather (with bl=480). No single architecture wins universally.
 
-5. **Fixed alpha=0.1 remains the safest default.** Wins 4/5 on M4, 4/6 on Tourism, 2/6 on Weather. Learnable alpha gains on Weather but never dramatically.
+5. **Double-VAE catastrophe severity scales inversely with horizon.** Tourism (H=4): 7-8x worse. M4 (H=6): 2-3x worse. Weather (H=96): ~1.1x worse.
+
+6. **Fixed alpha=0.1 remains the safest default.** Wins 4/5 on M4, 4/6 on Tourism, 3/6 on Weather. Learnable alpha gains on some Weather configs but never dramatically.
 
 ### Updated Recommendations (All Datasets)
 
 - **Default: skip OFF** for all architectures except GenericAELG on M4-type data.
-- **Tourism:** Use GenericAE at 10 stacks (SMAPE 20.53) or TrendWaveletAE at 10 stacks (SMAPE 21.10). Skip hurts. Investigate GAE10 with optimized hyperparameters vs Tourism SOTA.
-- **Weather:** Use TrendAELG+WaveletV3AELG at 16 stacks (v1 best) or TrendWaveletAE/AELG at 20 stacks (v2 best). Complete v2 R3 for definitive ranking.
-- **Never pair two VAE-backbone blocks** -- confirmed on all 3 datasets.
+- **M4-Yearly:** TrendWaveletAELG or TrendWaveletAE at 10-30 stacks, no skip. Winner: TWALG30_no_skip (SMAPE 13.568).
+- **Tourism-Yearly:** GenericAE at 10 stacks, no skip (SMAPE 20.526). Competitive with SOTA (TrendWaveletAELG_coif3 at 20.864); requires further head-to-head comparison with 10+ seeds to confirm.
+- **Weather-96:** Use bl=480 (L=5H). TrendVAE+Haar at 10-20 stacks. Best config: TVH20_skip5_a01 (MSE=0.133, SMAPE=41.76) — skip marginally helpful but not significant; TVH10_no_skip (MSE=0.142) is nearly equivalent with half the parameters.
+- **Never pair two VAE-backbone blocks** — confirmed on all 3 datasets.
 - **When skip IS needed** (GenericAELG on M4): use skip_distance=floor(n_stacks/6), alpha=0.1.

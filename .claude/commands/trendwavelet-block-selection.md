@@ -6,10 +6,11 @@ When choosing between TrendWaveletAELG (unified block) and TrendAELG + WaveletV3
 
 | Scenario | Recommended | Rationale |
 |----------|-------------|-----------|
-| **Tourism-Yearly** | **TrendWaveletAELG** | New SOTA (20.681 vs 20.930) |
+| **Tourism-Yearly** | **TrendWaveletAELG** (or test GAE10) | Confirmed SMAPE=20.864 (10-run); GAE10_no_skip achieves 20.526 (needs head-to-head ≥10 seeds to confirm SOTA) |
 | Short horizon (H<=10), simplicity preferred | **TrendWaveletAELG** | Simpler architecture, competitive results |
 | M4-Yearly, maximum accuracy | Trend+WaveletV3 (non-AE) | SOTA 13.410, unified is +0.40% |
 | Traffic-96 or Weather-96 | **TrendAELG+WaveletV3AELG (alternating)** | Requires L≥5H lookback and ≤8-10 stacks; converges with MSE ~0.0006 on Traffic |
+| **Weather-96 (non-alternating)** | **TrendVAE+HaarWaveletV3 at 10-20 stacks** | ResNet skip v2 R3: TVH20_skip5_a01 MSE=0.133 (bl=480); not sig. vs TVH10_no_skip |
 
 ---
 
@@ -30,11 +31,12 @@ Wavelet family is a non-factor for TrendWaveletAELG (Kruskal-Wallis p=0.107 acro
 
 **This is the opposite of alternating stacks** where sym20 is the universal best family.
 
-### Depth scaling (skip study v2, 2026-03-07)
+### Depth scaling (skip study v2, updated 2026-03-10)
 
-- **TrendWaveletAELG is depth-stable from 10 to 30 stacks.** SMAPE 13.57 at both 10 and 30 stacks (no degradation). CV < 1%.
-- **TrendWaveletAE is equally depth-stable** from 10 to 30 stacks. SMAPE 13.58 at 30 stacks.
-- **Skip connections are NOT needed and slightly hurt** at 30 stacks (+0.09 SMAPE). The integrated polynomial+DWT basis provides sufficient inductive bias to prevent residual decay.
+- **TrendWaveletAELG is depth-stable from 10 to 30 stacks on M4.** SMAPE 13.57 at both 10 and 30 stacks (no degradation). CV < 1%.
+- **TrendWaveletAE is equally depth-stable on M4** from 10 to 30 stacks. SMAPE 13.58 at 30 stacks.
+- **Skip connections are NOT needed on M4** and slightly hurt at 30 stacks (+0.09 SMAPE). The integrated polynomial+DWT basis provides sufficient inductive bias to prevent residual decay.
+- **On Tourism, skip actively hurts unified TrendWaveletAE** (MWU p=0.001). Do not use skip for unified TrendWavelet on Tourism. Note: alternating TrendAELG+WaveletV3AELG v1 on Tourism did see marginal skip benefit (p=0.016) — different architecture.
 - **Both AE and AELG backbones perform equivalently** for the unified TrendWavelet block at all depths (unlike alternating stacks where LG > non-LG).
 
 ### Known instability
