@@ -11,6 +11,7 @@ Oreshkin et al. (2019) answered this question with N-BEATS, a fully deep learnin
 This observation motivates the present work: if polynomial and Fourier bases can achieve state-of-the-art results when embedded within the N-BEATS doubly residual framework, what happens when we substitute alternative basis expansions? This repository provides a systematic exploration of alternative block types including:
 
 - **Wavelet basis expansion blocks** (V3 variants: Haar, Daubechies, Coiflets, Symlets) offering multi-resolution time-frequency localization
+- **Hybrid TrendWavelet / TrendWaveletGeneric blocks** combining polynomial trend, orthonormal wavelet, and optional learned generic basis expansions inside a single block
 - **Autoencoder blocks** with separated encoder-decoder paths for data-driven compressed representations
 - **Bottleneck generic blocks** with rank-*d* factorized projections for parameter-efficient basis expansion
 - **AE-backbone variants** (`AERootBlock`, `AERootBlockLG`, `AERootBlockVAE`) replacing the uniform FC-layer backbone with a hourglass encoder-decoder structure that achieves 5–10× parameter reduction
@@ -151,6 +152,13 @@ Define the model by defining the architecture in the `stack_types` parameter.  T
 - SeasonalityAE
 - AutoEncoder
 - AutoEncoderAE
+- TrendWavelet
+- TrendWaveletAE
+- TrendWaveletAELG
+- TrendWaveletGeneric
+- TrendWaveletGenericAE
+- TrendWaveletGenericAELG
+- TrendWaveletGenericVAE
 - WaveletV3 *(generic base class — wavelet family set via `wavelet_type` parameter)*
 - HaarWaveletV3
 - DB2WaveletV3
@@ -168,6 +176,8 @@ Define the model by defining the architecture in the `stack_types` parameter.  T
 - Symlet20WaveletV3
 
 Generic base classes (`WaveletV3`, `WaveletV3AE`, `WaveletV3AELG`, `WaveletV3VAE2`, `WaveletV3VAE`) are the recommended public API for new experiments. They accept `wavelet_type`, `backcast_wavelet_type`, and `forecast_wavelet_type` parameters, allowing different wavelet families for the backcast and forecast paths. Family-named subclasses (e.g., `HaarWaveletV3`) remain as compatibility wrappers.
+
+The hybrid `TrendWavelet*` families expose the same wavelet-family controls. `TrendWaveletGeneric*` adds a third learned generic branch, giving a three-way additive decomposition: trend + wavelet + generic. These blocks additionally use `generic_dim` to control the rank of that learned branch.
 
 Note: `WaveletV2`/`AltWaveletV2` block families were removed due to instability. Historical experiment results are retained under `experiments/results/` for reference.
 
@@ -346,6 +356,8 @@ stack_types = ['Trend', 'BottleneckGeneric'] * n_stacks
 This repository contains a number of experimental Wavelet Basis Expansion Blocks. Wavelet basis expansion is a mathematical technique used to represent signals or functions in terms of simpler, fixed building blocks called wavelets. Unlike Fourier transforms, which use sine and cosine functions as basis elements, wavelets can be localized in both time and frequency. This means they can represent both the frequency content of a signal and when these frequencies occur.
 
 This method is particularly useful for analyzing functions or signals that contain features at multiple scales.  The multi-resolution analysis capability of wavelets is particularly suited to capturing the essence of time series data then, which can have complex, hierarchical structures due to the presence of trends, seasonal effects, cycles, and irregular fluctuations.
+
+In addition to pure wavelet blocks, the repository also includes hybrid `TrendWavelet` and `TrendWaveletGeneric` families. `TrendWavelet` combines a fixed polynomial trend basis with an orthonormal DWT basis in one block. `TrendWaveletGeneric` extends that design with a third learned low-rank generic basis path, yielding `trend + wavelet + generic` additive outputs. Available variants are `TrendWaveletGeneric`, `TrendWaveletGenericAE`, `TrendWaveletGenericAELG`, and `TrendWaveletGenericVAE`.
 
 Wavelet blocks can be used in isolation or in combination with other blocks freely. V1 and V2 wavelet blocks were removed due to instability (NaN failures and MASE explosion). Use V3 variants. Historical V2 benchmark results are kept in `experiments/results/` for reference. For instance:
 

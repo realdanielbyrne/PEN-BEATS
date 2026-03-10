@@ -78,11 +78,12 @@ Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loade
 
 - `models.py`: `NBeatsNet(pl.LightningModule)` main model. Accepts `stack_types` list of strings to define architecture. Handles forward pass with backward/forward residual connections, training/validation/test steps, loss configuration, and optimizer setup.
 - `blocks/blocks.py`: all block implementations (largest file). Two parallel inheritance hierarchies:
-  - `RootBlock(nn.Module)`: standard backbone. Parent of `Generic`, `BottleneckGeneric`, `Seasonality`, `Trend`, `AutoEncoder`, `VAE`, `GenericAEBackcast`, `WaveletV3`, and concrete wavelet subclasses.
-  - `AERootBlock(nn.Module)`: autoencoder backbone. Parent of `GenericAE`, `BottleneckGenericAE`, `TrendAE`, `SeasonalityAE`, `AutoEncoderAE`, `GenericAEBackcastAE`.
-  - `AERootBlockLG(nn.Module)`: Learned-Gate AE backbone: same encoder-decoder as `AERootBlock` but adds a learnable `nn.Parameter` gate vector (`latent_gate`) of size `latent_dim`. Applies `sigmoid(gate) * z` after the latent layer. Parent of `GenericAELG`, `BottleneckGenericAELG`, `TrendAELG`, `SeasonalityAELG`, `AutoEncoderAELG`, `GenericAEBackcastAELG`.
-  - `AERootBlockVAE(nn.Module)`: Variational AE backbone: stochastic latent space with `fc2_mu`/`fc2_logvar` heads and reparameterization trick. Stores `self.kl_loss`; collected in `training_step()` with weight 0.001. Parent of `GenericVAE`, `BottleneckGenericVAE`, `TrendVAE`, `SeasonalityVAE`, `AutoEncoderVAE`, `GenericAEBackcastVAE`.
+  - `RootBlock(nn.Module)`: standard backbone. Parent of `Generic`, `BottleneckGeneric`, `Seasonality`, `Trend`, `AutoEncoder`, `VAE`, `GenericAEBackcast`, `WaveletV3`, `TrendWavelet`, `TrendWaveletGeneric`, and concrete wavelet subclasses.
+  - `AERootBlock(nn.Module)`: autoencoder backbone. Parent of `GenericAE`, `BottleneckGenericAE`, `TrendAE`, `SeasonalityAE`, `AutoEncoderAE`, `GenericAEBackcastAE`, `TrendWaveletAE`, and `TrendWaveletGenericAE`.
+  - `AERootBlockLG(nn.Module)`: Learned-Gate AE backbone: same encoder-decoder as `AERootBlock` but adds a learnable `nn.Parameter` gate vector (`latent_gate`) of size `latent_dim`. Applies `sigmoid(gate) * z` after the latent layer. Parent of `GenericAELG`, `BottleneckGenericAELG`, `TrendAELG`, `SeasonalityAELG`, `AutoEncoderAELG`, `GenericAEBackcastAELG`, `TrendWaveletAELG`, and `TrendWaveletGenericAELG`.
+  - `AERootBlockVAE(nn.Module)`: Variational AE backbone: stochastic latent space with `fc2_mu`/`fc2_logvar` heads and reparameterization trick. Stores `self.kl_loss`; collected in `training_step()` with weight 0.001. Parent of `GenericVAE`, `BottleneckGenericVAE`, `TrendVAE`, `SeasonalityVAE`, `AutoEncoderVAE`, `GenericAEBackcastVAE`, and `TrendWaveletGenericVAE`.
   - Wavelet blocks (`HaarWaveletV3`, `DB2WaveletV3`, etc.) are thin subclasses that set the wavelet type string.
+  - `TrendWavelet` merges polynomial trend and orthonormal DWT basis expansions in one block. `TrendWaveletGeneric` adds a third learned low-rank generic basis branch; AE / LG / VAE descendants keep that three-way additive decomposition.
   - Basis generators (`_SeasonalityGenerator`, `_TrendGenerator`, `_WaveletGeneratorV3`) produce non-trainable basis matrices registered as buffers.
   - V1 and V2 wavelet blocks were removed due to instability. Use V3 wavelet variants.
 - `loaders.py`: Lightning DataModules and Datasets. Two data layout conventions:
@@ -105,7 +106,9 @@ Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loade
 - `active_g`: applies activation to the final linear layers of Generic-type blocks. Default `False`.
 - Weight sharing: when `share_weights=True`, blocks within a stack reuse the first block's parameters.
 - `sum_losses`: adds weighted backcast reconstruction loss (0.25 x loss vs zeros) to forecast loss.
+- `trend_thetas_dim` / `generic_dim`: Trend, TrendWavelet, and TrendWaveletGeneric families use `trend_thetas_dim` for polynomial order; `TrendWaveletGeneric*` additionally use `generic_dim` for the learned generic branch rank.
 - `forecast_basis_dim`: optional override for WaveletV3 forecast basis dimension. Default `None` (both paths use `basis_dim`).
+- Asymmetric wavelet families (`backcast_wavelet_type`, `forecast_wavelet_type`) are supported by the generic WaveletV3 base classes and the hybrid `TrendWavelet` / `TrendWaveletGeneric` families.
 
 ### Width Parameter Mapping
 
@@ -115,7 +118,7 @@ Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loade
 |---|---|---|
 | `g_width` | 512 | `Generic`, `BottleneckGeneric`, `GenericAE`, `BottleneckGenericAE`, `GenericAEBackcast`, `GenericAEBackcastAE`, all wavelet blocks |
 | `s_width` | 2048 | `Seasonality`, `SeasonalityAE` |
-| `t_width` | 256 | `Trend`, `TrendAE` |
+| `t_width` | 256 | `Trend`, `TrendAE`, `TrendWavelet`, `TrendWaveletGeneric`, `TrendWaveletGenericAE`, `TrendWaveletGenericAELG`, `TrendWaveletGenericVAE` |
 | `ae_width` | 512 | `AutoEncoder`, `AutoEncoderAE` |
 
 ## Adding a New Block Type
