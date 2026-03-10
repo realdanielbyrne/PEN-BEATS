@@ -766,6 +766,7 @@ def run_single_config(
         seed=seed,
         skip_distance=int(training.get("skip_distance", 0)),
         skip_alpha=training.get("skip_alpha", 0.0),
+        generic_dim=int(block_params.get("generic_dim", 5)),
     )
 
 

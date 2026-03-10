@@ -816,6 +816,7 @@ def run_single_experiment(
     forecast_wavelet_type=None,   # Override wavelet family for forecast path only
     skip_distance=0,              # Re-inject original input every N stacks (0 = disabled)
     skip_alpha=0.0,               # Mixing weight for skip injection (float or "learnable")
+    generic_dim=5,                # Learned generic branch rank for TrendWaveletGeneric* blocks
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -866,6 +867,7 @@ def run_single_experiment(
         stack_basis_offsets=stack_basis_offsets,
         forecast_basis_dim=forecast_basis_dim,
         trend_thetas_dim=trend_thetas_dim,
+        generic_dim=generic_dim,
         wavelet_type=wavelet_type,
         backcast_wavelet_type=backcast_wavelet_type,
         forecast_wavelet_type=forecast_wavelet_type,

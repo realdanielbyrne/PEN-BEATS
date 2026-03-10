@@ -220,6 +220,7 @@ block_params:
   basis_dim: 128           # WaveletV3 basis dimension
   forecast_basis_dim: null # WaveletV3 asymmetric forecast basis (null = same as basis_dim)
   trend_thetas_dim: null   # Trend polynomial degree override (null = use thetas_dim)
+  generic_dim: 5           # Learned generic branch rank for TrendWaveletGeneric* blocks
   wavelet_type: null       # Wavelet family for wavelet-capable blocks (null = 'db3')
   backcast_wavelet_type: null  # Override wavelet family for backcast path only (null = use wavelet_type)
   forecast_wavelet_type: null  # Override wavelet family for forecast path only (null = use wavelet_type)
