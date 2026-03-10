@@ -1256,7 +1256,8 @@ class TrendWaveletGeneric(RootBlock):
         share_weights (bool, optional): Share the projection head between backcast and
             forecast paths when their total coefficient dimensions match. Defaults to False.
         activation (str, optional): Activation function for the backbone. Defaults to 'ReLU'.
-        active_g (bool or str, optional): Apply activation after basis expansion.
+        active_g (bool or str, optional): Apply activation to the generic basis
+            projection only (trend and wavelet projections remain linear).
             False = no activation.  True = both paths.
             'backcast'/'forecast' = single path.  Defaults to False.
         wavelet_type (str, optional): PyWavelets wavelet family string. Defaults to 'db3'.
@@ -1322,19 +1323,22 @@ class TrendWaveletGeneric(RootBlock):
     f_wavelet = forecast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_fore_wave]
     f_generic = forecast_coeffs[:, self.trend_dim + self.eff_fore_wave:]
 
+    # Activate generic projection only when active_g is set
+    b_generic_out = self.backcast_generic_g(b_generic)
+    f_generic_out = self.forecast_generic_g(f_generic)
+    if self.active_g:
+      if self.active_g != 'forecast':
+        b_generic_out = self.activation(b_generic_out)
+      if self.active_g != 'backcast':
+        f_generic_out = self.activation(f_generic_out)
+
     # Additive decomposition: structured + structured + learned
     backcast = (self.backcast_trend_g(b_trend)
               + self.backcast_wavelet_g(b_wavelet)
-              + self.backcast_generic_g(b_generic))
+              + b_generic_out)
     forecast = (self.forecast_trend_g(f_trend)
               + self.forecast_wavelet_g(f_wavelet)
-              + self.forecast_generic_g(f_generic))
-
-    if self.active_g:
-      if self.active_g != 'forecast':
-        backcast = self.activation(backcast)
-      if self.active_g != 'backcast':
-        forecast = self.activation(forecast)
+              + f_generic_out)
 
     return backcast, forecast
 
@@ -1569,7 +1573,10 @@ class TrendWaveletGenericAE(AERootBlock):
         basis_offset (int, optional): DWT basis row offset. Defaults to 0.
         share_weights (bool, optional): Share projection heads when dims match. Defaults to False.
         activation (str, optional): Activation function. Defaults to 'ReLU'.
-        active_g (bool or str, optional): Activation after basis expansion. Defaults to False.
+        active_g (bool or str, optional): Apply activation to the generic basis
+            projection only (trend and wavelet projections remain linear).
+            False = no activation.  True = both paths.
+            'backcast'/'forecast' = single path.  Defaults to False.
         wavelet_type (str, optional): PyWavelets wavelet family. Defaults to 'db3'.
         latent_dim (int, optional): AE bottleneck dimensionality. Defaults to 5.
         forecast_basis_dim (int, optional): Override wavelet basis dim for forecast. Defaults to None.
@@ -1627,18 +1634,20 @@ class TrendWaveletGenericAE(AERootBlock):
     f_wavelet = forecast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_fore_wave]
     f_generic = forecast_coeffs[:, self.trend_dim + self.eff_fore_wave:]
 
-    backcast = (self.backcast_trend_g(b_trend)
-              + self.backcast_wavelet_g(b_wavelet)
-              + self.backcast_generic_g(b_generic))
-    forecast = (self.forecast_trend_g(f_trend)
-              + self.forecast_wavelet_g(f_wavelet)
-              + self.forecast_generic_g(f_generic))
-
+    b_generic_out = self.backcast_generic_g(b_generic)
+    f_generic_out = self.forecast_generic_g(f_generic)
     if self.active_g:
       if self.active_g != 'forecast':
-        backcast = self.activation(backcast)
+        b_generic_out = self.activation(b_generic_out)
       if self.active_g != 'backcast':
-        forecast = self.activation(forecast)
+        f_generic_out = self.activation(f_generic_out)
+
+    backcast = (self.backcast_trend_g(b_trend)
+              + self.backcast_wavelet_g(b_wavelet)
+              + b_generic_out)
+    forecast = (self.forecast_trend_g(f_trend)
+              + self.forecast_wavelet_g(f_wavelet)
+              + f_generic_out)
 
     return backcast, forecast
 
@@ -1706,18 +1715,20 @@ class TrendWaveletGenericAELG(AERootBlockLG):
     f_wavelet = forecast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_fore_wave]
     f_generic = forecast_coeffs[:, self.trend_dim + self.eff_fore_wave:]
 
-    backcast = (self.backcast_trend_g(b_trend)
-              + self.backcast_wavelet_g(b_wavelet)
-              + self.backcast_generic_g(b_generic))
-    forecast = (self.forecast_trend_g(f_trend)
-              + self.forecast_wavelet_g(f_wavelet)
-              + self.forecast_generic_g(f_generic))
-
+    b_generic_out = self.backcast_generic_g(b_generic)
+    f_generic_out = self.forecast_generic_g(f_generic)
     if self.active_g:
       if self.active_g != 'forecast':
-        backcast = self.activation(backcast)
+        b_generic_out = self.activation(b_generic_out)
       if self.active_g != 'backcast':
-        forecast = self.activation(forecast)
+        f_generic_out = self.activation(f_generic_out)
+
+    backcast = (self.backcast_trend_g(b_trend)
+              + self.backcast_wavelet_g(b_wavelet)
+              + b_generic_out)
+    forecast = (self.forecast_trend_g(f_trend)
+              + self.forecast_wavelet_g(f_wavelet)
+              + f_generic_out)
 
     return backcast, forecast
 
@@ -1786,18 +1797,20 @@ class TrendWaveletGenericVAE(AERootBlockVAE):
     f_wavelet = forecast_coeffs[:, self.trend_dim:self.trend_dim + self.eff_fore_wave]
     f_generic = forecast_coeffs[:, self.trend_dim + self.eff_fore_wave:]
 
-    backcast = (self.backcast_trend_g(b_trend)
-              + self.backcast_wavelet_g(b_wavelet)
-              + self.backcast_generic_g(b_generic))
-    forecast = (self.forecast_trend_g(f_trend)
-              + self.forecast_wavelet_g(f_wavelet)
-              + self.forecast_generic_g(f_generic))
-
+    b_generic_out = self.backcast_generic_g(b_generic)
+    f_generic_out = self.forecast_generic_g(f_generic)
     if self.active_g:
       if self.active_g != 'forecast':
-        backcast = self.activation(backcast)
+        b_generic_out = self.activation(b_generic_out)
       if self.active_g != 'backcast':
-        forecast = self.activation(forecast)
+        f_generic_out = self.activation(f_generic_out)
+
+    backcast = (self.backcast_trend_g(b_trend)
+              + self.backcast_wavelet_g(b_wavelet)
+              + b_generic_out)
+    forecast = (self.forecast_trend_g(f_trend)
+              + self.forecast_wavelet_g(f_wavelet)
+              + f_generic_out)
 
     return backcast, forecast
 
