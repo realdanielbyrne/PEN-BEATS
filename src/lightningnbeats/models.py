@@ -378,7 +378,8 @@ class NBeatsNet(_NBeatsBase):
           elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityVAE",
                               "SeasonalityVAE2"]:
             units = self.s_width
-          elif stack_type in ["Trend", "TrendAE", "TrendWavelet", "TrendAELG", "TrendVAE", "TrendVAE2",
+          elif stack_type in ["Trend", "TrendAE", "TrendWavelet", "TrendWaveletAE", "TrendWaveletAELG",
+                              "TrendAELG", "TrendVAE", "TrendVAE2",
                               "TrendWaveletGeneric", "TrendWaveletGenericAE",
                               "TrendWaveletGenericAELG", "TrendWaveletGenericVAE"]:
             units = self.t_width
@@ -784,7 +785,8 @@ class NHiTSNet(_NBeatsBase):
           units = self.g_width
         elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityVAE"]:
           units = self.s_width
-        elif stack_type in ["Trend", "TrendAE", "TrendWavelet", "TrendAELG", "TrendVAE",
+        elif stack_type in ["Trend", "TrendAE", "TrendWavelet", "TrendWaveletAE", "TrendWaveletAELG",
+                            "TrendAELG", "TrendVAE",
                             "TrendWaveletGeneric", "TrendWaveletGenericAE",
                             "TrendWaveletGenericAELG", "TrendWaveletGenericVAE"]:
           units = self.t_width

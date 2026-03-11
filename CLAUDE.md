@@ -174,7 +174,7 @@ The `create_stack` method selects hidden layer width by block type:
 |---|---|---|
 | `g_width` | 512 | `Generic`, `BottleneckGeneric`, `GenericAE`, `BottleneckGenericAE`, `GenericAEBackcast`, `GenericAEBackcastAE`, all wavelet blocks |
 | `s_width` | 2048 | `Seasonality`, `SeasonalityAE` |
-| `t_width` | 256 | `Trend`, `TrendAE`, `TrendWavelet`, `TrendWaveletGeneric`, `TrendWaveletGenericAE`, `TrendWaveletGenericAELG`, `TrendWaveletGenericVAE` |
+| `t_width` | 256 | `Trend`, `TrendAE`, `TrendWavelet`, `TrendWaveletAE`, `TrendWaveletAELG`, `TrendWaveletGeneric`, `TrendWaveletGenericAE`, `TrendWaveletGenericAELG`, `TrendWaveletGenericVAE` |
 | `ae_width` | 512 | `AutoEncoder`, `AutoEncoderAE` |
 
 ### Adding a New Block Type
