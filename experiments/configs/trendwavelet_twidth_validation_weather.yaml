@@ -1,0 +1,219 @@
+# ============================================================
+# TrendWaveletAE/AELG Corrected-Width Validation — Weather-96
+#
+# Validates TrendWaveletAE and TrendWaveletAELG with the
+# corrected t_width=256 (fixed from inadvertent g_width=512).
+# Weather-96 dataset (H=96, backcast=480, forecast_multiplier=5).
+#
+# Design:
+#   - 2 block types × 4 wavelet families = 8 configs
+#   - Single pass: active_g=false
+#   - eq_fcast: basis_dim=96 (= forecast_length H=96)
+#   - forecast_basis_dim=96 (symmetric, both paths same)
+#   - latent_dim=8 for AE, latent_dim=12 for AELG
+#   - 10 stacks, 5 runs per config = 40 total runs
+#
+# Protocol: columnar dataset requires normalize=true,
+#   train_ratio=0.7, val_ratio=0.1, include_target=true,
+#   forecast_multiplier=5 (L=480), batch_size=256.
+#
+# Note on sym20 + basis_dim=96: sym20 has long support and
+#   H=96 gives sufficient length for full multi-level DWT
+#   decomposition. WaveletV3 short-target guard is not triggered.
+#
+# Usage:
+#   python experiments/run_from_yaml.py \
+#       experiments/configs/trendwavelet_twidth_validation_weather.yaml --dry-run
+#   python experiments/run_from_yaml.py \
+#       experiments/configs/trendwavelet_twidth_validation_weather.yaml
+#   python experiments/run_from_yaml.py \
+#       experiments/configs/trendwavelet_twidth_validation_weather.yaml --worker-id gpu0
+# ============================================================
+
+experiment_name: trendwavelet_twidth_validation_weather
+category: trendwavelet_twidth_validation
+description: >
+  TrendWaveletAE/AELG with corrected t_width=256 on Weather-96.
+  Validates the width bug fix across datasets. eq_fcast: basis_dim=96 (H=96).
+  Protocol: normalize=true, forecast_multiplier=5 (L=480), batch_size=256.
+
+dataset: weather
+periods:
+  - Weather-96
+
+protocol:
+  normalize: true
+  train_ratio: 0.7
+  val_ratio: 0.1
+  include_target: true
+  forecast_multiplier: 5
+  batch_size: 256
+
+training:
+  active_g: false
+  sum_losses: false
+  activation: ReLU
+  max_epochs: 100
+  patience: 10
+  n_blocks_per_stack: 1
+  share_weights: true
+  loss: SMAPELoss
+  optimizer: Adam
+  learning_rate: 0.001
+
+lr_scheduler:
+  warmup_epochs: 15
+  eta_min: 0.000001
+
+# Global block params — t_width=256 explicitly set to document the corrected value.
+# basis_dim=96 = eq_fcast for Weather-96 (H=96).
+# forecast_basis_dim=96: symmetric paths (same for backcast and forecast).
+block_params:
+  trend_thetas_dim: 3
+  basis_dim: 96
+  forecast_basis_dim: 96
+  t_width: 256
+
+extra_csv_columns:
+  - block_type
+  - backbone
+  - wavelet_family
+
+# ── TrendWaveletAE (AERootBlock, latent_dim=8) ────────────────────────────────
+configs:
+  - name: TWAE_haar_td3_bd96_ld8
+    category: trendwaveletae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAE
+      n: 10
+    block_params:
+      wavelet_type: haar
+      latent_dim: 8
+    extra_fields:
+      block_type: TrendWaveletAE
+      backbone: AERootBlock
+      wavelet_family: haar
+
+  - name: TWAE_db3_td3_bd96_ld8
+    category: trendwaveletae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAE
+      n: 10
+    block_params:
+      wavelet_type: db3
+      latent_dim: 8
+    extra_fields:
+      block_type: TrendWaveletAE
+      backbone: AERootBlock
+      wavelet_family: db3
+
+  - name: TWAE_db10_td3_bd96_ld8
+    category: trendwaveletae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAE
+      n: 10
+    block_params:
+      wavelet_type: db10
+      latent_dim: 8
+    extra_fields:
+      block_type: TrendWaveletAE
+      backbone: AERootBlock
+      wavelet_family: db10
+
+  - name: TWAE_sym20_td3_bd96_ld8
+    category: trendwaveletae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAE
+      n: 10
+    block_params:
+      wavelet_type: sym20
+      latent_dim: 8
+    extra_fields:
+      block_type: TrendWaveletAE
+      backbone: AERootBlock
+      wavelet_family: sym20
+
+# ── TrendWaveletAELG (AERootBlockLG, latent_dim=12) ──────────────────────────
+  - name: TWAELG_haar_td3_bd96_ld12
+    category: trendwaveletaelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 10
+    block_params:
+      wavelet_type: haar
+      latent_dim: 12
+    extra_fields:
+      block_type: TrendWaveletAELG
+      backbone: AERootBlockLG
+      wavelet_family: haar
+
+  - name: TWAELG_db3_td3_bd96_ld12
+    category: trendwaveletaelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 10
+    block_params:
+      wavelet_type: db3
+      latent_dim: 12
+    extra_fields:
+      block_type: TrendWaveletAELG
+      backbone: AERootBlockLG
+      wavelet_family: db3
+
+  - name: TWAELG_db10_td3_bd96_ld12
+    category: trendwaveletaelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 10
+    block_params:
+      wavelet_type: db10
+      latent_dim: 12
+    extra_fields:
+      block_type: TrendWaveletAELG
+      backbone: AERootBlockLG
+      wavelet_family: db10
+
+  - name: TWAELG_sym20_td3_bd96_ld12
+    category: trendwaveletaelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 10
+    block_params:
+      wavelet_type: sym20
+      latent_dim: 12
+    extra_fields:
+      block_type: TrendWaveletAELG
+      backbone: AERootBlockLG
+      wavelet_family: sym20
+
+runs:
+  n_runs: 5
+  base_seed: 42
+
+output:
+  results_dir: experiments/results
+  csv_filename: trendwavelet_twidth_validation_weather_results.csv
+  save_predictions: false
+
+logging:
+  wandb:
+    enabled: false
+    project: nbeats-lightning
+  tensorboard: false
+
+hardware:
+  accelerator: auto
+  num_workers: 0
+  worker_id: ""
+
+analysis:
+  enabled: true
+  ranking: true
