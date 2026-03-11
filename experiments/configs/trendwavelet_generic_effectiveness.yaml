@@ -19,6 +19,16 @@
 #       experiments/configs/trendwavelet_generic_effectiveness.yaml --dry-run
 #   python experiments/run_from_yaml.py \
 #       experiments/configs/trendwavelet_generic_effectiveness.yaml
+#   python experiments/run_from_yaml.py \
+#       experiments/configs/trendwavelet_generic_effectiveness.yaml --worker-id gpu0
+#   python experiments/run_from_yaml.py \
+#       experiments/configs/trendwavelet_generic_effectiveness.yaml --worker-id gpu1
+#
+# Parallel note:
+#   YAML/unified runs claim jobs atomically under experiments/results/.claims/.
+#   The filename shape stays <config>__<dataset>__<horizon>__run<idx>.claim, but
+#   the pass name is prefixed into the config segment so baseline and
+#   activeG_fcast do not collide.
 # ============================================================
 
 experiment_name: trendwavelet_generic_effectiveness
@@ -170,6 +180,7 @@ logging:
 hardware:
   accelerator: auto
   num_workers: 0
+  worker_id: ""
 
 analysis:
   enabled: true

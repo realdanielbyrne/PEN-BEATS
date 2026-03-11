@@ -155,6 +155,7 @@ DEFAULT_HARDWARE = {
     "accelerator": "auto",
     "num_workers": 0,
     "gpu_id": None,
+    "worker_id": "",
 }
 
 # ---------------------------------------------------------------------------
@@ -632,6 +633,7 @@ def run_single_config(
     config: dict,
     pass_name: str,
     pass_training_override: dict,
+    dataset_name: str,
     period: str,
     run_idx: int,
     dataset,
@@ -658,6 +660,8 @@ def run_single_config(
         Pass label used as the ``experiment_name`` in CSV rows.
     pass_training_override : dict
         Training param overrides specific to this pass (e.g. active_g).
+    dataset_name : str
+        Canonical dataset slug used for claim identity (e.g. "m4").
     period : str
         Dataset period string (e.g. "Yearly", "Traffic-96").
     run_idx : int
@@ -746,6 +750,8 @@ def run_single_config(
         save_predictions=bool(output_cfg.get("save_predictions", True)),
         predictions_dir=predictions_dir,
         gpu_id=hardware_cfg.get("gpu_id"),
+        dataset_name=dataset_name,
+        worker_id=str(hardware_cfg.get("worker_id", "") or ""),
         basis_dim=int(block_params.get("basis_dim", BASIS_DIM)),
         forecast_basis_dim=block_params.get("forecast_basis_dim"),
         extra_row=extra_row if extra_row else None,
@@ -778,6 +784,7 @@ def _run_standard(
     configs: list,
     passes: list,
     n_runs: int,
+    dataset_name: str,
     period: str,
     dataset,
     train_series_list,
@@ -827,6 +834,7 @@ def _run_standard(
                     config=config,
                     pass_name=pass_name,
                     pass_training_override=pass_training,
+                    dataset_name=dataset_name,
                     period=period,
                     run_idx=run_idx,
                     dataset=dataset,
@@ -1077,6 +1085,7 @@ def _run_successive_halving(
     configs: list,
     passes: list,
     search_rounds: list,
+    dataset_name: str,
     period: str,
     dataset,
     train_series_list,
@@ -1157,6 +1166,7 @@ def _run_successive_halving(
                         config=config,
                         pass_name=pass_name,
                         pass_training_override=pass_training,
+                        dataset_name=dataset_name,
                         period=period,
                         run_idx=run_idx,
                         dataset=dataset,
@@ -1438,6 +1448,7 @@ def run_experiment(
                     configs=configs,
                     passes=passes,
                     search_rounds=search_rounds,
+                    dataset_name=dataset_name,
                     period=period,
                     dataset=dataset,
                     train_series_list=train_series_list,
@@ -1455,6 +1466,7 @@ def run_experiment(
                     configs=configs,
                     passes=passes,
                     n_runs=n_runs,
+                    dataset_name=dataset_name,
                     period=period,
                     dataset=dataset,
                     train_series_list=train_series_list,
@@ -1539,6 +1551,10 @@ Examples:
         help="Override DataLoader workers (default: from YAML).",
     )
     parser.add_argument(
+        "--worker-id", default=None,
+        help="Optional worker label recorded in atomic claim files.",
+    )
+    parser.add_argument(
         "--wandb", action="store_true", default=False,
         help="Enable Weights & Biases logging.",
     )
@@ -1592,6 +1608,8 @@ Examples:
         cli_overrides.setdefault("hardware", {})["gpu_id"] = args.gpu_id
     if args.num_workers is not None:
         cli_overrides.setdefault("hardware", {})["num_workers"] = args.num_workers
+    if args.worker_id is not None:
+        cli_overrides.setdefault("hardware", {})["worker_id"] = args.worker_id
     if args.wandb:
         cli_overrides.setdefault("logging", {}).setdefault(
             "wandb", {}

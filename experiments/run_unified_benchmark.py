@@ -130,6 +130,8 @@ BASE_SEED = 42
 N_RUNS_DEFAULT = 10
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
+CLAIMS_DIR = os.path.join(RESULTS_DIR, ".claims")
+STALE_CLAIM_SECONDS = 7200  # 2 hours — assume crashed worker
 
 # ---------------------------------------------------------------------------
 # Dataset Periods
@@ -764,6 +766,71 @@ def result_exists(path, experiment, config_name, period, run):
     return False
 
 
+def _claim_key(config_name, dataset_name, horizon_label, run_idx):
+    """Deterministic filename for a job claim file."""
+    return f"{config_name}__{dataset_name}__{horizon_label}__run{run_idx}.claim"
+
+
+def build_claim_config_name(experiment_name, config_name):
+    """Make claim identity pass-aware for two-pass/search YAML jobs."""
+    if not experiment_name:
+        return config_name
+    return f"{experiment_name}__{config_name}"
+
+
+def claim_job(config_name, dataset_name, horizon_label, run_idx, worker_id=""):
+    """Atomically claim a job. Returns True if this process won the claim."""
+    os.makedirs(CLAIMS_DIR, exist_ok=True)
+    claim_path = os.path.join(
+        CLAIMS_DIR,
+        _claim_key(config_name, dataset_name, horizon_label, run_idx),
+    )
+    try:
+        file_descriptor = os.open(claim_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        with os.fdopen(file_descriptor, "w") as claim_file:
+            claim_file.write(json.dumps({
+                "worker_id": worker_id,
+                "pid": os.getpid(),
+                "claimed_at": time.time(),
+                "config_name": config_name,
+                "dataset": dataset_name,
+                "horizon": horizon_label,
+                "run": run_idx,
+            }))
+        return True
+    except FileExistsError:
+        try:
+            claim_age_seconds = time.time() - os.path.getmtime(claim_path)
+            if claim_age_seconds > STALE_CLAIM_SECONDS:
+                print(
+                    f"  [STALE] Reclaiming stale job: "
+                    f"{config_name}/{dataset_name}-{horizon_label}/run{run_idx}"
+                )
+                os.unlink(claim_path)
+                return claim_job(
+                    config_name,
+                    dataset_name,
+                    horizon_label,
+                    run_idx,
+                    worker_id,
+                )
+        except OSError:
+            pass
+        return False
+
+
+def release_claim(config_name, dataset_name, horizon_label, run_idx):
+    """Remove a claim file after the job is complete or aborted."""
+    claim_path = os.path.join(
+        CLAIMS_DIR,
+        _claim_key(config_name, dataset_name, horizon_label, run_idx),
+    )
+    try:
+        os.unlink(claim_path)
+    except OSError:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Single Run Function
 # ---------------------------------------------------------------------------
@@ -794,6 +861,8 @@ def run_single_experiment(
     save_predictions=True,
     predictions_dir=None,
     gpu_id=None,
+    dataset_name=None,
+    worker_id="",
     basis_dim=BASIS_DIM,
     basis_offset=0,
     stack_basis_offsets=None,
@@ -827,271 +896,338 @@ def run_single_experiment(
         print(f"  {prefix}[SKIP] {config_name} / {period} / run {run_idx} -- already exists")
         return
 
-    seed = seed if seed is not None else (BASE_SEED + run_idx)
-    set_seed(seed)
+    effective_dataset_name = dataset_name or getattr(dataset, "name", "unknown")
+    claim_config_name = build_claim_config_name(experiment_name, config_name)
+    if not claim_job(
+        claim_config_name,
+        effective_dataset_name,
+        period,
+        run_idx,
+        worker_id,
+    ):
+        print(
+            f"  {prefix}[CLAIMED] {config_name} / {period} / run {run_idx} "
+            f"(another worker)"
+        )
+        return
 
-    forecast_length = dataset.forecast_length
-    frequency = dataset.frequency
-    backcast_length = forecast_length * forecast_multiplier
+    try:
+        seed = seed if seed is not None else (BASE_SEED + run_idx)
+        set_seed(seed)
 
-    n_stacks = len(stack_types)
+        forecast_length = dataset.forecast_length
+        frequency = dataset.frequency
+        backcast_length = forecast_length * forecast_multiplier
 
-    accelerator, device = resolve_accelerator(accelerator_override)
+        n_stacks = len(stack_types)
 
-    # Mixed precision on CUDA — prefer bf16 (same exponent range as fp32,
-    # avoids the fp16 overflow that kills 30-stack N-BEATS on M4).
-    if accelerator == "cuda" and torch.cuda.is_bf16_supported():
-        precision = "bf16-mixed"
-    elif accelerator == "cuda":
-        precision = "32-true"           # fp16 overflows; fall back to fp32
-    else:
-        precision = "32-true"
+        accelerator, device = resolve_accelerator(accelerator_override)
 
-    # Create model
-    effective_thetas_dim = thetas_dim_override if thetas_dim_override is not None else THETAS_DIM
-    effective_latent_dim = latent_dim_override if latent_dim_override is not None else LATENT_DIM
-    model = NBeatsNet(
-        backcast_length=backcast_length,
-        forecast_length=forecast_length,
-        stack_types=stack_types,
-        n_blocks_per_stack=n_blocks_per_stack,
-        share_weights=share_weights,
-        thetas_dim=effective_thetas_dim,
-        loss=loss_override if loss_override is not None else LOSS,
-        active_g=active_g,
-        sum_losses=sum_losses,
-        activation=activation,
-        latent_dim=effective_latent_dim,
-        basis_dim=basis_dim,
-        basis_offset=basis_offset,
-        stack_basis_offsets=stack_basis_offsets,
-        forecast_basis_dim=forecast_basis_dim,
-        trend_thetas_dim=trend_thetas_dim,
-        generic_dim=generic_dim,
-        wavelet_type=wavelet_type,
-        backcast_wavelet_type=backcast_wavelet_type,
-        forecast_wavelet_type=forecast_wavelet_type,
-        learning_rate=learning_rate if learning_rate is not None else LEARNING_RATE,
-        optimizer_name=optimizer_name,
-        no_val=False,
-        lr_scheduler_config=lr_scheduler_config,
-        skip_distance=skip_distance,
-        skip_alpha=skip_alpha,
-    )
+        # Mixed precision on CUDA — prefer bf16 (same exponent range as fp32,
+        # avoids the fp16 overflow that kills 30-stack N-BEATS on M4).
+        if accelerator == "cuda" and torch.cuda.is_bf16_supported():
+            precision = "bf16-mixed"
+        elif accelerator == "cuda":
+            precision = "32-true"           # fp16 overflows; fall back to fp32
+        else:
+            precision = "32-true"
 
-    n_params = count_parameters(model)
-
-    # Data modules
-    train_data = dataset.train_data
-    test_data = dataset.test_data
-
-    pin_memory = num_workers > 0
-    dm = ColumnarCollectionTimeSeriesDataModule(
-        train_data,
-        backcast_length=backcast_length,
-        forecast_length=forecast_length,
-        batch_size=batch_size,
-        no_val=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        normalize=normalize,
-        val_ratio=val_ratio,
-    )
-    dm.setup()
-
-    test_dm = ColumnarCollectionTimeSeriesTestDataModule(
-        train_data,
-        test_data,
-        backcast_length=backcast_length,
-        forecast_length=forecast_length,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=pin_memory,
-        col_means=dm.col_means,
-        col_stds=dm.col_stds,
-    )
-
-    # Trainer
-    log_dir = os.path.join(RESULTS_DIR, "lightning_logs")
-    log_name = f"unified/{experiment_name}/{config_name}/{period}/run{run_idx}"
-
-    # Use a temp directory for checkpoints — they are only needed to reload
-    # the best-epoch weights for evaluation, then deleted immediately.
-    ckpt_tmp_dir = tempfile.mkdtemp(prefix="nbeats_ckpt_")
-    chk_callback = ModelCheckpoint(
-        dirpath=ckpt_tmp_dir,
-        filename="best-checkpoint",
-        save_top_k=1,
-        monitor="val_loss",
-        mode="min",
-    )
-
-    early_stop_callback = EarlyStopping(
-        monitor="val_loss",
-        patience=patience,
-        mode="min",
-        verbose=False,
-    )
-
-    wandb_group = f"unified/{period}"
-    exp_loggers = build_loggers(
-        log_dir=log_dir, log_name=log_name,
-        wandb_enabled=wandb_enabled, wandb_project=wandb_project,
-        wandb_group=wandb_group,
-        wandb_config={
-            "dataset": dataset.name, "period": period,
-            "config_name": config_name, "category": category,
-            "stack_types": stack_types,
-            "n_stacks": n_stacks, "n_blocks_per_stack": n_blocks_per_stack,
-            "share_weights": share_weights, "backcast_length": backcast_length,
-            "forecast_length": forecast_length, "batch_size": batch_size,
-            "max_epochs": max_epochs, "seed": seed,
-            "run_idx": run_idx, "active_g": active_g,
-            "sum_losses": sum_losses, "activation": activation,
-            "n_params": n_params,
-        },
-        tb_enabled=tb_enabled,
-    )
-
-    divergence_detector = DivergenceDetector(relative_threshold=3.0, consecutive_epochs=3)
-    convergence_tracker = ConvergenceTracker()
-
-    trainer = pl.Trainer(
-        accelerator=accelerator,
-        devices=1,
-        max_epochs=max_epochs,
-        precision=precision,
-        gradient_clip_val=1.0,
-        callbacks=[chk_callback, early_stop_callback, divergence_detector, convergence_tracker],
-        logger=exp_loggers,
-        enable_progress_bar=True,
-        deterministic=False,
-        log_every_n_steps=1,
-    )
-
-    # Train
-    stack_summary = (f"{n_stacks}x{stack_types[0]}" if len(set(stack_types)) == 1
-                     else f"{n_stacks} mixed")
-    print(f"  {prefix}[RUN]  {config_name} / {period} / run {run_idx} "
-          f"(seed={seed}, {stack_summary}, blocks/stack={n_blocks_per_stack}, "
-          f"share_w={share_weights}, params={n_params:,})")
-    t0 = time.time()
-    trainer.fit(model, datamodule=dm)
-    training_time = time.time() - t0
-
-    # Load best checkpoint, then delete temp checkpoint directory
-    best_path = trainer.checkpoint_callback.best_model_path
-    if best_path:
-        model = NBeatsNet.load_from_checkpoint(best_path, weights_only=False)
-    shutil.rmtree(ckpt_tmp_dir, ignore_errors=True)
-    epochs_trained = trainer.current_epoch
-
-    # Classify stopping reason
-    if divergence_detector.diverged:
-        stopping_reason = "DIVERGED"
-    elif hasattr(early_stop_callback, "stopped_epoch") and early_stop_callback.stopped_epoch > 0:
-        stopping_reason = "EARLY_STOPPED"
-    else:
-        stopping_reason = "MAX_EPOCHS"
-
-    # Convergence statistics
-    best_val_loss = (float(trainer.checkpoint_callback.best_model_score)
-                     if trainer.checkpoint_callback.best_model_score is not None
-                     else float("nan"))
-    final_val_loss = (convergence_tracker.val_losses[-1]
-                      if convergence_tracker.val_losses else float("nan"))
-    final_train_loss = (convergence_tracker.train_losses[-1]
-                        if convergence_tracker.train_losses else float("nan"))
-    best_epoch = (int(np.argmin(convergence_tracker.val_losses))
-                  if convergence_tracker.val_losses else 0)
-    loss_ratio = (final_val_loss / best_val_loss
-                  if best_val_loss > 0 and math.isfinite(best_val_loss)
-                  else float("nan"))
-    diverged = (divergence_detector.diverged
-                or not math.isfinite(best_val_loss))
-
-    # Inference
-    preds, targets = run_inference(model, test_dm, device)
-
-    # Metrics
-    smape = compute_smape(preds, targets)
-    mase = compute_m4_mase(preds, targets, train_series_list, frequency)
-    mae = compute_mae(preds, targets)
-    mse = compute_mse(preds, targets)
-    owa = dataset.compute_owa(smape, mase)
-    # Normalized MAE/MSE: per-series Z-score using training-data statistics,
-    # matching the evaluation protocol in N-HiTS, PatchTST, etc. for
-    # Traffic and Weather datasets.  For M4, sMAPE/OWA remain primary;
-    # norm_mae/norm_mse are still recorded for completeness.
-    norm_mae, norm_mse = compute_normalized_mae_mse(preds, targets, train_data)
-
-    # Update diverged flag — only for genuinely non-finite metrics.
-    # The smape >= 200 threshold was removed: a high sMAPE from a model that
-    # early-stopped is "poor" but not "diverged".  Actual divergence is already
-    # caught by DivergenceDetector (NaN val_loss or 3× spike for 3 epochs).
-    diverged = diverged or not math.isfinite(smape)
-
-    print(f"  {prefix}       sMAPE={smape:.4f}  MASE={mase:.4f}  OWA={owa:.4f}  "
-          f"nMAE={norm_mae:.4f}  nMSE={norm_mse:.4f}  "
-          f"time={training_time:.1f}s  epochs={epochs_trained}  [{stopping_reason}]")
-
-    # Save predictions
-    if save_predictions and predictions_dir is not None:
-        os.makedirs(predictions_dir, exist_ok=True)
-        npz_name = f"{experiment_name}_{config_name}_{period}_run{run_idx}.npz"
-        np.savez(
-            os.path.join(predictions_dir, npz_name),
-            preds=preds, targets=targets,
+        # Create model
+        effective_thetas_dim = (
+            thetas_dim_override if thetas_dim_override is not None else THETAS_DIM
+        )
+        effective_latent_dim = (
+            latent_dim_override if latent_dim_override is not None else LATENT_DIM
+        )
+        model = NBeatsNet(
+            backcast_length=backcast_length,
+            forecast_length=forecast_length,
+            stack_types=stack_types,
+            n_blocks_per_stack=n_blocks_per_stack,
+            share_weights=share_weights,
+            thetas_dim=effective_thetas_dim,
+            loss=loss_override if loss_override is not None else LOSS,
+            active_g=active_g,
+            sum_losses=sum_losses,
+            activation=activation,
+            latent_dim=effective_latent_dim,
+            basis_dim=basis_dim,
+            basis_offset=basis_offset,
+            stack_basis_offsets=stack_basis_offsets,
+            forecast_basis_dim=forecast_basis_dim,
+            trend_thetas_dim=trend_thetas_dim,
+            generic_dim=generic_dim,
+            wavelet_type=wavelet_type,
+            backcast_wavelet_type=backcast_wavelet_type,
+            forecast_wavelet_type=forecast_wavelet_type,
+            learning_rate=(
+                learning_rate if learning_rate is not None else LEARNING_RATE
+            ),
+            optimizer_name=optimizer_name,
+            no_val=False,
+            lr_scheduler_config=lr_scheduler_config,
+            skip_distance=skip_distance,
+            skip_alpha=skip_alpha,
         )
 
-    # Save result
-    unique_types = list(dict.fromkeys(stack_types))
-    row = {
-        "experiment": experiment_name,
-        "config_name": config_name,
-        "category": category,
-        "stack_types": str(unique_types),
-        "period": period,
-        "frequency": frequency,
-        "forecast_length": forecast_length,
-        "backcast_length": backcast_length,
-        "n_stacks": n_stacks,
-        "n_blocks_per_stack": n_blocks_per_stack,
-        "share_weights": share_weights,
-        "run": run_idx,
-        "seed": seed,
-        "smape": f"{smape:.6f}",
-        "mase": f"{mase:.6f}",
-        "mae": f"{mae:.6f}",
-        "mse": f"{mse:.6f}",
-        "owa": f"{owa:.6f}",
-        "norm_mae": f"{norm_mae:.6f}" if math.isfinite(norm_mae) else "nan",
-        "norm_mse": f"{norm_mse:.6f}" if math.isfinite(norm_mse) else "nan",
-        "n_params": n_params,
-        "training_time_seconds": f"{training_time:.2f}",
-        "epochs_trained": epochs_trained,
-        "active_g": active_g,
-        "sum_losses": sum_losses,
-        "activation": activation,
-        "stopping_reason": stopping_reason,
-        "best_val_loss": f"{best_val_loss:.8f}",
-        "final_val_loss": f"{final_val_loss:.8f}",
-        "final_train_loss": f"{final_train_loss:.8f}",
-        "best_epoch": best_epoch,
-        "loss_ratio": f"{loss_ratio:.6f}" if math.isfinite(loss_ratio) else "nan",
-        "diverged": diverged,
-        "val_loss_curve": json.dumps([f"{v:.8f}" for v in convergence_tracker.val_losses]),
-    }
-    if extra_row:
-        row.update(extra_row)
-    append_result(csv_path, row, columns=csv_columns)
-    finish_wandb(wandb_enabled)
+        n_params = count_parameters(model)
 
-    # Cleanup
-    del model, trainer, dm, test_dm
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+        # Data modules
+        train_data = dataset.train_data
+        test_data = dataset.test_data
+
+        pin_memory = num_workers > 0
+        dm = ColumnarCollectionTimeSeriesDataModule(
+            train_data,
+            backcast_length=backcast_length,
+            forecast_length=forecast_length,
+            batch_size=batch_size,
+            no_val=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            normalize=normalize,
+            val_ratio=val_ratio,
+        )
+        dm.setup()
+
+        test_dm = ColumnarCollectionTimeSeriesTestDataModule(
+            train_data,
+            test_data,
+            backcast_length=backcast_length,
+            forecast_length=forecast_length,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            col_means=dm.col_means,
+            col_stds=dm.col_stds,
+        )
+
+        # Trainer
+        log_dir = os.path.join(RESULTS_DIR, "lightning_logs")
+        log_name = f"unified/{experiment_name}/{config_name}/{period}/run{run_idx}"
+
+        # Use a temp directory for checkpoints — they are only needed to reload
+        # the best-epoch weights for evaluation, then deleted immediately.
+        ckpt_tmp_dir = tempfile.mkdtemp(prefix="nbeats_ckpt_")
+        chk_callback = ModelCheckpoint(
+            dirpath=ckpt_tmp_dir,
+            filename="best-checkpoint",
+            save_top_k=1,
+            monitor="val_loss",
+            mode="min",
+        )
+
+        early_stop_callback = EarlyStopping(
+            monitor="val_loss",
+            patience=patience,
+            mode="min",
+            verbose=False,
+        )
+
+        wandb_group = f"unified/{period}"
+        exp_loggers = build_loggers(
+            log_dir=log_dir,
+            log_name=log_name,
+            wandb_enabled=wandb_enabled,
+            wandb_project=wandb_project,
+            wandb_group=wandb_group,
+            wandb_config={
+                "dataset": dataset.name,
+                "period": period,
+                "config_name": config_name,
+                "category": category,
+                "stack_types": stack_types,
+                "n_stacks": n_stacks,
+                "n_blocks_per_stack": n_blocks_per_stack,
+                "share_weights": share_weights,
+                "backcast_length": backcast_length,
+                "forecast_length": forecast_length,
+                "batch_size": batch_size,
+                "max_epochs": max_epochs,
+                "seed": seed,
+                "run_idx": run_idx,
+                "active_g": active_g,
+                "sum_losses": sum_losses,
+                "activation": activation,
+                "n_params": n_params,
+            },
+            tb_enabled=tb_enabled,
+        )
+
+        divergence_detector = DivergenceDetector(
+            relative_threshold=3.0,
+            consecutive_epochs=3,
+        )
+        convergence_tracker = ConvergenceTracker()
+
+        trainer = pl.Trainer(
+            accelerator=accelerator,
+            devices=1,
+            max_epochs=max_epochs,
+            precision=precision,
+            gradient_clip_val=1.0,
+            callbacks=[
+                chk_callback,
+                early_stop_callback,
+                divergence_detector,
+                convergence_tracker,
+            ],
+            logger=exp_loggers,
+            enable_progress_bar=True,
+            deterministic=False,
+            log_every_n_steps=1,
+        )
+
+        # Train
+        stack_summary = (
+            f"{n_stacks}x{stack_types[0]}"
+            if len(set(stack_types)) == 1
+            else f"{n_stacks} mixed"
+        )
+        print(
+            f"  {prefix}[RUN]  {config_name} / {period} / run {run_idx} "
+            f"(seed={seed}, {stack_summary}, blocks/stack={n_blocks_per_stack}, "
+            f"share_w={share_weights}, params={n_params:,})"
+        )
+        t0 = time.time()
+        trainer.fit(model, datamodule=dm)
+        training_time = time.time() - t0
+
+        # Load best checkpoint, then delete temp checkpoint directory
+        best_path = trainer.checkpoint_callback.best_model_path
+        if best_path:
+            model = NBeatsNet.load_from_checkpoint(best_path, weights_only=False)
+        shutil.rmtree(ckpt_tmp_dir, ignore_errors=True)
+        epochs_trained = trainer.current_epoch
+
+        # Classify stopping reason
+        if divergence_detector.diverged:
+            stopping_reason = "DIVERGED"
+        elif (
+            hasattr(early_stop_callback, "stopped_epoch")
+            and early_stop_callback.stopped_epoch > 0
+        ):
+            stopping_reason = "EARLY_STOPPED"
+        else:
+            stopping_reason = "MAX_EPOCHS"
+
+        # Convergence statistics
+        best_val_loss = (
+            float(trainer.checkpoint_callback.best_model_score)
+            if trainer.checkpoint_callback.best_model_score is not None
+            else float("nan")
+        )
+        final_val_loss = (
+            convergence_tracker.val_losses[-1]
+            if convergence_tracker.val_losses else float("nan")
+        )
+        final_train_loss = (
+            convergence_tracker.train_losses[-1]
+            if convergence_tracker.train_losses else float("nan")
+        )
+        best_epoch = (
+            int(np.argmin(convergence_tracker.val_losses))
+            if convergence_tracker.val_losses else 0
+        )
+        loss_ratio = (
+            final_val_loss / best_val_loss
+            if best_val_loss > 0 and math.isfinite(best_val_loss)
+            else float("nan")
+        )
+        diverged = (
+            divergence_detector.diverged
+            or not math.isfinite(best_val_loss)
+        )
+
+        # Inference
+        preds, targets = run_inference(model, test_dm, device)
+
+        # Metrics
+        smape = compute_smape(preds, targets)
+        mase = compute_m4_mase(preds, targets, train_series_list, frequency)
+        mae = compute_mae(preds, targets)
+        mse = compute_mse(preds, targets)
+        owa = dataset.compute_owa(smape, mase)
+        # Normalized MAE/MSE: per-series Z-score using training-data statistics,
+        # matching the evaluation protocol in N-HiTS, PatchTST, etc. for
+        # Traffic and Weather datasets.  For M4, sMAPE/OWA remain primary;
+        # norm_mae/norm_mse are still recorded for completeness.
+        norm_mae, norm_mse = compute_normalized_mae_mse(preds, targets, train_data)
+
+        # Update diverged flag — only for genuinely non-finite metrics.
+        # The smape >= 200 threshold was removed: a high sMAPE from a model that
+        # early-stopped is "poor" but not "diverged".  Actual divergence is already
+        # caught by DivergenceDetector (NaN val_loss or 3× spike for 3 epochs).
+        diverged = diverged or not math.isfinite(smape)
+
+        print(
+            f"  {prefix}       sMAPE={smape:.4f}  MASE={mase:.4f}  OWA={owa:.4f}  "
+            f"nMAE={norm_mae:.4f}  nMSE={norm_mse:.4f}  "
+            f"time={training_time:.1f}s  epochs={epochs_trained}  [{stopping_reason}]"
+        )
+
+        # Save predictions
+        if save_predictions and predictions_dir is not None:
+            os.makedirs(predictions_dir, exist_ok=True)
+            npz_name = f"{experiment_name}_{config_name}_{period}_run{run_idx}.npz"
+            np.savez(
+                os.path.join(predictions_dir, npz_name),
+                preds=preds,
+                targets=targets,
+            )
+
+        # Save result
+        unique_types = list(dict.fromkeys(stack_types))
+        row = {
+            "experiment": experiment_name,
+            "config_name": config_name,
+            "category": category,
+            "stack_types": str(unique_types),
+            "period": period,
+            "frequency": frequency,
+            "forecast_length": forecast_length,
+            "backcast_length": backcast_length,
+            "n_stacks": n_stacks,
+            "n_blocks_per_stack": n_blocks_per_stack,
+            "share_weights": share_weights,
+            "run": run_idx,
+            "seed": seed,
+            "smape": f"{smape:.6f}",
+            "mase": f"{mase:.6f}",
+            "mae": f"{mae:.6f}",
+            "mse": f"{mse:.6f}",
+            "owa": f"{owa:.6f}",
+            "norm_mae": f"{norm_mae:.6f}" if math.isfinite(norm_mae) else "nan",
+            "norm_mse": f"{norm_mse:.6f}" if math.isfinite(norm_mse) else "nan",
+            "n_params": n_params,
+            "training_time_seconds": f"{training_time:.2f}",
+            "epochs_trained": epochs_trained,
+            "active_g": active_g,
+            "sum_losses": sum_losses,
+            "activation": activation,
+            "stopping_reason": stopping_reason,
+            "best_val_loss": f"{best_val_loss:.8f}",
+            "final_val_loss": f"{final_val_loss:.8f}",
+            "final_train_loss": f"{final_train_loss:.8f}",
+            "best_epoch": best_epoch,
+            "loss_ratio": f"{loss_ratio:.6f}" if math.isfinite(loss_ratio) else "nan",
+            "diverged": diverged,
+            "val_loss_curve": json.dumps(
+                [f"{value:.8f}" for value in convergence_tracker.val_losses]
+            ),
+        }
+        if extra_row:
+            row.update(extra_row)
+        append_result(csv_path, row, columns=csv_columns)
+        finish_wandb(wandb_enabled)
+
+        # Cleanup
+        del model, trainer, dm, test_dm
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    finally:
+        release_claim(claim_config_name, effective_dataset_name, period, run_idx)
 
 
 # ---------------------------------------------------------------------------
@@ -1203,6 +1339,8 @@ def _gpu_worker(gpu_id, job_queue, shutdown_event, worker_args):
             save_predictions=worker_args["save_predictions"],
             predictions_dir=worker_args["predictions_dir"],
             gpu_id=gpu_id,
+            dataset_name=dataset_name,
+            worker_id=worker_args.get("worker_id") or f"gpu{gpu_id}",
             tb_enabled=worker_args.get("tb_enabled", False),
         )
 
@@ -1352,6 +1490,12 @@ def _run_sequential(args, params):
                         wandb_project=args.wandb_project,
                         save_predictions=args.save_predictions,
                         predictions_dir=predictions_dir,
+                        dataset_name=dataset_name,
+                        worker_id=(
+                            f"gpu{args.gpu_id}"
+                            if getattr(args, "gpu_id", None) is not None
+                            else ""
+                        ),
                         tb_enabled=getattr(args, "tensorboard", False),
                     )
 

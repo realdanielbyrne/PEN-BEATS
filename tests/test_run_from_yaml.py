@@ -81,6 +81,7 @@ def test_run_experiment_forwards_protocol_settings(monkeypatch, tmp_path):
         "training": {"max_epochs": 1, "patience": 1},
         "runs": {"n_runs": 1, "base_seed": 7},
         "output": {"results_dir": str(tmp_path), "save_predictions": False},
+        "hardware": {"worker_id": "yaml-worker-1"},
     }
 
     ryf.run_experiment(top_level_cfg, cli_overrides={}, dry_run=False, analyze_only=False)
@@ -96,6 +97,70 @@ def test_run_experiment_forwards_protocol_settings(monkeypatch, tmp_path):
     assert captured["run_single_experiment"]["loss_override"] == "MSELoss"
     assert captured["run_single_experiment"]["forecast_multiplier"] == 5
     assert captured["run_single_experiment"]["batch_size"] == rub.BATCH_SIZES[("traffic", "Traffic-96")]
+    assert captured["run_single_experiment"]["dataset_name"] == "traffic"
+    assert captured["run_single_experiment"]["worker_id"] == "yaml-worker-1"
+
+
+def test_claim_job_prevents_duplicate_work_per_pass(monkeypatch, tmp_path):
+    claims_dir = tmp_path / ".claims"
+    monkeypatch.setattr(rub, "CLAIMS_DIR", str(claims_dir))
+
+    baseline_claim_name = rub.build_claim_config_name("baseline", "TWG_cfg")
+    active_g_claim_name = rub.build_claim_config_name("activeG_fcast", "TWG_cfg")
+
+    assert rub.claim_job(baseline_claim_name, "m4", "Yearly", 0, worker_id="worker-a")
+    assert not rub.claim_job(baseline_claim_name, "m4", "Yearly", 0, worker_id="worker-b")
+    assert rub.claim_job(active_g_claim_name, "m4", "Yearly", 0, worker_id="worker-c")
+
+    assert (claims_dir / "baseline__TWG_cfg__m4__Yearly__run0.claim").exists()
+    assert (claims_dir / "activeG_fcast__TWG_cfg__m4__Yearly__run0.claim").exists()
+
+
+def test_run_single_experiment_claims_with_pass_aware_identity(monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(rub, "result_exists", lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        rub,
+        "claim_job",
+        lambda config_name, dataset_name, horizon_label, run_idx, worker_id="": (
+            captured.update(
+                config_name=config_name,
+                dataset_name=dataset_name,
+                horizon_label=horizon_label,
+                run_idx=run_idx,
+                worker_id=worker_id,
+            )
+            or False
+        ),
+    )
+    monkeypatch.setattr(
+        rub,
+        "set_seed",
+        lambda seed: pytest.fail("set_seed should not run when claim acquisition fails"),
+    )
+
+    rub.run_single_experiment(
+        experiment_name="baseline",
+        config_name="TWG_cfg",
+        category="regression",
+        stack_types=["Generic"],
+        period="Yearly",
+        run_idx=2,
+        dataset=SimpleNamespace(name="M4-Yearly"),
+        train_series_list=[],
+        csv_path="unused.csv",
+        dataset_name="m4",
+        worker_id="yaml-worker-2",
+    )
+
+    assert captured == {
+        "config_name": "baseline__TWG_cfg",
+        "dataset_name": "m4",
+        "horizon_label": "Yearly",
+        "run_idx": 2,
+        "worker_id": "yaml-worker-2",
+    }
 
 
 @pytest.mark.parametrize(

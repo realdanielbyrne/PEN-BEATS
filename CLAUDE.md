@@ -39,6 +39,8 @@ python examples/TourismAllBlks.py  # Tourism dataset benchmark
 
 For Traffic/Weather benchmark configs that define a top-level `protocol:` block, the launcher forwards `train_ratio` / `include_target` into dataset loading, passes `normalize` / `val_ratio` into the columnar datamodule, and treats `protocol.loss` / `protocol.forecast_multiplier` / `protocol.batch_size` as fallbacks when the same keys are not explicitly set under `training`.
 
+YAML / unified runs also use atomic claim files under `experiments/results/.claims/` to prevent duplicate work across parallel workers. Claim filenames follow the NHiTS-style pattern `<claim_config>__<dataset>__<horizon>__run<idx>.claim`; for multi-pass/search jobs the pass or experiment tag is prefixed into `claim_config` so `baseline` and `activeG_fcast` stay distinct. `hardware.worker_id` (or `--worker-id`) is recorded in the claim metadata.
+
 ```bash
 # Run a pre-built config (dry-run first to check the plan)
 python experiments/run_from_yaml.py experiments/configs/nbeats_g.yaml --dry-run
@@ -78,6 +80,7 @@ Key concepts:
 
 - **`stacks`**: Defines the stack architecture using one of: `homogeneous`, `prefix_body`, `alternating`, `concat`, `explicit`, `builtin` (references `UNIFIED_CONFIGS`), direct list, or string shorthand (`"Generic:30"`).
 - **`passes`**: Two-pass design (baseline + activeG_fcast). When absent, a single pass uses `experiment_name`.
+- **Atomic claim files**: YAML/unified runs claim jobs before training via `experiments/results/.claims/`. Two-pass/search jobs fold the pass tag into the claim-side config name so each `(pass, config, dataset, period, run)` tuple is independently claimable.
 - **`search`**: Successive halving with `rounds` list (each with `max_epochs`, `n_runs`, `keep_fraction` / `top_k`).
 - **`extra_csv_columns`** + **`extra_fields`**: Extend the CSV schema for study-specific metadata.
 - All CLI flags override YAML values. Resumability is built-in (skips already-written CSV rows).

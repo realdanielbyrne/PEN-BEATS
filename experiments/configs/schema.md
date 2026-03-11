@@ -326,7 +326,14 @@ hardware:
   accelerator: auto          # auto | cuda | mps | cpu
   num_workers: 0             # DataLoader worker processes
   gpu_id: null               # null = auto; int = pin to specific GPU index
+  worker_id: ""             # Optional label recorded in atomic claim metadata
 ```
+
+YAML / unified runs also use atomic claim files under
+`experiments/results/.claims/`. Claim filenames keep the NHiTS-style shape
+`<claim_config>__<dataset>__<horizon>__run<idx>.claim`; for two-pass and search
+runs, the pass / experiment tag is prefixed into `claim_config` so `baseline`
+and `activeG_fcast` remain independently claimable.
 
 ---
 
@@ -434,6 +441,7 @@ All CLI flags override the YAML values:
 | `--batch-size N` | Override `training.batch_size` |
 | `--accelerator` | Override `hardware.accelerator` |
 | `--num-workers N` | Override `hardware.num_workers` |
+| `--worker-id ID` | Override `hardware.worker_id` for claim metadata |
 | `--wandb` | Enable W&B logging |
 | `--wandb-project NAME` | Set W&B project |
 | `--no-save-predictions` | Disable NPZ saving |
