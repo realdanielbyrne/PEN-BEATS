@@ -188,6 +188,20 @@
 - **Coif3's advantage may come from eq_bcast (bd=8) vs eq_fcast (bd=4)**, not the wavelet family itself. Needs ablation.
 - **Tourism-Yearly SOTA confirmed:** TrendWaveletAELG_coif3_eq_bcast_td3_ld16, SMAPE=20.864, 95% CI [20.712, 21.016].
 
+## TrendWaveletGeneric Effectiveness Study (M4-Yearly) (2026-03-11)
+
+- See `experiments/analysis/analysis_reports/trendwavelet_generic_effectiveness_analysis.md`
+- See notebook: `experiments/analysis/notebooks/trendwavelet_generic_effectiveness.ipynb`
+- **70 runs, 7 configs x 2 passes x 5 seeds. Zero divergences.**
+- **The learned generic branch does NOT provide significant improvement** over TrendWavelet on M4-Yearly. All 6 paired comparisons: MWU p > 0.16, all bootstrap CIs straddle zero.
+- **TWG-AE variants are 3.4x more parameter-efficient** than TW-AE variants (445K vs 1.5M params) with equivalent quality. Most actionable finding.
+- **Best config: TWGAELG baseline** (SMAPE=13.509, OWA=0.801, 445K params). Does NOT beat M4-Yearly SOTA (13.410).
+- **active_g is a non-factor** for all TrendWavelet/TrendWaveletGeneric blocks (all p > 0.4).
+- **VAE backbone (+19%)** catastrophically bad, as always.
+- **Backbone hierarchy confirmed:** AERootBlockLG > AERootBlock > RootBlock (LG vs RootBlock p=0.014).
+- **TWG shows small advantage on AE/AELG backbones in baseline pass, reverses with activeG_fcast.** Suggests generic branch and active_g are partially redundant.
+- **Next tests needed:** generic_dim sweep (gd=2-15), multi-dataset validation, alternating Trend+WaveletV3Generic architecture, bd=6 for TWG.
+
 ## Critical Methodology Lesson
 
 - **R1 (early training) data can produce misleading factor rankings.** Both ttd and bd_label showed R1 advantages that reversed or vanished at R3 convergence. Always validate hyperparameter recommendations with converged data. This affected two prior skill recommendations (ttd and bd_label).
