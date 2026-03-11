@@ -886,6 +886,7 @@ def run_single_experiment(
     skip_distance=0,              # Re-inject original input every N stacks (0 = disabled)
     skip_alpha=0.0,               # Mixing weight for skip injection (float or "learnable")
     generic_dim=5,                # Learned generic branch rank for TrendWaveletGeneric* blocks
+    t_width=256,                  # Hidden layer width for Trend/TrendWavelet-family blocks
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -968,6 +969,7 @@ def run_single_experiment(
             lr_scheduler_config=lr_scheduler_config,
             skip_distance=skip_distance,
             skip_alpha=skip_alpha,
+            t_width=t_width,
         )
 
         n_params = count_parameters(model)

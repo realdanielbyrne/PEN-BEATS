@@ -124,6 +124,7 @@ DEFAULT_BLOCK_PARAMS = {
     "wavelet_type": None,
     "backcast_wavelet_type": None,
     "forecast_wavelet_type": None,
+    "t_width": 256,
 }
 
 DEFAULT_RUNS = {
@@ -773,6 +774,7 @@ def run_single_config(
         skip_distance=int(training.get("skip_distance", 0)),
         skip_alpha=training.get("skip_alpha", 0.0),
         generic_dim=int(block_params.get("generic_dim", 5)),
+        t_width=int(block_params.get("t_width", 256)),
     )
 
 
