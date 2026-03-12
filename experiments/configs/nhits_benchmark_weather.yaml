@@ -146,7 +146,7 @@ runs:
 
 training:
   max_epochs: 100
-  patience: 10
+  patience: 25
   activation: ReLU
   active_g: false
   sum_losses: false
