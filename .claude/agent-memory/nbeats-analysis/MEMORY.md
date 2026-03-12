@@ -188,19 +188,28 @@
 - **Coif3's advantage may come from eq_bcast (bd=8) vs eq_fcast (bd=4)**, not the wavelet family itself. Needs ablation.
 - **Tourism-Yearly SOTA confirmed:** TrendWaveletAELG_coif3_eq_bcast_td3_ld16, SMAPE=20.864, 95% CI [20.712, 21.016].
 
-## TrendWaveletGeneric Effectiveness Study (M4-Yearly) (2026-03-11)
+## TrendWaveletGeneric Studies (M4-Yearly) (2026-03-11/12)
 
-- See `experiments/analysis/analysis_reports/trendwavelet_generic_effectiveness_analysis.md`
-- See notebook: `experiments/analysis/notebooks/trendwavelet_generic_effectiveness.ipynb`
-- **70 runs, 7 configs x 2 passes x 5 seeds. Zero divergences.**
-- **The learned generic branch does NOT provide significant improvement** over TrendWavelet on M4-Yearly. All 6 paired comparisons: MWU p > 0.16, all bootstrap CIs straddle zero.
-- **TWG-AE variants are 3.4x more parameter-efficient** than TW-AE variants (445K vs 1.5M params) with equivalent quality. Most actionable finding.
-- **Best config: TWGAELG baseline** (SMAPE=13.509, OWA=0.801, 445K params). Does NOT beat M4-Yearly SOTA (13.410).
-- **active_g is a non-factor** for all TrendWavelet/TrendWaveletGeneric blocks (all p > 0.4).
-- **VAE backbone (+19%)** catastrophically bad, as always.
-- **Backbone hierarchy confirmed:** AERootBlockLG > AERootBlock > RootBlock (LG vs RootBlock p=0.014).
-- **TWG shows small advantage on AE/AELG backbones in baseline pass, reverses with activeG_fcast.** Suggests generic branch and active_g are partially redundant.
-- **Next tests needed:** generic_dim sweep (gd=2-15), multi-dataset validation, alternating Trend+WaveletV3Generic architecture, bd=6 for TWG.
+- See `experiments/analysis/analysis_reports/trendwavelet_generic_effectiveness_analysis.md` (effectiveness study)
+- See `experiments/analysis/analysis_reports/generic_dim_sweep_analysis.md` (dim sweep)
+- See notebook: `experiments/analysis/notebooks/generic_dim_sweep_insights.ipynb`
+- **Effectiveness study (70 runs):** Generic branch does NOT significantly improve over TrendWavelet. active_g is a non-factor.
+- **generic_dim sweep (144 runs, 23 configs, 3-round halving):**
+  - **generic_dim is a NON-FACTOR for RootBlock** (KW p=0.91). Spread 0.050 SMAPE across gd={3,5,8,16}. Use gd=3 or gd=5.
+  - **Backbone hierarchy for TWG: RootBlock > AERootBlock > AERootBlockLG** (MWU p=0.007 RB vs AE). CONTRADICTS effectiveness study (which found AELG > RB at bd=4). Resolution: bd=6 (eq_fcast) favors RootBlock; bd=4 (lt_fcast) penalizes it. Backbone ranking is bd-dependent.
+  - **AE backbones are depth-hungry:** TWGAE needs n=15-20, TWGAELG needs n>=20 to compete with RootBlock at n=10.
+  - **Generic branch helps AE backbones** (0.4-1.2 SMAPE vs no-generic baseline at equal epochs).
+  - **Best TWG: TWG_gd3 RootBlock n=10** (SMAPE=13.440, OWA=0.797, 2.1M params). Does NOT beat SOTA (13.410).
+  - **Best parameter-efficient: TWGAE_gd5_n20** (SMAPE=13.505, 900K params, 57% fewer than winner).
+
+## NHiTS-Protocol Benchmark (Weather, Traffic) (2026-03-11)
+
+- See `nhits_benchmark_findings.md` for full details
+- **We beat NHiTS at H=192 (0.938x) and H=336 (0.773x, 22.7% improvement).** Miss at H=96 (1.047x) and H=720 (1.454x).
+- **NHiTSNet wins at short horizons (H<=192), NBeatsNet wins at long horizons (H>=336).** Clear architecture crossover.
+- **BottleneckGenericAELG-10** is most cross-horizon robust (avg rank 3.5/14).
+- **H=720 is broken** -- all SMAPE>100, undertrained. Needs patience increase.
+- **Traffic experiment incomplete.** MSE metric not comparable to paper (per-variate vs joint).
 
 ## Critical Methodology Lesson
 
