@@ -522,6 +522,7 @@ def build_passes(top_level_cfg: dict) -> list:
             {
                 "name": str(p.get("name", f"pass{i}")),
                 "training": p.get("training", {}) or {},
+                "extra_fields": p.get("extra_fields", {}) or {},
             }
             for i, p in enumerate(passes_spec)
         ]
@@ -529,6 +530,7 @@ def build_passes(top_level_cfg: dict) -> list:
         {
             "name": top_level_cfg.get("experiment_name", "run"),
             "training": {},
+            "extra_fields": {},
         }
     ]
 
@@ -634,6 +636,7 @@ def run_single_config(
     config: dict,
     pass_name: str,
     pass_training_override: dict,
+    pass_extra_fields: dict,
     dataset_name: str,
     period: str,
     run_idx: int,
@@ -661,6 +664,8 @@ def run_single_config(
         Pass label used as the ``experiment_name`` in CSV rows.
     pass_training_override : dict
         Training param overrides specific to this pass (e.g. active_g).
+    pass_extra_fields : dict
+        Extra CSV fields specific to this pass (e.g. lookback metadata).
     dataset_name : str
         Canonical dataset slug used for claim identity (e.g. "m4").
     period : str
@@ -712,6 +717,7 @@ def run_single_config(
 
     # Extra CSV fields
     extra_row = dict(config.get("extra_fields") or {})
+    extra_row.update(pass_extra_fields or {})
     if round_num is not None:
         extra_row.setdefault("search_round", round_num)
 
@@ -806,6 +812,7 @@ def _run_standard(
     for pass_info in passes:
         pass_name = pass_info["name"]
         pass_training = pass_info.get("training") or {}
+        pass_extra_fields = pass_info.get("extra_fields") or {}
 
         print(f"\n    Pass: {pass_name}")
 
@@ -836,6 +843,7 @@ def _run_standard(
                     config=config,
                     pass_name=pass_name,
                     pass_training_override=pass_training,
+                    pass_extra_fields=pass_extra_fields,
                     dataset_name=dataset_name,
                     period=period,
                     run_idx=run_idx,
@@ -1143,6 +1151,7 @@ def _run_successive_halving(
         for pass_info in passes:
             pass_name = pass_info["name"]
             pass_training = dict(pass_info.get("training") or {})
+            pass_extra_fields = pass_info.get("extra_fields") or {}
             if max_epochs_override is not None:
                 pass_training["max_epochs"] = int(max_epochs_override)
 
@@ -1168,6 +1177,7 @@ def _run_successive_halving(
                         config=config,
                         pass_name=pass_name,
                         pass_training_override=pass_training,
+                        pass_extra_fields=pass_extra_fields,
                         dataset_name=dataset_name,
                         period=period,
                         run_idx=run_idx,

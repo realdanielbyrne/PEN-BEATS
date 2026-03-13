@@ -173,7 +173,7 @@ class NBeatsNet(_NBeatsBase):
       generic_dim:int = 5,
       lr_scheduler_config:dict = None,
       skip_distance:int = 0,
-      skip_alpha: float | str = 0.0,
+      skip_alpha: float | str = 0.1,
     ):
 
     """A PyTorch Lightning module for the N-BEATS network for time series forecasting.
@@ -638,7 +638,7 @@ class NHiTSNet(_NBeatsBase):
       generic_dim: int = 5,
       lr_scheduler_config: dict = None,
       skip_distance: int = 0,
-      skip_alpha: float | str = 0.0,
+      skip_alpha: float | str = 0.1,
   ):
     if stack_types is None:
       raise ValueError("Stack architecture must be specified.")

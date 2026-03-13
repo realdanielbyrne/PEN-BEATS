@@ -54,7 +54,7 @@ training:
   sum_losses: false
   activation: ReLU
   max_epochs: 100
-  patience: 10
+  patience: 20
   n_blocks_per_stack: 1
   share_weights: true
   loss: SMAPELoss
@@ -62,7 +62,7 @@ training:
   learning_rate: 0.001
 
 lr_scheduler:
-  warmup_epochs: 15
+  warmup_epochs: 20
   eta_min: 0.000001
 
 # Global block params — t_width=256 explicitly set to document the corrected value.
@@ -86,7 +86,7 @@ configs:
     stacks:
       type: homogeneous
       block: TrendWaveletAE
-      n: 10
+      n: 20
     block_params:
       wavelet_type: haar
       latent_dim: 8
@@ -100,7 +100,7 @@ configs:
     stacks:
       type: homogeneous
       block: TrendWaveletAE
-      n: 10
+      n: 20
     block_params:
       wavelet_type: db3
       latent_dim: 8
@@ -114,7 +114,7 @@ configs:
     stacks:
       type: homogeneous
       block: TrendWaveletAE
-      n: 10
+      n: 20
     block_params:
       wavelet_type: db10
       latent_dim: 8
@@ -128,7 +128,7 @@ configs:
     stacks:
       type: homogeneous
       block: TrendWaveletAE
-      n: 10
+      n: 20
     block_params:
       wavelet_type: sym20
       latent_dim: 8
@@ -143,7 +143,7 @@ configs:
     stacks:
       type: homogeneous
       block: TrendWaveletAELG
-      n: 10
+      n: 20
     block_params:
       wavelet_type: haar
       latent_dim: 12
@@ -157,7 +157,7 @@ configs:
     stacks:
       type: homogeneous
       block: TrendWaveletAELG
-      n: 10
+      n: 20
     block_params:
       wavelet_type: db3
       latent_dim: 12
@@ -171,7 +171,7 @@ configs:
     stacks:
       type: homogeneous
       block: TrendWaveletAELG
-      n: 10
+      n: 20
     block_params:
       wavelet_type: db10
       latent_dim: 12
@@ -185,7 +185,7 @@ configs:
     stacks:
       type: homogeneous
       block: TrendWaveletAELG
-      n: 10
+      n: 20
     block_params:
       wavelet_type: sym20
       latent_dim: 12

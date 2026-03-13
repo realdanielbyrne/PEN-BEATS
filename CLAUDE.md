@@ -94,7 +94,7 @@ Key concepts:
 | `run_trendae_study.py` | See `configs/trendae_ae_alternating.yaml` |
 | Custom one-off experiment | Single top-level `stacks:` + `training:` |
 
-The `experiments/run_experiments.py` script also runs systematic benchmarks with multiple seeds across datasets:
+The `experiments/run_experiments.py` script is **deprecated** (use YAML configs via `run_from_yaml.py` instead). It runs systematic benchmarks with multiple seeds across datasets:
 
 ```bash
 python experiments/run_experiments.py --dataset m4 --part 1 --periods Yearly --max-epochs 50
@@ -128,7 +128,10 @@ Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loade
 
 ### Package Structure (`src/lightningnbeats/`)
 
-- **`models.py`** — `NBeatsNet(pl.LightningModule)`: the main model class. Accepts a `stack_types` list of strings to define architecture. Handles forward pass with backward/forward residual connections, training/validation/test steps, loss configuration, and optimizer setup.
+- **`models.py`** — Two model classes sharing a common `_NBeatsBase(pl.LightningModule)` superclass:
+  - `NBeatsNet` — The standard N-BEATS model with doubly residual stacking.
+  - `NHiTSNet` — NHiTS variant that adds multi-rate input pooling (`n_pools_kernel_size` per stack) and hierarchical forecast interpolation (`n_freq_downsample` per stack). All existing block types plug in unchanged; pooling/interpolation happens outside the block interface. Additional params: `n_pools_kernel_size`, `n_freq_downsample`, `interpolation_mode` (default `'linear'`).
+  - Both accept a `stack_types` list of strings to define architecture. Handle forward pass with backward/forward residual connections, training/validation/test steps, loss configuration, and optimizer setup.
 - **`blocks/blocks.py`** — All block implementations (the largest file). Two parallel inheritance hierarchies:
   - `RootBlock(nn.Module)` — Standard backbone: 4 FC layers with activation. Parent of `Generic`, `BottleneckGeneric`, `Seasonality`, `Trend`, `AutoEncoder`, `VAE`, `GenericAEBackcast`, `WaveletV3`, `TrendWavelet`, `TrendWaveletGeneric`, and concrete wavelet subclasses.
   - `AERootBlock(nn.Module)` — Autoencoder backbone: encoder (units → units/2 → latent_dim) then decoder (latent_dim → units/2 → units). Parent of `GenericAE`, `BottleneckGenericAE`, `TrendAE`, `SeasonalityAE`, `AutoEncoderAE`, `GenericAEBackcastAE`, `TrendWaveletAE`, and `TrendWaveletGenericAE`.
@@ -149,6 +152,8 @@ Test files: `test_blocks.py` (block shapes, attributes, registries), `test_loade
 - **`data/M4/`** — `M4Dataset(BenchmarkDataset)` loader with bundled CSV data files for all 6 M4 periods. Includes Naive2 baseline constants and OWA computation.
 - **`data/Traffic/`** — `TrafficDataset(BenchmarkDataset)` loader for PeMS Traffic (862 sensors, hourly). Downloads from Hugging Face on first use, caches at `~/.cache/lightningnbeats/Traffic/`. Parameterized by `horizon` (96, 192, 336, 720).
 - **`data/Weather/`** — `WeatherDataset(BenchmarkDataset)` loader for Weather (21 meteorological indicators, 10-min intervals). Downloads from Hugging Face on first use, caches at `~/.cache/lightningnbeats/Weather/`. Parameterized by `horizon` (96, 192, 336, 720).
+- **`data/Tourism/`** — `TourismDataset(BenchmarkDataset)` loader for Tourism dataset. Columnar format (columns = series, rows = observations). Parameterized by `period` (Yearly, Quarterly, Monthly).
+- **`data/Milk/`** — `MilkDataset(BenchmarkDataset)` loader for the Milk Production univariate time series.
 
 ### Key Design Patterns
 
@@ -190,7 +195,7 @@ The `create_stack` method selects hidden layer width by block type:
 2. Create a class inheriting from `BenchmarkDataset` in `data/benchmark_dataset.py`. Must set `train_data` (DataFrame, columnar), `test_data`, `forecast_length`, `frequency`, and `name`.
 3. Override `supports_owa = True` and `compute_owa()` if Naive2 baselines exist.
 4. Add the import to `src/lightningnbeats/data/__init__.py`.
-5. In `experiments/run_experiments.py`: add a horizons dict (e.g. `NEW_HORIZONS`), add to `DATASET_DEFAULTS`, extend `load_dataset()`, and add the dataset choice to the CLI `--dataset` argument.
+5. In `experiments/run_unified_benchmark.py`: extend `load_dataset()` and add the dataset choice to the CLI `--dataset` argument. Create a YAML config in `experiments/configs/` to drive experiments via `run_from_yaml.py`.
 
 ## CI/CD
 

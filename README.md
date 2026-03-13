@@ -476,6 +476,43 @@ model = NBeatsNet(
 )
 ```
 
+### ResNet-Style Skip Connections
+
+For deep stacks, N-BEATS residual connections can cause signal decay: each stack subtracts its backcast from the residual, and in architectures with 20+ stacks the remaining signal approaches zero, starving later stacks. ResNet-style skip connections counteract this by periodically re-injecting a scaled copy of the original input back into the residual stream.
+
+Enable via `skip_distance` and `skip_alpha` on `NBeatsNet` or `NHiTSNet`:
+
+```python
+model = NBeatsNet(
+    stack_types=['GenericAELG'] * 30,
+    backcast_length=30,
+    forecast_length=6,
+    skip_distance=5,   # re-inject every 5 stacks
+    skip_alpha=0.1,    # injection strength (recommended fixed value)
+)
+```
+
+- **`skip_distance`** — Number of stacks between injections. `0` disables skip connections (default). Rule of thumb: `floor(n_stacks / 6)` provides adequate injection density.
+- **`skip_alpha`** — Injection strength. Accepts a float or `'learnable'` (creates an `nn.Parameter` initialized to 0.01). **`0.1` is the recommended default**, winning 4/5 comparisons against learnable alpha across M4, Tourism, and Weather datasets (ResNet Skip Study v1/v2). Default: `0.1`.
+
+**When to use skip connections** (findings from ResNet Skip Study v1/v2 across M4-Yearly, Tourism-Yearly, and Weather-96):
+
+| Architecture | Recommendation |
+|---|---|
+| `GenericAELG` at depth ≥ 20 | **Enable** — rescues bimodal convergence failure (SMAPE 36 → 13.8 on M4-Yearly). Use `skip_distance=floor(n_stacks/6)`, `skip_alpha=0.1`. |
+| `TrendWaveletAE` / `TrendWaveletAELG` | **Off** — no measurable benefit; can slightly hurt (p=0.001 on Tourism). |
+| `Generic` (30 stacks) | Off on M4; marginal benefit on Tourism (p=0.014). |
+| `GenericAE` | Off — depth-stable without skip. |
+| Double-VAE pairings | Skip reduces severity but does not fix the fundamental instability. |
+
+Skip connections also work in YAML experiment configs:
+
+```yaml
+training:
+  skip_distance: 5
+  skip_alpha: 0.1
+```
+
 ### Custom Loss Functions
 
 In addition to standard PyTorch loss functions (MSELoss, L1Loss, SmoothL1Loss, etc.), this implementation provides several custom loss functions commonly used in time series forecasting:
