@@ -161,6 +161,7 @@ class NBeatsNet(_NBeatsBase):
       frequency:int = 1, 
       active_g = False,
       latent_dim:int = 5,
+      latent_gate_fn: str = 'sigmoid',
       sum_losses:bool = False,
       basis_dim:int = 32,
       basis_offset:int = 0,
@@ -251,6 +252,9 @@ class NBeatsNet(_NBeatsBase):
         If True, the total loss is defined as forecast_loss + 1/4 Backcast_loss.  This is an experimental feature. Default False.
     latent_dim : int, optional
         The dimensionality of the latent space in the AutoEncoder blocks. Default 5.
+    latent_gate_fn : str, optional
+        Latent gate function for AELG blocks. One of ``'sigmoid'``,
+        ``'wavy_sigmoid'``, or ``'wavelet_sigmoid'``. Default ``'sigmoid'``.
     basis_dim : int, optional
         The dimensionality of the basis space in the Wavelet blocks. Default 32.
     basis_offset : int, optional
@@ -295,6 +299,10 @@ class NBeatsNet(_NBeatsBase):
   
     if isinstance(active_g, str) and active_g not in ('backcast', 'forecast'):
       raise ValueError(f"active_g must be True, False, 'backcast', or 'forecast', got '{active_g}'")
+    if latent_gate_fn not in b.LATENT_GATE_FNS:
+      raise ValueError(
+          f"latent_gate_fn must be one of {sorted(b.LATENT_GATE_FNS)}, got '{latent_gate_fn}'"
+      )
     if trend_thetas_dim is not None and (not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1):
       raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
     if not isinstance(skip_distance, int) or skip_distance < 0:
@@ -323,6 +331,7 @@ class NBeatsNet(_NBeatsBase):
     self.activation = activation
     self.active_g = active_g
     self.latent_dim = latent_dim
+    self.latent_gate_fn = latent_gate_fn
     self.basis_dim = basis_dim
     self.basis_offset = basis_offset
     self.stack_basis_offsets = stack_basis_offsets
@@ -430,8 +439,7 @@ class NBeatsNet(_NBeatsBase):
                 backcast_wavelet_type=self.backcast_wavelet_type,
                 forecast_wavelet_type=self.forecast_wavelet_type)
           elif stack_type in ("TrendWaveletAE", "TrendWaveletAELG"):
-            block = getattr(b, stack_type)(
-                units, self.backcast_length, self.forecast_length,
+            block_kwargs = dict(
                 trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
                 basis_offset=effective_offset,
                 share_weights=self.share_weights, activation=self.activation,
@@ -440,10 +448,14 @@ class NBeatsNet(_NBeatsBase):
                 wavelet_type=self.wavelet_type,
                 backcast_wavelet_type=self.backcast_wavelet_type,
                 forecast_wavelet_type=self.forecast_wavelet_type)
-          elif stack_type in ("TrendWaveletGenericAE", "TrendWaveletGenericAELG",
-                              "TrendWaveletGenericVAE"):
+            if "AELG" in stack_type:
+              block_kwargs["latent_gate_fn"] = self.latent_gate_fn
             block = getattr(b, stack_type)(
                 units, self.backcast_length, self.forecast_length,
+                **block_kwargs)
+          elif stack_type in ("TrendWaveletGenericAE", "TrendWaveletGenericAELG",
+                              "TrendWaveletGenericVAE"):
+            block_kwargs = dict(
                 trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
                 generic_dim=self.generic_dim, basis_offset=effective_offset,
                 share_weights=self.share_weights, activation=self.activation,
@@ -452,10 +464,19 @@ class NBeatsNet(_NBeatsBase):
                 wavelet_type=self.wavelet_type,
                 backcast_wavelet_type=self.backcast_wavelet_type,
                 forecast_wavelet_type=self.forecast_wavelet_type)
+            if "AELG" in stack_type:
+              block_kwargs["latent_gate_fn"] = self.latent_gate_fn
+            block = getattr(b, stack_type)(
+                units, self.backcast_length, self.forecast_length,
+                **block_kwargs)
           elif stack_type in ae_latent_blocks:
-            block = getattr(b,stack_type)(
+            block_args = [
                 units, self.backcast_length, self.forecast_length, effective_td,
-                self.share_weights, self.activation, self.active_g, self.latent_dim)
+                self.share_weights, self.activation, self.active_g, self.latent_dim]
+            if "AELG" in stack_type:
+              block = getattr(b, stack_type)(*block_args, self.latent_gate_fn)
+            else:
+              block = getattr(b, stack_type)(*block_args)
           elif "Wavelet" in stack_type:
             # Only generic base classes accept wavelet_type/backcast/forecast overrides;
             # family-named subclasses (e.g. HaarWaveletV3) hardcode their wavelet family.
@@ -466,6 +487,8 @@ class NBeatsNet(_NBeatsBase):
                   backcast_wavelet_type=self.backcast_wavelet_type,
                   forecast_wavelet_type=self.forecast_wavelet_type)
             if any(token in stack_type for token in ("V3VAE2", "V3VAE", "V3AE")):
+              if "AELG" in stack_type:
+                _wavelet_kwargs["latent_gate_fn"] = self.latent_gate_fn
               block = getattr(b, stack_type)(
                   units, self.backcast_length, self.forecast_length, self.basis_dim,
                   effective_offset, self.share_weights, self.activation, self.active_g,
@@ -584,6 +607,9 @@ class NHiTSNet(_NBeatsBase):
       ``'forecast'``. Default False.
   latent_dim : int, optional
       Latent bottleneck size for AE-family blocks. Default 5.
+  latent_gate_fn : str, optional
+      Latent gate function for AELG blocks. One of ``'sigmoid'``,
+      ``'wavy_sigmoid'``, or ``'wavelet_sigmoid'``. Default ``'sigmoid'``.
   sum_losses : bool, optional
       Add 0.25 × backcast-reconstruction loss to forecast loss. Default False.
   basis_dim : int, optional
@@ -626,6 +652,7 @@ class NHiTSNet(_NBeatsBase):
       frequency: int = 1,
       active_g = False,
       latent_dim: int = 5,
+      latent_gate_fn: str = 'sigmoid',
       sum_losses: bool = False,
       basis_dim: int = 32,
       basis_offset: int = 0,
@@ -644,6 +671,10 @@ class NHiTSNet(_NBeatsBase):
       raise ValueError("Stack architecture must be specified.")
     if isinstance(active_g, str) and active_g not in ('backcast', 'forecast'):
       raise ValueError(f"active_g must be True, False, 'backcast', or 'forecast', got '{active_g}'")
+    if latent_gate_fn not in b.LATENT_GATE_FNS:
+      raise ValueError(
+          f"latent_gate_fn must be one of {sorted(b.LATENT_GATE_FNS)}, got '{latent_gate_fn}'"
+      )
     if trend_thetas_dim is not None and (not isinstance(trend_thetas_dim, int) or trend_thetas_dim < 1):
       raise ValueError(f"trend_thetas_dim must be a positive integer, got {trend_thetas_dim}")
     if not isinstance(skip_distance, int) or skip_distance < 0:
@@ -696,6 +727,7 @@ class NHiTSNet(_NBeatsBase):
     self.activation = activation
     self.active_g = active_g
     self.latent_dim = latent_dim
+    self.latent_gate_fn = latent_gate_fn
     self.basis_dim = basis_dim
     self.basis_offset = basis_offset
     self.stack_basis_offsets = stack_basis_offsets
@@ -829,8 +861,7 @@ class NHiTSNet(_NBeatsBase):
               forecast_wavelet_type=self.forecast_wavelet_type,
           )
         elif stack_type in ("TrendWaveletAE", "TrendWaveletAELG"):
-          block = getattr(b, stack_type)(
-              units, effective_backcast_length, effective_forecast_length,
+          block_kwargs = dict(
               trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
               basis_offset=effective_offset,
               share_weights=self.share_weights, activation=self.activation,
@@ -840,10 +871,15 @@ class NHiTSNet(_NBeatsBase):
               backcast_wavelet_type=self.backcast_wavelet_type,
               forecast_wavelet_type=self.forecast_wavelet_type,
           )
-        elif stack_type in ("TrendWaveletGenericAE", "TrendWaveletGenericAELG",
-                            "TrendWaveletGenericVAE"):
+          if "AELG" in stack_type:
+            block_kwargs["latent_gate_fn"] = self.latent_gate_fn
           block = getattr(b, stack_type)(
               units, effective_backcast_length, effective_forecast_length,
+              **block_kwargs,
+          )
+        elif stack_type in ("TrendWaveletGenericAE", "TrendWaveletGenericAELG",
+                            "TrendWaveletGenericVAE"):
+          block_kwargs = dict(
               trend_dim=self.trend_thetas_dim, wavelet_dim=self.basis_dim,
               generic_dim=self.generic_dim, basis_offset=effective_offset,
               share_weights=self.share_weights, activation=self.activation,
@@ -853,12 +889,22 @@ class NHiTSNet(_NBeatsBase):
               backcast_wavelet_type=self.backcast_wavelet_type,
               forecast_wavelet_type=self.forecast_wavelet_type,
           )
-        elif stack_type in ae_latent_blocks:
+          if "AELG" in stack_type:
+            block_kwargs["latent_gate_fn"] = self.latent_gate_fn
           block = getattr(b, stack_type)(
+              units, effective_backcast_length, effective_forecast_length,
+              **block_kwargs,
+          )
+        elif stack_type in ae_latent_blocks:
+          block_args = [
               units, effective_backcast_length, effective_forecast_length,
               effective_td, self.share_weights, self.activation,
               self.active_g, self.latent_dim,
-          )
+          ]
+          if "AELG" in stack_type:
+            block = getattr(b, stack_type)(*block_args, self.latent_gate_fn)
+          else:
+            block = getattr(b, stack_type)(*block_args)
         elif "Wavelet" in stack_type:
           _wavelet_kwargs = {}
           if stack_type in _GENERIC_WAVELET_V3:
@@ -867,6 +913,8 @@ class NHiTSNet(_NBeatsBase):
                 backcast_wavelet_type=self.backcast_wavelet_type,
                 forecast_wavelet_type=self.forecast_wavelet_type)
           if any(token in stack_type for token in ("V3VAE2", "V3VAE", "V3AE")):
+            if "AELG" in stack_type:
+              _wavelet_kwargs["latent_gate_fn"] = self.latent_gate_fn
             block = getattr(b, stack_type)(
                 units, effective_backcast_length, effective_forecast_length,
                 self.basis_dim, effective_offset,

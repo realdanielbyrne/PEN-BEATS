@@ -118,6 +118,7 @@ DEFAULT_PROTOCOL = {
 DEFAULT_BLOCK_PARAMS = {
     "thetas_dim": THETAS_DIM,
     "latent_dim": LATENT_DIM,
+    "latent_gate_fn": "sigmoid",
     "basis_dim": BASIS_DIM,
     "forecast_basis_dim": None,
     "trend_thetas_dim": None,
@@ -766,6 +767,7 @@ def run_single_config(
         tb_enabled=bool(logging_cfg.get("tensorboard", False)),
         thetas_dim_override=block_params.get("thetas_dim"),
         latent_dim_override=block_params.get("latent_dim"),
+        latent_gate_fn=block_params.get("latent_gate_fn", "sigmoid"),
         trend_thetas_dim=block_params.get("trend_thetas_dim"),
         wavelet_type=block_params.get("wavelet_type") or "db3",
         backcast_wavelet_type=block_params.get("backcast_wavelet_type"),

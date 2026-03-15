@@ -79,6 +79,7 @@ def test_run_experiment_forwards_protocol_settings(monkeypatch, tmp_path):
             "batch_size": 256,
         },
         "training": {"max_epochs": 1, "patience": 1},
+        "block_params": {"latent_gate_fn": "wavy_sigmoid"},
         "runs": {"n_runs": 1, "base_seed": 7},
         "output": {"results_dir": str(tmp_path), "save_predictions": False},
         "hardware": {"worker_id": "yaml-worker-1"},
@@ -97,6 +98,7 @@ def test_run_experiment_forwards_protocol_settings(monkeypatch, tmp_path):
     assert captured["run_single_experiment"]["loss_override"] == "MSELoss"
     assert captured["run_single_experiment"]["forecast_multiplier"] == 5
     assert captured["run_single_experiment"]["batch_size"] == rub.BATCH_SIZES[("traffic", "Traffic-96")]
+    assert captured["run_single_experiment"]["latent_gate_fn"] == "wavy_sigmoid"
     assert captured["run_single_experiment"]["dataset_name"] == "traffic"
     assert captured["run_single_experiment"]["worker_id"] == "yaml-worker-1"
 

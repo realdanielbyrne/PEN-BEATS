@@ -226,6 +226,16 @@ class TestModelDefaults:
         )
         assert model.learning_rate == 1e-3
 
+    def test_latent_gate_fn_defaults_to_sigmoid(self):
+        model = NBeatsNet(
+            backcast_length=20,
+            forecast_length=5,
+            stack_types=["GenericAELG"],
+            n_blocks_per_stack=1,
+        )
+        assert model.latent_gate_fn == "sigmoid"
+        assert model.stacks[0][0].latent_gate_fn == "sigmoid"
+
 
 # --- sum_losses semantic fix tests ---
 
@@ -335,6 +345,20 @@ class TestActiveGSplitModesModel:
     def test_active_g_invalid_string_raises(self):
         with pytest.raises(ValueError, match="active_g must be"):
             _make_model(["Generic"], active_g='invalid')
+
+    def test_latent_gate_fn_invalid_string_raises(self):
+        with pytest.raises(ValueError, match="latent_gate_fn must be one of"):
+            _make_model(["GenericAELG"], latent_gate_fn="invalid")
+
+    def test_latent_gate_fn_routes_to_aelg_blocks(self):
+        model = _make_model(["GenericAELG"], latent_gate_fn="wavy_sigmoid", g_width=32)
+        assert model.latent_gate_fn == "wavy_sigmoid"
+        assert model.stacks[0][0].latent_gate_fn == "wavy_sigmoid"
+
+    def test_wavelet_latent_gate_fn_routes_to_aelg_blocks(self):
+        model = _make_model(["GenericAELG"], latent_gate_fn="wavelet_sigmoid", g_width=32)
+        assert model.latent_gate_fn == "wavelet_sigmoid"
+        assert model.stacks[0][0].latent_gate_fn == "wavelet_sigmoid"
 
     def test_active_g_backcast_forward_pass(self):
         model = _make_model(["Generic"], active_g='backcast', g_width=32)
@@ -534,6 +558,10 @@ class TestNHiTSNetConstruction:
         with pytest.raises(ValueError, match="active_g must be"):
             _make_nhits(["Generic"], active_g='invalid')
 
+    def test_invalid_latent_gate_fn_raises(self):
+        with pytest.raises(ValueError, match="latent_gate_fn must be one of"):
+            _make_nhits(["GenericAELG"], latent_gate_fn="invalid")
+
     def test_invalid_trend_thetas_dim_raises(self):
         with pytest.raises(ValueError, match="trend_thetas_dim must be a positive integer"):
             _make_nhits(["Trend"], trend_thetas_dim=0)
@@ -690,6 +718,26 @@ class TestNHiTSNetParameters:
         model = _make_nhits(["Generic"], active_g='backcast')
         assert model.active_g == 'backcast'
         assert model.stacks[0][0].active_g == 'backcast'
+
+    def test_latent_gate_fn_passthrough(self):
+        model = _make_nhits(
+            ["GenericAELG"],
+            latent_gate_fn="wavy_sigmoid",
+            n_pools_kernel_size=[1],
+            n_freq_downsample=[1],
+        )
+        assert model.latent_gate_fn == "wavy_sigmoid"
+        assert model.stacks[0][0].latent_gate_fn == "wavy_sigmoid"
+
+    def test_wavelet_latent_gate_fn_passthrough(self):
+        model = _make_nhits(
+            ["GenericAELG"],
+            latent_gate_fn="wavelet_sigmoid",
+            n_pools_kernel_size=[1],
+            n_freq_downsample=[1],
+        )
+        assert model.latent_gate_fn == "wavelet_sigmoid"
+        assert model.stacks[0][0].latent_gate_fn == "wavelet_sigmoid"
 
     def test_interpolation_mode_stored(self):
         model = _make_nhits(["Generic"], interpolation_mode='nearest')

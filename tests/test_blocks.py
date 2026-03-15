@@ -695,6 +695,103 @@ class TestAERootBlockLGProperties:
         assert block.latent_gate.requires_grad
 
 
+class TestAERootBlockLGGateFunctions:
+    """Verify LG blocks expose and apply configurable latent gate functions."""
+
+    def test_default_latent_gate_fn_is_sigmoid(self):
+        block = b.AERootBlockLG(
+            BACKCAST_LENGTH,
+            UNITS,
+            activation="ReLU",
+            latent_dim=LATENT_DIM,
+        )
+        assert block.latent_gate_fn == "sigmoid"
+
+    def test_wavy_sigmoid_is_accepted_by_aelg_blocks(self):
+        block = b.GenericAELG(
+            units=UNITS,
+            backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH,
+            thetas_dim=THETAS_DIM,
+            share_weights=False,
+            activation="ReLU",
+            latent_dim=LATENT_DIM,
+            latent_gate_fn="wavy_sigmoid",
+        )
+        assert block.latent_gate_fn == "wavy_sigmoid"
+
+    def test_wavelet_sigmoid_is_accepted_by_aelg_blocks(self):
+        block = b.GenericAELG(
+            units=UNITS,
+            backcast_length=BACKCAST_LENGTH,
+            forecast_length=FORECAST_LENGTH,
+            thetas_dim=THETAS_DIM,
+            share_weights=False,
+            activation="ReLU",
+            latent_dim=LATENT_DIM,
+            latent_gate_fn="wavelet_sigmoid",
+        )
+        assert block.latent_gate_fn == "wavelet_sigmoid"
+
+    def test_invalid_latent_gate_fn_raises(self):
+        with pytest.raises(ValueError, match="latent_gate_fn must be one of"):
+            b.AERootBlockLG(
+                BACKCAST_LENGTH,
+                UNITS,
+                activation="ReLU",
+                latent_dim=LATENT_DIM,
+                latent_gate_fn="invalid",
+            )
+
+    def test_sigmoid_gate_helper_matches_torch(self):
+        block = b.AERootBlockLG(
+            BACKCAST_LENGTH,
+            UNITS,
+            activation="ReLU",
+            latent_dim=LATENT_DIM,
+            latent_gate_fn="sigmoid",
+        )
+        with torch.no_grad():
+            block.latent_gate.copy_(torch.tensor([-2.0, -0.5, 0.5, 2.0]))
+
+        expected = torch.sigmoid(block.latent_gate)
+        actual = block._compute_latent_gate_scale()
+
+        assert torch.allclose(actual, expected, atol=1e-6)
+
+    def test_wavy_sigmoid_gate_helper_matches_formula(self):
+        block = b.AERootBlockLG(
+            BACKCAST_LENGTH,
+            UNITS,
+            activation="ReLU",
+            latent_dim=LATENT_DIM,
+            latent_gate_fn="wavy_sigmoid",
+        )
+        with torch.no_grad():
+            block.latent_gate.copy_(torch.tensor([-2.0, -0.5, 0.5, 2.0]))
+
+        expected = b.wavy_sigmoid(block.latent_gate)
+        actual = block._compute_latent_gate_scale()
+
+        assert torch.allclose(actual, expected, atol=1e-6)
+
+    def test_wavelet_sigmoid_gate_helper_matches_formula(self):
+        block = b.AERootBlockLG(
+            BACKCAST_LENGTH,
+            UNITS,
+            activation="ReLU",
+            latent_dim=LATENT_DIM,
+            latent_gate_fn="wavelet_sigmoid",
+        )
+        with torch.no_grad():
+            block.latent_gate.copy_(torch.tensor([-2.0, -0.5, 0.5, 2.0]))
+
+        expected = b.wavelet_sigmoid(block.latent_gate)
+        actual = block._compute_latent_gate_scale()
+
+        assert torch.allclose(actual, expected, atol=1e-6)
+
+
 class TestAERootBlockVAEProperties:
     """Verify VAE blocks store kl_loss after forward pass."""
 
