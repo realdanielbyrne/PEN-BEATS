@@ -9,7 +9,8 @@ When choosing between TrendWaveletAELG (unified block) and TrendAELG + WaveletV3
 | **Tourism-Yearly** | **TrendWaveletAELG** (or test GAE10) | Confirmed SMAPE=20.864 (10-run); GAE10_no_skip achieves 20.526 (needs head-to-head ≥10 seeds to confirm SOTA) |
 | Short horizon (H<=10), simplicity preferred | **TrendWaveletAELG** | Simpler architecture, competitive results |
 | M4-Yearly, maximum accuracy | Trend+WaveletV3 (non-AE) | SOTA 13.410, unified is +0.40% |
-| Traffic-96 or Weather-96 | **TrendAELG+WaveletV3AELG (alternating)** | Requires L≥5H lookback and ≤8-10 stacks; converges with MSE ~0.0006 on Traffic |
+| **Traffic-96** | **TrendAELG+WaveletV3AELG (alternating)** | Requires L≥5H lookback and ≤8-10 stacks; converges with MSE ~0.0006 on Traffic |
+| **Weather-96 (alternating, preferred)** | **TrendAE+WaveletV3AE (alternating, AE not AELG)** | Gate fn study FM5: MSE=0.121. AE beats AELG (MWU p=0.036). Use `forecast_multiplier=5` |
 | **Weather-96 (non-alternating)** | **TrendVAE+HaarWaveletV3 at 10-20 stacks** | ResNet skip v2 R3: TVH20_skip5_a01 MSE=0.133 (bl=480); not sig. vs TVH10_no_skip |
 
 ---
@@ -23,6 +24,7 @@ When using TrendWaveletAELG:
 - `latent_dim=16` (significantly better than ld=8, p=0.042)
 - `trend_thetas_dim=3` for H<=10 (confirmed, p=0.255 directional)
 - `basis_dim_label=eq_fcast` (significantly best, p=0.017)
+- `forecast_multiplier=5` (FM5 beats FM7 on both M4 and Weather, p<0.001 each; gate fn study 2026-03-15)
 - `n_stacks=10`, `n_blocks_per_stack=1`, `share_weights=True`
 
 ### Wavelet family: does NOT matter
@@ -58,6 +60,28 @@ Wavelet family is a non-factor for TrendWaveletAELG (Kruskal-Wallis p=0.107 acro
 | M4-Yearly | 13.463 (+0.40%) | 13.438 (+0.21%) |
 | Architecture simplicity | 1 block type | 2 block types alternating |
 
+### Alternating stacks: AELG vs AE backbone is dataset-dependent (gate fn study, 2026-03-15)
+
+| Dataset | Better backbone | Evidence |
+|---------|-----------------|----------|
+| M4-Yearly | AELG (weakly) | All 4 architectures favor AELG, none significant |
+| Weather-96 | **AE (significantly)** | MWU p=0.036. Top 2 Weather configs are AE controls (no gate) |
+
+On Weather-96, the learned gate appears to over-constrain the latent space for long-horizon forecasting. Prefer AE for Weather alternating stacks. The gate function itself (sigmoid vs wavy_sigmoid vs wavelet_sigmoid) is a non-factor on both datasets (KW p>0.20).
+
+### Lookback multiplier: FM5 > FM7 (gate fn study, 2026-03-15)
+
+`forecast_multiplier=5` significantly outperforms `forecast_multiplier=7` on **both** datasets:
+
+- M4-Yearly: FM5 wins 16/16 matched configs (Wilcoxon p<0.001), -0.09 SMAPE (-0.66%)
+- Weather-96: FM5 wins 13/13 matched configs (Wilcoxon p<0.001), -0.035 MSE (-17.5%)
+
+Use FM=5 as the default for AE/AELG architectures on these datasets.
+
+### T+W+G does not improve over T+W
+
+Adding a Generic block to the alternating T+W pattern adds parameters without improving accuracy on either dataset. Stick with T+W alternating for parameter efficiency.
+
 ---
 
 ## Evidence
@@ -69,3 +93,4 @@ Wavelet family is a non-factor for TrendWaveletAELG (Kruskal-Wallis p=0.107 acro
 | Skip Study v2 (36 configs, depth scaling) | `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.md` | `experiments/results/m4/resnet_skip_study_v2_results.csv` |
 | Skip Study v2 Notebook | `experiments/analysis/analysis_reports/resnet_skip_study_v2_analysis.ipynb` | See notebook |
 | Notebook | `experiments/analysis/notebooks/trendwaveletaelg_pure_study_insights.ipynb` | See notebook |
+| Gate Function Study (M4+Weather, 303 runs) | `experiments/analysis/analysis_reports/gate_fn_study_analysis.md` | `experiments/results/m4/gate_fn_study_results.csv`, `experiments/results/weather/gate_fn_study_results.csv` |

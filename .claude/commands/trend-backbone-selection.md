@@ -6,6 +6,8 @@ When building Trend+Wavelet stacks, the **backbone class hierarchy** matters mor
 
 **RootBlock (non-AE) > AERootBlockLG (learned-gate AE) >> AERootBlock (plain AE)**
 
+**Important exception (gate fn study, 2026-03-15):** On **Weather-96**, the hierarchy reverses for AE vs AELG: plain AE significantly outperforms AELG (MWU p=0.036). The top 2 Weather configs are AE controls (no learned gate). The learned gate may over-constrain the latent space for long-horizon forecasting. **For Weather-96 alternating stacks, prefer AE over AELG.**
+
 | Full Stack | Backbone | M4-Yearly SMAPE | OWA |
 |---|---|---|---|
 | Trend + WaveletV3 | RootBlock | **13.410** | **0.794** |
@@ -78,3 +80,4 @@ When running successive halving searches:
 | Weather TrendAE | - | `experiments/results/weather/wavelet_study_3_successive_trendae_results.csv` |
 | V3AE backbone hierarchy (332 configs, 995 runs) | `experiments/analysis/analysis_reports/wavelet_v3ae_study_analysis.md` | `experiments/results/m4/wavelet_v3ae_study_results.csv` |
 | V3AELG cross-dataset (4 datasets) | `experiments/analysis/analysis_reports/wavelet_v3aelg_study_analysis.md` | `experiments/results/m4/wavelet_v3aelg_trendaelg_study_results.csv` + 3 others |
+| Gate Function Study (AE vs AELG, M4+Weather, 303 runs) | `experiments/analysis/analysis_reports/gate_fn_study_analysis.md` | `experiments/results/m4/gate_fn_study_results.csv`, `experiments/results/weather/gate_fn_study_results.csv` |

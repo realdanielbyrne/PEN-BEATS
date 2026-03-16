@@ -205,12 +205,16 @@
 ## NHiTS-Protocol Benchmark (Weather, Traffic) (2026-03-11)
 
 - See `nhits_benchmark_findings.md` for full details
-- **We beat NHiTS at H=192 (0.938x) and H=336 (0.773x, 22.7% improvement).** Miss at H=96 (1.047x) and H=720 (1.454x).
-- **NHiTSNet wins at short horizons (H<=192), NBeatsNet wins at long horizons (H>=336).** Clear architecture crossover.
-- **BottleneckGenericAELG-10** is most cross-horizon robust (avg rank 3.5/14).
-- **H=720 is broken** -- all SMAPE>100, undertrained. Needs patience increase.
-- **Traffic experiment incomplete.** MSE metric not comparable to paper (per-variate vs joint).
+- Beat NHiTS at H=192/336, miss at H=96/720. NHiTSNet wins short horizons, NBeatsNet wins long.
+
+## Gate Function Study (M4-Yearly + Weather-96) (2026-03-15)
+
+- See `gate_fn_study.md` for full details
+- **Gate fn is a NON-FACTOR** cross-dataset (M4 KW p=0.37, Weather KW p=0.64). Keep sigmoid default.
+- **FM5 beats FM7** on both datasets (p<0.001 each). M4: -0.09 SMAPE. Weather: -17.5% MSE. Use FM=5 as default.
+- **AE beats AELG on Weather** (MWU p=0.036). Reverses M4 pattern. AELG over-constrains long-horizon latent.
+- **Alternating > homogeneous** on both datasets (M4 p=0.0006, Weather p=0.015).
 
 ## Critical Methodology Lesson
 
-- **R1 (early training) data can produce misleading factor rankings.** Both ttd and bd_label showed R1 advantages that reversed or vanished at R3 convergence. Always validate hyperparameter recommendations with converged data. This affected two prior skill recommendations (ttd and bd_label).
+- **R1 (early training) data can produce misleading factor rankings.** Both ttd and bd_label showed R1 advantages that reversed or vanished at R3 convergence. Always validate hyperparameter recommendations with converged data.

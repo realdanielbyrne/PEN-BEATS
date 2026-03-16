@@ -13,14 +13,10 @@
 # 16 configs × 5 runs = 80 runs
 #
 # Supports multi-worker execution via claim system:
-#   python experiments/run_from_yaml.py experiments/configs/gate_fn_study_weather.yaml \
-#     --gpu-id 0 --worker-id w0a &
-#   python experiments/run_from_yaml.py experiments/configs/gate_fn_study_weather.yaml \
-#     --gpu-id 0 --worker-id w0b &
-#   python experiments/run_from_yaml.py experiments/configs/gate_fn_study_weather.yaml \
-#     --gpu-id 1 --worker-id w1a &
-#   python experiments/run_from_yaml.py experiments/configs/gate_fn_study_weather.yaml \
-#     --gpu-id 1 --worker-id w1b &
+#   python experiments/run_from_yaml.py experiments/configs/gate_fn_study_weather.yaml --gpu-id 0 --worker-id w0a 
+#   python experiments/run_from_yaml.py experiments/configs/gate_fn_study_weather.yaml --gpu-id 0 --worker-id w0b 
+#   python experiments/run_from_yaml.py experiments/configs/gate_fn_study_weather.yaml --gpu-id 1 --worker-id w1a 
+#   python experiments/run_from_yaml.py experiments/configs/gate_fn_study_weather.yaml --gpu-id 1 --worker-id w1b 
 # ============================================================
 
 experiment_name: gate_fn_study
@@ -47,9 +43,9 @@ training:
   activation: ReLU
   loss: SMAPELoss
   optimizer: Adam
-  learning_rate: 0.0001
-  max_epochs: 100
-  patience: 10
+  learning_rate: 0.001
+  max_epochs: 200
+  patience: 25
   n_blocks_per_stack: 1
   share_weights: true
   skip_distance: 5

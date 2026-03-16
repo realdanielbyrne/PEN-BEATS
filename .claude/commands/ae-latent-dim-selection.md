@@ -38,14 +38,19 @@ When configuring `latent_dim` for AE-family wavelet blocks (`AERootBlock`, `AERo
 - **Caution with DB4+eq_fcast at ld=16:** This specific combination catastrophically fails (SMAPE ~76). DB4 with other basis labels or at ld=8 is fine.
 - Evidence: TrendWaveletAELG Pure Study. See `experiments/analysis/analysis_reports/trendwaveletaelg_pure_study_analysis.md`.
 
+### AERootBlock on Weather-96: AE outperforms AELG (gate fn study, 2026-03-15)
+
+On Weather-96 with alternating stacks (TrendAE + WaveletV3AE), plain AE significantly outperforms AELG (MWU p=0.036). The top 2 Weather configs are AE controls with no learned gate. The gate function choice (sigmoid vs wavy_sigmoid vs wavelet_sigmoid) is a non-factor on both M4 and Weather (KW p>0.20). This suggests `latent_dim=16` with plain AE (no gate) is worth testing on long-horizon datasets.
+
 ### Untested but Recommended: ld=16 for Plain AE
 
 Given that:
 1. AELG is optimal at ld=16
 2. Plain AE is optimal at ld=8 (the maximum tested)
 3. Performance is still improving from ld=5 to ld=8 (slightly, not significantly)
+4. Plain AE outperforms AELG on Weather-96 (gate fn study), suggesting the gate may not be needed
 
-It is plausible that plain AE would benefit from ld=12 or ld=16. This has not been tested.
+It is plausible that plain AE would benefit from ld=12 or ld=16. This has not been tested on M4 but is supported indirectly by Weather-96 results.
 
 ---
 
