@@ -215,6 +215,12 @@
 - **AE beats AELG on Weather** (MWU p=0.036). Reverses M4 pattern. AELG over-constrains long-horizon latent.
 - **Alternating > homogeneous** on both datasets (M4 p=0.0006, Weather p=0.015).
 
+## FM Sweep + Ensemble Plan (pending omnibus completion)
+
+- See `fm_sweep_ensemble_plan.md` for details
+- After omnibus completes: FM={3,4,5,6,7} × 10 seeds on top 3-5 winners per dataset
+- Goal: lookback-diverse ensembles replicating paper methodology (paper used 180-model ensembles with varied lookback)
+
 ## Critical Methodology Lesson
 
 - **R1 (early training) data can produce misleading factor rankings.** Both ttd and bd_label showed R1 advantages that reversed or vanished at R3 convergence. Always validate hyperparameter recommendations with converged data.

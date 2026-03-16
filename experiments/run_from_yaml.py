@@ -602,6 +602,19 @@ def _resolve_forecast_multiplier(training: dict, dataset) -> int:
     return FORECAST_MULTIPLIERS.get(_dataset_key_from_dataset(dataset), 5)
 
 
+def _resolve_basis_dim(raw, dataset) -> int:
+    """Resolve basis_dim from YAML value.
+
+    Accepts an integer or the string ``"forecast"`` (alias for eq_fcast),
+    which resolves to ``dataset.forecast_length`` at runtime.  This allows
+    a single YAML config to produce the correct eq_fcast basis_dim across
+    multiple periods (e.g. M4 Yearly H=6 and Quarterly H=8).
+    """
+    if isinstance(raw, str) and raw.lower() in ("forecast", "eq_fcast"):
+        return int(dataset.forecast_length)
+    return int(raw)
+
+
 def _compute_seed(runs_cfg: dict, run_idx: int) -> int:
     """Compute the seed for a given run index.
 
@@ -760,7 +773,7 @@ def run_single_config(
         gpu_id=hardware_cfg.get("gpu_id"),
         dataset_name=dataset_name,
         worker_id=str(hardware_cfg.get("worker_id", "") or ""),
-        basis_dim=int(block_params.get("basis_dim", BASIS_DIM)),
+        basis_dim=_resolve_basis_dim(block_params.get("basis_dim", BASIS_DIM), dataset),
         forecast_basis_dim=block_params.get("forecast_basis_dim"),
         extra_row=extra_row if extra_row else None,
         csv_columns=csv_columns,

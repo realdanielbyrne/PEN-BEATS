@@ -187,7 +187,7 @@ FORECAST_MULTIPLIERS = {
 # ---------------------------------------------------------------------------
 
 BATCH_SIZES = {
-    ("m4", "Yearly"): 32768,
+    ("m4", "Yearly"): 16384,
     ("tourism", "Tourism-Yearly"): 8192,
     ("tourism", "Tourism-Monthly"): 32768,
     ("tourism", "Tourism-Quarterly"): 65536,

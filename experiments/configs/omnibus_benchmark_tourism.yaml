@@ -34,15 +34,15 @@ training:
   loss: SMAPELoss
   optimizer: Adam
   learning_rate: 0.001
-  max_epochs: 100
-  patience: 10
+  max_epochs: 200
+  patience: 20
   n_blocks_per_stack: 1
   share_weights: true
 
 block_params:
   thetas_dim: 5
   latent_dim: 16
-  basis_dim: 128
+  basis_dim: forecast
   trend_thetas_dim: 3
   generic_dim: 5
   wavelet_type: coif2
