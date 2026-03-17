@@ -1,0 +1,1742 @@
+  # ════════════════════════════════════════════════════════════════════════
+  # Basis Dimension Sweep
+  #
+  # Adds fixed basis_dim overrides of 32, 64, and 128 for every unique
+  # configuration in this file that contains Wavelet / TrendWavelet-family
+  # blocks and therefore consumes block_params.basis_dim.
+  #
+  # Duplicate guard: no configs in the original file already set
+  # basis_dim to 32, 64, or 128, and the duplicated base config name
+  # `TrendAELG+DB3WaveletV3AELG-30-skip` is swept only once here.
+  #
+  # Naming convention: <base_name>_bd32 / _bd64 / _bd128
+  #
+  # Swept base configs:
+  #   novel_nonae:
+  #     - Trend+Coif2WaveletV3-30
+  #     - TrendWaveletGeneric-10
+  #     - TrendWaveletGeneric-30
+  #     - Trend+Coif2WaveletV3-30-activeG
+  #     - TrendWaveletGeneric-10-activeG
+  #   novel_aelg:
+  #     - TrendWaveletAELG-10
+  #     - TrendWaveletAELG-20
+  #     - TrendAELG+Coif2WaveletV3AELG-30
+  #     - TrendAELG+DB3WaveletV3AELG-30
+  #     - TrendAELG+Coif2WaveletV3AELG-30-skip
+  #     - TrendAELG+DB3WaveletV3AELG-30-skip
+  #     - TrendAE+Coif2WaveletV3AE-30
+  #     - TrendAE+DB3WaveletV3AE-30
+  #     - TrendWaveletGenericAELG-10
+  #     - TrendWaveletGenericAELG-20
+  #     - TrendWaveletAELG-10-activeG
+  #     - TrendWaveletAELG-20-activeG
+  #     - TrendAELG+Coif2WaveletV3AELG-30-activeG
+  #     - TrendWaveletGenericAELG-10-activeG
+  #     - TrendAELG+SynWaveletV3AELG-30-skip
+  #     - TrendAELG+Symlet3WaveletV3AELG-30
+  #     - TrendAELG+HaarWaveletV3AELG-30
+  #     - TrendAELG+Coif2WaveletV3-30
+  #     - TrendAELG+Symlet3WaveletV3AELG-20
+  #     - TrendAELG+HaarWaveletV3AELG-20
+  #     - TrendAELG+Coif2WaveletV3-20
+  #   novel_ae:
+  #     - TrendAE+DB3WaveletV3AE-30-activeG
+  #     - TrendAE+Coif2WaveletV3AE-30-activeG
+  # ════════════════════════════════════════════════════════════════════════
+
+  # Trend+Coif2WaveletV3-30 — basis_dim sweep
+  - name: Trend+Coif2WaveletV3-30_bd32
+    category: novel_nonae
+    stacks:
+      type: alternating
+      blocks:
+      - Trend
+      - Coif2WaveletV3
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Polynomial+DWT orthonormal basis SOTA
+    block_params:
+      basis_dim: 32
+
+  - name: Trend+Coif2WaveletV3-30_bd64
+    category: novel_nonae
+    stacks:
+      type: alternating
+      blocks:
+      - Trend
+      - Coif2WaveletV3
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Polynomial+DWT orthonormal basis SOTA
+    block_params:
+      basis_dim: 64
+
+  - name: Trend+Coif2WaveletV3-30_bd128
+    category: novel_nonae
+    stacks:
+      type: alternating
+      blocks:
+      - Trend
+      - Coif2WaveletV3
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Polynomial+DWT orthonormal basis SOTA
+    block_params:
+      basis_dim: 128
+
+  # TrendWaveletGeneric-10 — basis_dim sweep
+  - name: TrendWaveletGeneric-10_bd32
+    category: novel_nonae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: 3-branch unified block most parameter-efficient
+    block_params:
+      basis_dim: 32
+
+  - name: TrendWaveletGeneric-10_bd64
+    category: novel_nonae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: 3-branch unified block most parameter-efficient
+    block_params:
+      basis_dim: 64
+
+  - name: TrendWaveletGeneric-10_bd128
+    category: novel_nonae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: 3-branch unified block most parameter-efficient
+    block_params:
+      basis_dim: 128
+
+  # TrendWaveletGeneric-30 — basis_dim sweep
+  - name: TrendWaveletGeneric-30_bd32
+    category: novel_nonae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 30
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 30
+      innovation_claim: 3-branch unified block most parameter-efficient same depth as
+        baseline configs
+    block_params:
+      basis_dim: 32
+
+  - name: TrendWaveletGeneric-30_bd64
+    category: novel_nonae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 30
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 30
+      innovation_claim: 3-branch unified block most parameter-efficient same depth as
+        baseline configs
+    block_params:
+      basis_dim: 64
+
+  - name: TrendWaveletGeneric-30_bd128
+    category: novel_nonae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 30
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 30
+      innovation_claim: 3-branch unified block most parameter-efficient same depth as
+        baseline configs
+    block_params:
+      basis_dim: 128
+
+  # TrendWaveletAELG-10 — basis_dim sweep
+  - name: TrendWaveletAELG-10_bd32
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 10
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: Learned-gate AE with polynomial+DWT basis
+    block_params:
+      basis_dim: 32
+
+  - name: TrendWaveletAELG-10_bd64
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 10
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: Learned-gate AE with polynomial+DWT basis
+    block_params:
+      basis_dim: 64
+
+  - name: TrendWaveletAELG-10_bd128
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 10
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: Learned-gate AE with polynomial+DWT basis
+    block_params:
+      basis_dim: 128
+
+  # TrendWaveletAELG-20 — basis_dim sweep
+  - name: TrendWaveletAELG-20_bd32
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 20
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 20
+      innovation_claim: Depth-matched AELG vs 30-stack non-AE
+    block_params:
+      basis_dim: 32
+
+  - name: TrendWaveletAELG-20_bd64
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 20
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 20
+      innovation_claim: Depth-matched AELG vs 30-stack non-AE
+    block_params:
+      basis_dim: 64
+
+  - name: TrendWaveletAELG-20_bd128
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 20
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 20
+      innovation_claim: Depth-matched AELG vs 30-stack non-AE
+    block_params:
+      basis_dim: 128
+
+  # TrendAELG+Coif2WaveletV3AELG-30 — basis_dim sweep
+  - name: TrendAELG+Coif2WaveletV3AELG-30_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks
+    block_params:
+      basis_dim: 32
+
+  - name: TrendAELG+Coif2WaveletV3AELG-30_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks
+    block_params:
+      basis_dim: 64
+
+  - name: TrendAELG+Coif2WaveletV3AELG-30_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks
+    block_params:
+      basis_dim: 128
+
+  # TrendAELG+DB3WaveletV3AELG-30 — basis_dim sweep
+  - name: TrendAELG+DB3WaveletV3AELG-30_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - DB3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+DB3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks higher order wavelet
+    block_params:
+      basis_dim: 32
+
+  - name: TrendAELG+DB3WaveletV3AELG-30_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - DB3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+DB3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks higher order wavelet
+    block_params:
+      basis_dim: 64
+
+  - name: TrendAELG+DB3WaveletV3AELG-30_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - DB3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+DB3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks higher order wavelet
+    block_params:
+      basis_dim: 128
+
+  # TrendAELG+Coif2WaveletV3AELG-30-skip — basis_dim sweep
+  - name: TrendAELG+Coif2WaveletV3AELG-30-skip_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+      skip_distance: 5
+      skip_alpha: 0.1
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks with skip connections
+        for stability
+    block_params:
+      basis_dim: 32
+
+  - name: TrendAELG+Coif2WaveletV3AELG-30-skip_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+      skip_distance: 5
+      skip_alpha: 0.1
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks with skip connections
+        for stability
+    block_params:
+      basis_dim: 64
+
+  - name: TrendAELG+Coif2WaveletV3AELG-30-skip_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+      skip_distance: 5
+      skip_alpha: 0.1
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks with skip connections
+        for stability
+    block_params:
+      basis_dim: 128
+
+  # TrendAELG+DB3WaveletV3AELG-30-skip — basis_dim sweep
+  - name: TrendAELG+DB3WaveletV3AELG-30-skip_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - DB3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+      skip_distance: 5
+      skip_alpha: 0.1
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+DB3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks higher order wavelet
+        and skip connections for stability
+    block_params:
+      basis_dim: 32
+
+  - name: TrendAELG+DB3WaveletV3AELG-30-skip_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - DB3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+      skip_distance: 5
+      skip_alpha: 0.1
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+DB3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks higher order wavelet
+        and skip connections for stability
+    block_params:
+      basis_dim: 64
+
+  - name: TrendAELG+DB3WaveletV3AELG-30-skip_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - DB3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+      skip_distance: 5
+      skip_alpha: 0.1
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+DB3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks higher order wavelet
+        and skip connections for stability
+    block_params:
+      basis_dim: 128
+
+  # TrendAE+Coif2WaveletV3AE-30 — basis_dim sweep
+  - name: TrendAE+Coif2WaveletV3AE-30_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - Coif2WaveletV3AE
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+Coif2WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AE alternating at 30 stacks
+    block_params:
+      basis_dim: 32
+
+  - name: TrendAE+Coif2WaveletV3AE-30_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - Coif2WaveletV3AE
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+Coif2WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AE alternating at 30 stacks
+    block_params:
+      basis_dim: 64
+
+  - name: TrendAE+Coif2WaveletV3AE-30_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - Coif2WaveletV3AE
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+Coif2WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AE alternating at 30 stacks
+    block_params:
+      basis_dim: 128
+
+  # TrendAE+DB3WaveletV3AE-30 — basis_dim sweep
+  - name: TrendAE+DB3WaveletV3AE-30_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - DB3WaveletV3AE
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+DB3WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AE alternating at 30 stacks higher order wavelet
+    block_params:
+      basis_dim: 32
+
+  - name: TrendAE+DB3WaveletV3AE-30_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - DB3WaveletV3AE
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+DB3WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AE alternating at 30 stacks higher order wavelet
+    block_params:
+      basis_dim: 64
+
+  - name: TrendAE+DB3WaveletV3AE-30_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - DB3WaveletV3AE
+      repeats: 15
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+DB3WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AE alternating at 30 stacks higher order wavelet
+    block_params:
+      basis_dim: 128
+
+  # TrendAE+DB3WaveletV3AE-30-activeG — basis_dim sweep
+  - name: TrendAE+DB3WaveletV3AE-30-activeG_bd32
+    category: novel_ae
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - DB3WaveletV3AE
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+DB3WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AE alternating DB3 + active_g sweep
+    block_params:
+      basis_dim: 32
+
+  - name: TrendAE+DB3WaveletV3AE-30-activeG_bd64
+    category: novel_ae
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - DB3WaveletV3AE
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+DB3WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AE alternating DB3 + active_g sweep
+    block_params:
+      basis_dim: 64
+
+  - name: TrendAE+DB3WaveletV3AE-30-activeG_bd128
+    category: novel_ae
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - DB3WaveletV3AE
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+DB3WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AE alternating DB3 + active_g sweep
+    block_params:
+      basis_dim: 128
+
+  # TrendAE+Coif2WaveletV3AE-30-activeG — basis_dim sweep
+  - name: TrendAE+Coif2WaveletV3AE-30-activeG_bd32
+    category: novel_ae
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - Coif2WaveletV3AE
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+Coif2WaveletV3AE
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AE alternating at 30 stacks active_g forecast
+    block_params:
+      basis_dim: 32
+
+  - name: TrendAE+Coif2WaveletV3AE-30-activeG_bd64
+    category: novel_ae
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - Coif2WaveletV3AE
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+Coif2WaveletV3AE
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AE alternating at 30 stacks active_g forecast
+    block_params:
+      basis_dim: 64
+
+  - name: TrendAE+Coif2WaveletV3AE-30-activeG_bd128
+    category: novel_ae
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAE
+      - Coif2WaveletV3AE
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+Coif2WaveletV3AE
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AE alternating at 30 stacks active_g forecast
+    block_params:
+      basis_dim: 128
+
+  # TrendWaveletGenericAELG-10 — basis_dim sweep
+  - name: TrendWaveletGenericAELG-10_bd32
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGenericAELG
+      n: 10
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletGenericAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: 3-branch trend+wavelet+generic unified AELG
+    block_params:
+      basis_dim: 32
+
+  - name: TrendWaveletGenericAELG-10_bd64
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGenericAELG
+      n: 10
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletGenericAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: 3-branch trend+wavelet+generic unified AELG
+    block_params:
+      basis_dim: 64
+
+  - name: TrendWaveletGenericAELG-10_bd128
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGenericAELG
+      n: 10
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletGenericAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: 3-branch trend+wavelet+generic unified AELG
+    block_params:
+      basis_dim: 128
+
+  # TrendWaveletGenericAELG-20 — basis_dim sweep
+  - name: TrendWaveletGenericAELG-20_bd32
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGenericAELG
+      n: 20
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletGenericAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 20
+      innovation_claim: 3-branch trend+wavelet+generic unified AELG, 20 stacks
+    block_params:
+      basis_dim: 32
+
+  - name: TrendWaveletGenericAELG-20_bd64
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGenericAELG
+      n: 20
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletGenericAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 20
+      innovation_claim: 3-branch trend+wavelet+generic unified AELG, 20 stacks
+    block_params:
+      basis_dim: 64
+
+  - name: TrendWaveletGenericAELG-20_bd128
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGenericAELG
+      n: 20
+    training:
+      active_g: false
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletGenericAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 20
+      innovation_claim: 3-branch trend+wavelet+generic unified AELG, 20 stacks
+    block_params:
+      basis_dim: 128
+
+  # Trend+Coif2WaveletV3-30-activeG — basis_dim sweep
+  - name: Trend+Coif2WaveletV3-30-activeG_bd32
+    category: novel_nonae
+    stacks:
+      type: alternating
+      blocks:
+      - Trend
+      - Coif2WaveletV3
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: active_g sweep for polynomial+DWT
+    block_params:
+      basis_dim: 32
+
+  - name: Trend+Coif2WaveletV3-30-activeG_bd64
+    category: novel_nonae
+    stacks:
+      type: alternating
+      blocks:
+      - Trend
+      - Coif2WaveletV3
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: active_g sweep for polynomial+DWT
+    block_params:
+      basis_dim: 64
+
+  - name: Trend+Coif2WaveletV3-30-activeG_bd128
+    category: novel_nonae
+    stacks:
+      type: alternating
+      blocks:
+      - Trend
+      - Coif2WaveletV3
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: active_g sweep for polynomial+DWT
+    block_params:
+      basis_dim: 128
+
+  # TrendWaveletGeneric-10-activeG — basis_dim sweep
+  - name: TrendWaveletGeneric-10-activeG_bd32
+    category: novel_nonae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: active_g sweep for 3-branch unified
+    block_params:
+      basis_dim: 32
+
+  - name: TrendWaveletGeneric-10-activeG_bd64
+    category: novel_nonae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: active_g sweep for 3-branch unified
+    block_params:
+      basis_dim: 64
+
+  - name: TrendWaveletGeneric-10-activeG_bd128
+    category: novel_nonae
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: active_g sweep for 3-branch unified
+    block_params:
+      basis_dim: 128
+
+  # TrendWaveletAELG-10-activeG — basis_dim sweep
+  - name: TrendWaveletAELG-10-activeG_bd32
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 10
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: active_g sweep for unified AELG
+    block_params:
+      basis_dim: 32
+
+  - name: TrendWaveletAELG-10-activeG_bd64
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 10
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: active_g sweep for unified AELG
+    block_params:
+      basis_dim: 64
+
+  - name: TrendWaveletAELG-10-activeG_bd128
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 10
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: active_g sweep for unified AELG
+    block_params:
+      basis_dim: 128
+
+  # TrendWaveletAELG-20-activeG — basis_dim sweep
+  - name: TrendWaveletAELG-20-activeG_bd32
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 20
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 20
+      innovation_claim: active_g sweep for depth-matched AELG
+    block_params:
+      basis_dim: 32
+
+  - name: TrendWaveletAELG-20-activeG_bd64
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 20
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 20
+      innovation_claim: active_g sweep for depth-matched AELG
+    block_params:
+      basis_dim: 64
+
+  - name: TrendWaveletAELG-20-activeG_bd128
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletAELG
+      n: 20
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 20
+      innovation_claim: active_g sweep for depth-matched AELG
+    block_params:
+      basis_dim: 128
+
+  # TrendAELG+Coif2WaveletV3AELG-30-activeG — basis_dim sweep
+  - name: TrendAELG+Coif2WaveletV3AELG-30-activeG_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: active_g sweep for AELG alternating
+    block_params:
+      basis_dim: 32
+
+  - name: TrendAELG+Coif2WaveletV3AELG-30-activeG_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: active_g sweep for AELG alternating
+    block_params:
+      basis_dim: 64
+
+  - name: TrendAELG+Coif2WaveletV3AELG-30-activeG_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: active_g sweep for AELG alternating
+    block_params:
+      basis_dim: 128
+
+  # TrendWaveletGenericAELG-10-activeG — basis_dim sweep
+  - name: TrendWaveletGenericAELG-10-activeG_bd32
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGenericAELG
+      n: 10
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletGenericAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: active_g sweep for 3-branch AELG
+    block_params:
+      basis_dim: 32
+
+  - name: TrendWaveletGenericAELG-10-activeG_bd64
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGenericAELG
+      n: 10
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletGenericAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: active_g sweep for 3-branch AELG
+    block_params:
+      basis_dim: 64
+
+  - name: TrendWaveletGenericAELG-10-activeG_bd128
+    category: novel_aelg
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGenericAELG
+      n: 10
+    training:
+      active_g: forecast
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendWaveletGenericAELG
+      backbone: AERootBlockLG
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: active_g sweep for 3-branch AELG
+    block_params:
+      basis_dim: 128
+
+  # TrendAELG+SynWaveletV3AELG-30-skip — basis_dim sweep
+  - name: TrendAELG+SynWaveletV3AELG-30-skip_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - DB3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+      skip_distance: 5
+      skip_alpha: 0.1
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+DB3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks higher order wavelet
+        and skip connections for stability
+    block_params:
+      basis_dim: 32
+
+  - name: TrendAELG+SynWaveletV3AELG-30-skip_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - DB3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+      skip_distance: 5
+      skip_alpha: 0.1
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+DB3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks higher order wavelet
+        and skip connections for stability
+    block_params:
+      basis_dim: 64
+
+  - name: TrendAELG+SynWaveletV3AELG-30-skip_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - DB3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+      skip_distance: 5
+      skip_alpha: 0.1
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+DB3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks higher order wavelet
+        and skip connections for stability
+    block_params:
+      basis_dim: 128
+
+  # TrendAELG+Symlet3WaveletV3AELG-30 — basis_dim sweep
+  - name: TrendAELG+Symlet3WaveletV3AELG-30_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Symlet3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 32
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Symlet3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG alternating Symlet3 wavelet family sweep
+
+  - name: TrendAELG+Symlet3WaveletV3AELG-30_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Symlet3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 64
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Symlet3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG alternating Symlet3 wavelet family sweep
+
+  - name: TrendAELG+Symlet3WaveletV3AELG-30_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Symlet3WaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 128
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Symlet3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG alternating Symlet3 wavelet family sweep
+
+  # TrendAELG+HaarWaveletV3AELG-30 — basis_dim sweep
+  - name: TrendAELG+HaarWaveletV3AELG-30_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - HaarWaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 32
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+HaarWaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG alternating Haar wavelet family sweep
+
+  - name: TrendAELG+HaarWaveletV3AELG-30_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - HaarWaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 64
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+HaarWaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG alternating Haar wavelet family sweep
+
+  - name: TrendAELG+HaarWaveletV3AELG-30_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - HaarWaveletV3AELG
+      repeats: 15
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 128
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+HaarWaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG alternating Haar wavelet family sweep
+
+  # TrendAELG+Coif2WaveletV3-30 — basis_dim sweep
+  - name: TrendAELG+Coif2WaveletV3-30_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3
+      repeats: 15
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 32
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG trend + non-AE Coif2 wavelet family sweep
+
+  - name: TrendAELG+Coif2WaveletV3-30_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3
+      repeats: 15
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 64
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG trend + non-AE Coif2 wavelet family sweep
+
+  - name: TrendAELG+Coif2WaveletV3-30_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3
+      repeats: 15
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 128
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG trend + non-AE Coif2 wavelet family sweep
+
+  # TrendAELG+Symlet3WaveletV3AELG-20 — basis_dim sweep
+  - name: TrendAELG+Symlet3WaveletV3AELG-20_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Symlet3WaveletV3AELG
+      repeats: 10
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 32
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Symlet3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG alternating Symlet3 20-stack depth comparison
+
+  - name: TrendAELG+Symlet3WaveletV3AELG-20_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Symlet3WaveletV3AELG
+      repeats: 10
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 64
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Symlet3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG alternating Symlet3 20-stack depth comparison
+
+  - name: TrendAELG+Symlet3WaveletV3AELG-20_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Symlet3WaveletV3AELG
+      repeats: 10
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 128
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Symlet3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG alternating Symlet3 20-stack depth comparison
+
+  # TrendAELG+HaarWaveletV3AELG-20 — basis_dim sweep
+  - name: TrendAELG+HaarWaveletV3AELG-20_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - HaarWaveletV3AELG
+      repeats: 10
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 32
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+HaarWaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG alternating Haar 20-stack depth comparison
+
+  - name: TrendAELG+HaarWaveletV3AELG-20_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - HaarWaveletV3AELG
+      repeats: 10
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 64
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+HaarWaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG alternating Haar 20-stack depth comparison
+
+  - name: TrendAELG+HaarWaveletV3AELG-20_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - HaarWaveletV3AELG
+      repeats: 10
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 128
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+HaarWaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG alternating Haar 20-stack depth comparison
+
+  # TrendAELG+Coif2WaveletV3-20 — basis_dim sweep
+  - name: TrendAELG+Coif2WaveletV3-20_bd32
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3
+      repeats: 10
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 32
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG trend + non-AE Coif2 20-stack depth comparison
+
+  - name: TrendAELG+Coif2WaveletV3-20_bd64
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3
+      repeats: 10
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 64
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG trend + non-AE Coif2 20-stack depth comparison
+
+  - name: TrendAELG+Coif2WaveletV3-20_bd128
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks:
+      - TrendAELG
+      - Coif2WaveletV3
+      repeats: 10
+    training:
+      active_g: forecast
+    block_params:
+      latent_dim: 32
+      basis_dim: 128
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG trend + non-AE Coif2 20-stack depth comparison

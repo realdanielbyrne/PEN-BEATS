@@ -79,8 +79,32 @@ configs:
       block_type_primary: Generic
       backbone: RootBlock
       stack_pattern: homogeneous
-      n_stacks: 30
+      n_stacks: 20
       innovation_claim: Paper-faithful NBEATS-G baseline
+
+  - name: NBEATS-G-baseline20
+    category: paper_baseline
+    stacks: {builtin: NBEATS-G}
+    training: {active_g: false}
+    extra_fields:
+      arch_family: paper_baseline
+      block_type_primary: Generic
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 20
+      innovation_claim: Paper-faithful NBEATS-G baseline but 20 stacks to show that more stacks don't help
+
+  - name: NBEATS-G-baseline10
+    category: paper_baseline
+    stacks: {builtin: NBEATS-G}
+    training: {active_g: false}
+    extra_fields:
+      arch_family: paper_baseline
+      block_type_primary: Generic
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: Paper-faithful NBEATS-G baseline but 10 stacks to show that fewer stacks don't help
 
   # 2. NBEATS-G + active_g — Shows +22% improvement finding
   - name: NBEATS-G-activeG
@@ -94,6 +118,31 @@ configs:
       stack_pattern: homogeneous
       n_stacks: 30
       innovation_claim: active_g activation on Generic blocks
+
+  - name: NBEATS-G-activeG20
+    category: paper_baseline
+    stacks: {builtin: NBEATS-G}
+    training: {active_g: forecast}
+    extra_fields:
+      arch_family: paper_baseline
+      block_type_primary: Generic
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 20
+      innovation_claim: active_g activation on Generic blocks to improve stability
+
+  - name: NBEATS-G-activeG10
+    category: paper_baseline
+    stacks: {builtin: NBEATS-G}
+    training: {active_g: forecast}
+    extra_fields:
+      arch_family: paper_baseline
+      block_type_primary: Generic
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: active_g activation on Generic blocks to improve stability
+
 
   # 3. NBEATS-I — Paper faithful interpretable
   - name: NBEATS-I-baseline
@@ -869,7 +918,310 @@ configs:
       n_stacks: 20
       innovation_claim: AELG trend + non-AE Coif2 20-stack depth comparison
 
-# ── Output ──────────────────────────────────────────────────────────────────
+
+
+  # ── Novel Non-AE: basis_dim sweep ──────────────────────────────────────
+
+  # Trend+Coif2WaveletV3-30 — bd32
+  - name: Trend+Coif2WaveletV3-30_bd32
+    category: basis_dim_sweep
+    stacks:
+      type: alternating
+      blocks: [Trend, Coif2WaveletV3]
+      repeats: 15
+    training: {active_g: false}
+    block_params: {basis_dim: 32}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: basis_dim=32 sweep for polynomial+DWT
+
+  # Trend+Coif2WaveletV3-30 — bd64
+  - name: Trend+Coif2WaveletV3-30_bd64
+    category: basis_dim_sweep
+    stacks:
+      type: alternating
+      blocks: [Trend, Coif2WaveletV3]
+      repeats: 15
+    training: {active_g: false}
+    block_params: {basis_dim: 64}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: basis_dim=64 sweep for polynomial+DWT
+
+  # Trend+Coif2WaveletV3-30 — bd128
+  - name: Trend+Coif2WaveletV3-30_bd128
+    category: basis_dim_sweep
+    stacks:
+      type: alternating
+      blocks: [Trend, Coif2WaveletV3]
+      repeats: 15
+    training: {active_g: false}
+    block_params: {basis_dim: 128}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: basis_dim=128 sweep for polynomial+DWT
+
+  # Trend+Coif2WaveletV3-30-activeG — bd32
+  - name: Trend+Coif2WaveletV3-30-activeG_bd32
+    category: basis_dim_sweep
+    stacks:
+      type: alternating
+      blocks: [Trend, Coif2WaveletV3]
+      repeats: 15
+    training: {active_g: forecast}
+    block_params: {basis_dim: 32}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: basis_dim=32 sweep for polynomial+DWT active_g
+
+  # Trend+Coif2WaveletV3-30-activeG — bd64
+  - name: Trend+Coif2WaveletV3-30-activeG_bd64
+    category: basis_dim_sweep
+    stacks:
+      type: alternating
+      blocks: [Trend, Coif2WaveletV3]
+      repeats: 15
+    training: {active_g: forecast}
+    block_params: {basis_dim: 64}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: basis_dim=64 sweep for polynomial+DWT active_g
+
+  # Trend+Coif2WaveletV3-30-activeG — bd128
+  - name: Trend+Coif2WaveletV3-30-activeG_bd128
+    category: basis_dim_sweep
+    stacks:
+      type: alternating
+      blocks: [Trend, Coif2WaveletV3]
+      repeats: 15
+    training: {active_g: forecast}
+    block_params: {basis_dim: 128}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: Trend+Coif2WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: basis_dim=128 sweep for polynomial+DWT active_g
+
+  # TrendWaveletGeneric-10 — bd32/64/128
+  - name: TrendWaveletGeneric-10_bd32
+    category: basis_dim_sweep
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training: {active_g: false}
+    block_params: {basis_dim: 32}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: basis_dim=32 sweep for 3-branch unified
+
+  - name: TrendWaveletGeneric-10_bd64
+    category: basis_dim_sweep
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training: {active_g: false}
+    block_params: {basis_dim: 64}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: basis_dim=64 sweep for 3-branch unified
+
+  - name: TrendWaveletGeneric-10_bd128
+    category: basis_dim_sweep
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training: {active_g: false}
+    block_params: {basis_dim: 128}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: basis_dim=128 sweep for 3-branch unified
+
+  # TrendWaveletGeneric-30 — bd32/64/128
+  - name: TrendWaveletGeneric-30_bd32
+    category: basis_dim_sweep
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 30
+    training: {active_g: false}
+    block_params: {basis_dim: 32}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 30
+      innovation_claim: basis_dim=32 sweep for 3-branch unified 30-stack
+
+  - name: TrendWaveletGeneric-30_bd64
+    category: basis_dim_sweep
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 30
+    training: {active_g: false}
+    block_params: {basis_dim: 64}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 30
+      innovation_claim: basis_dim=64 sweep for 3-branch unified 30-stack
+
+  - name: TrendWaveletGeneric-30_bd128
+    category: basis_dim_sweep
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 30
+    training: {active_g: false}
+    block_params: {basis_dim: 128}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 30
+      innovation_claim: basis_dim=128 sweep for 3-branch unified 30-stack
+
+  # TrendWaveletGeneric-10-activeG — bd32/64/128
+  - name: TrendWaveletGeneric-10-activeG_bd32
+    category: basis_dim_sweep
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training: {active_g: forecast}
+    block_params: {basis_dim: 32}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: basis_dim=32 sweep for 3-branch unified active_g
+
+  - name: TrendWaveletGeneric-10-activeG_bd64
+    category: basis_dim_sweep
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training: {active_g: forecast}
+    block_params: {basis_dim: 64}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: basis_dim=64 sweep for 3-branch unified active_g
+
+  - name: TrendWaveletGeneric-10-activeG_bd128
+    category: basis_dim_sweep
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 10
+    training: {active_g: forecast}
+    block_params: {basis_dim: 128}
+    extra_fields:
+      arch_family: novel_nonae
+      block_type_primary: TrendWaveletGeneric
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      innovation_claim: basis_dim=128 sweep for 3-branch unified active_g
+
+  # ── Novel AE: basis_dim sweep ─────────────────────────────────────────
+
+  # TrendAE+Coif2WaveletV3AE-30 — bd32/64/128
+  - name: TrendAE+Coif2WaveletV3AE-30_bd32
+    category: basis_dim_sweep
+    stacks:
+      type: alternating
+      blocks: [TrendAE, Coif2WaveletV3AE]
+      repeats: 15
+    training: {active_g: false}
+    block_params: {basis_dim: 32}
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+Coif2WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: basis_dim=32 sweep for AE alternating Coif2
+
+  - name: TrendAE+Coif2WaveletV3AE-30_bd64
+    category: basis_dim_sweep
+    stacks:
+      type: alternating
+      blocks: [TrendAE, Coif2WaveletV3AE]
+      repeats: 15
+    training: {active_g: false}
+    block_params: {basis_dim: 64}
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+Coif2WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: basis_dim=64 sweep for AE alternating Coif2
+
+  - name: TrendAE+Coif2WaveletV3AE-30_bd128
+    category: basis_dim_sweep
+    stacks:
+      type: alternating
+      blocks: [TrendAE, Coif2WaveletV3AE]
+      repeats: 15
+    training: {active_g: false}
+    block_params: {basis_dim: 128}
+    extra_fields:
+      arch_family: novel_ae
+      block_type_primary: TrendAE+Coif2WaveletV3AE
+      backbone: AERootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: basis_dim=128 sweep for AE alternating Coif2
+
 output:
   results_dir: experiments/results
   csv_filename: omnibus_benchmark_results.csv

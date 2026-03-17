@@ -215,12 +215,18 @@
 - **AE beats AELG on Weather** (MWU p=0.036). Reverses M4 pattern. AELG over-constrains long-horizon latent.
 - **Alternating > homogeneous** on both datasets (M4 p=0.0006, Weather p=0.015).
 
+## Omnibus Benchmark M4-Yearly (2026-03-16)
+
+- See `omnibus_benchmark_m4.md` for full details
+- 356 runs, 36 configs, 10 seeds, zero divergences. Top 10 within 0.097 SMAPE (no sig. differences).
+- Best 10-run: TrendAELG+Coif2WavV3AELG-30 (SMAPE=13.521, 2.9M params). Most efficient: TrendWaveletAELG-10 (13.579, 436K).
+- active_g NOT beneficial for most configs. Hurts NBEATS-G (p=0.049).
+- No config reaches prior SOTA 13.410 (different training protocol — early stopping vs fixed epochs).
+
 ## FM Sweep + Ensemble Plan (pending omnibus completion)
 
 - See `fm_sweep_ensemble_plan.md` for details
-- After omnibus completes: FM={3,4,5,6,7} × 10 seeds on top 3-5 winners per dataset
-- Goal: lookback-diverse ensembles replicating paper methodology (paper used 180-model ensembles with varied lookback)
 
 ## Critical Methodology Lesson
 
-- **R1 (early training) data can produce misleading factor rankings.** Both ttd and bd_label showed R1 advantages that reversed or vanished at R3 convergence. Always validate hyperparameter recommendations with converged data.
+- **R1 (early training) data can produce misleading factor rankings.** Always validate with converged data.
