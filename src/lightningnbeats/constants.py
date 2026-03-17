@@ -44,6 +44,41 @@ OPTIMIZERS = [
   "AdamW"
 ]
 
+_DEPRECATED_VAE2_BLOCKS = (
+  "GenericVAE2",
+  "TrendVAE2",
+  "SeasonalityVAE2",
+  "VAE2",
+  "WaveletV3VAE2",
+  "HaarWaveletV3VAE2",
+  "DB2WaveletV3VAE2",
+  "DB3WaveletV3VAE2",
+  "DB4WaveletV3VAE2",
+  "DB10WaveletV3VAE2",
+  "DB20WaveletV3VAE2",
+  "Coif1WaveletV3VAE2",
+  "Coif2WaveletV3VAE2",
+  "Coif3WaveletV3VAE2",
+  "Coif10WaveletV3VAE2",
+  "Symlet2WaveletV3VAE2",
+  "Symlet3WaveletV3VAE2",
+  "Symlet10WaveletV3VAE2",
+  "Symlet20WaveletV3VAE2",
+)
+
+DEPRECATED_BLOCKS = {
+  block_name: block_name.replace("VAE2", "VAE")
+  for block_name in _DEPRECATED_VAE2_BLOCKS
+}
+
+
+def get_deprecated_block_message(block_name: str) -> str:
+  replacement = DEPRECATED_BLOCKS[block_name]
+  return (
+    f"Block type '{block_name}' has been deprecated and removed. "
+    f"Use '{replacement}' instead."
+  )
+
 BLOCKS = [
   "Generic",
   "BottleneckGeneric",
@@ -131,27 +166,6 @@ BLOCKS = [
   "Symlet3WaveletV3AELG",
   "Symlet10WaveletV3AELG",
   "Symlet20WaveletV3AELG",
-  # VAE2 blocks (compact VAE backbone: units→units//2→latent_dim*2 split)
-  "GenericVAE2",
-  "TrendVAE2",
-  "SeasonalityVAE2",
-  "VAE2",
-  # V3VAE2 Wavelet blocks (orthonormal DWT basis, compact VAE2 backbone)
-  "WaveletV3VAE2",
-  "HaarWaveletV3VAE2",
-  "DB2WaveletV3VAE2",
-  "DB3WaveletV3VAE2",
-  "DB4WaveletV3VAE2",
-  "DB10WaveletV3VAE2",
-  "DB20WaveletV3VAE2",
-  "Coif1WaveletV3VAE2",
-  "Coif2WaveletV3VAE2",
-  "Coif3WaveletV3VAE2",
-  "Coif10WaveletV3VAE2",
-  "Symlet2WaveletV3VAE2",
-  "Symlet3WaveletV3VAE2",
-  "Symlet10WaveletV3VAE2",
-  "Symlet20WaveletV3VAE2",
   # V3VAE Wavelet blocks (orthonormal DWT basis, variational AE backbone)
   "WaveletV3VAE",
   "HaarWaveletV3VAE",

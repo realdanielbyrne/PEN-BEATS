@@ -887,7 +887,7 @@ class TestAsymmetricWaveletForwarding:
 class TestWaveletVAELatentDimRouting:
     """Verify generic WaveletV3 VAE variants receive the configured latent_dim."""
 
-    @pytest.mark.parametrize("block_name", ["WaveletV3VAE", "WaveletV3VAE2"])
+    @pytest.mark.parametrize("block_name", ["WaveletV3VAE"])
     def test_nbeats_wavelet_vae_variants_route_latent_dim(self, block_name):
         latent_dim = 7
         model = _make_model([block_name], g_width=64, latent_dim=latent_dim)
@@ -895,7 +895,7 @@ class TestWaveletVAELatentDimRouting:
 
         assert block.fc2_mu.out_features == latent_dim
 
-    @pytest.mark.parametrize("block_name", ["WaveletV3VAE", "WaveletV3VAE2"])
+    @pytest.mark.parametrize("block_name", ["WaveletV3VAE"])
     def test_nhits_wavelet_vae_variants_route_latent_dim(self, block_name):
         latent_dim = 7
         model = _make_nhits(
@@ -908,6 +908,36 @@ class TestWaveletVAELatentDimRouting:
         block = model.stacks[0][0]
 
         assert block.fc2_mu.out_features == latent_dim
+
+
+class TestDeprecatedVAE2StackTypes:
+    """Deprecated VAE2 stack names should fail with a targeted message."""
+
+    @pytest.mark.parametrize("block_name", [
+        "GenericVAE2",
+        "TrendVAE2",
+        "VAE2",
+        "WaveletV3VAE2",
+        "DB4WaveletV3VAE2",
+    ])
+    def test_nbeats_rejects_deprecated_stack_types(self, block_name):
+        with pytest.raises(ValueError, match="deprecated and removed"):
+            _make_model([block_name])
+
+    @pytest.mark.parametrize("block_name", [
+        "GenericVAE2",
+        "TrendVAE2",
+        "VAE2",
+        "WaveletV3VAE2",
+        "DB4WaveletV3VAE2",
+    ])
+    def test_nhits_rejects_deprecated_stack_types(self, block_name):
+        with pytest.raises(ValueError, match="deprecated and removed"):
+            _make_nhits(
+                [block_name],
+                n_pools_kernel_size=[1],
+                n_freq_downsample=[1],
+            )
 
 
 # ---------------------------------------------------------------------------

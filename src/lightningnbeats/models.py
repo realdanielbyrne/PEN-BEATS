@@ -8,14 +8,29 @@ import lightning.pytorch as pl
 
 from .losses import *
 from .blocks import blocks as b
-from .constants import LOSSES, OPTIMIZERS, BLOCKS
+from .constants import (
+    BLOCKS,
+    DEPRECATED_BLOCKS,
+    LOSSES,
+    OPTIMIZERS,
+    get_deprecated_block_message,
+)
 
 # Generic wavelet base classes that accept wavelet_type / backcast_wavelet_type /
 # forecast_wavelet_type kwargs.  Family-named subclasses (e.g. HaarWaveletV3)
 # hardcode their wavelet family and do NOT accept these parameters.
 _GENERIC_WAVELET_V3 = {
-    "WaveletV3", "WaveletV3AE", "WaveletV3AELG", "WaveletV3VAE2", "WaveletV3VAE",
+    "WaveletV3", "WaveletV3AE", "WaveletV3AELG", "WaveletV3VAE",
 }
+
+
+def _validate_stack_type(stack_type: str) -> None:
+  if stack_type in DEPRECATED_BLOCKS:
+    raise ValueError(get_deprecated_block_message(stack_type))
+  if stack_type not in BLOCKS:
+    raise ValueError(
+        f"Unknown stack type: {stack_type}. Please select one of {BLOCKS}"
+    )
 
 
 class _NBeatsBase(pl.LightningModule):
@@ -99,7 +114,7 @@ class _NBeatsBase(pl.LightningModule):
     kl_loss = torch.tensor(0.0, device=x.device)
     for stack in self.stacks:
       for block in stack:
-        if isinstance(block, (b.AERootBlockVAE, b.VAE, b.VAE2RootBlock)):
+        if isinstance(block, (b.AERootBlockVAE, b.VAE)):
           kl_loss = kl_loss + block.kl_loss
     if kl_loss.item() > 0:
       loss = loss + kl_loss * 0.002
@@ -366,8 +381,7 @@ class NBeatsNet(_NBeatsBase):
   def create_stack(self, stack_type, stack_idx=0):
 
     blocks = nn.ModuleList()
-    if (stack_type not in BLOCKS):
-        raise ValueError(f"Unknown stack type: {stack_type}. Please select one of {BLOCKS}")
+    _validate_stack_type(stack_type)
 
     if self.stack_basis_offsets and stack_idx < len(self.stack_basis_offsets):
         effective_offset = self.stack_basis_offsets[stack_idx]
@@ -381,25 +395,23 @@ class NBeatsNet(_NBeatsBase):
         else:           
           if stack_type in ["Generic", "BottleneckGeneric", "GenericAE", "BottleneckGenericAE", "GenericAEBackcast", "GenericAEBackcastAE",
                            "GenericAELG", "BottleneckGenericAELG", "GenericAEBackcastAELG",
-                           "GenericVAE", "BottleneckGenericVAE", "GenericAEBackcastVAE",
-                           "GenericVAE2"]:
+                           "GenericVAE", "BottleneckGenericVAE", "GenericAEBackcastVAE"]:
             units = self.g_width
-          elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityVAE",
-                              "SeasonalityVAE2"]:
+          elif stack_type in ["Seasonality", "SeasonalityAE", "SeasonalityAELG", "SeasonalityVAE"]:
             units = self.s_width
           elif stack_type in ["Trend", "TrendAE", "TrendWavelet", "TrendWaveletAE", "TrendWaveletAELG",
-                              "TrendAELG", "TrendVAE", "TrendVAE2",
+                              "TrendAELG", "TrendVAE",
                               "TrendWaveletGeneric", "TrendWaveletGenericAE",
                               "TrendWaveletGenericAELG", "TrendWaveletGenericVAE"]:
             units = self.t_width
           elif stack_type in ["AutoEncoder", "AutoEncoderAE", "AutoEncoderAELG", "AutoEncoderVAE",
-                              "VAE", "VAE2"]:
+                              "VAE"]:
             units = self.ae_width
           else:
             units = self.g_width
 
           # Use trend_thetas_dim for Trend/TrendAE when set, else global thetas_dim
-          if stack_type in ("Trend", "TrendAE", "TrendWavelet", "TrendAELG", "TrendVAE", "TrendVAE2",
+          if stack_type in ("Trend", "TrendAE", "TrendWavelet", "TrendAELG", "TrendVAE",
                           "TrendWaveletGeneric", "TrendWaveletGenericAE",
                           "TrendWaveletGenericAELG", "TrendWaveletGenericVAE"):
             effective_td = self.trend_thetas_dim
@@ -413,8 +425,6 @@ class NBeatsNet(_NBeatsBase):
               "AutoEncoderAELG", "TrendAELG", "GenericAEBackcastAELG",
               "GenericVAE", "BottleneckGenericVAE", "SeasonalityVAE",
               "AutoEncoderVAE", "TrendVAE", "GenericAEBackcastVAE",
-              # VAE2 derivative (non-wavelet) blocks
-              "GenericVAE2", "TrendVAE2", "SeasonalityVAE2", "VAE2",
           )
           if stack_type == "TrendWavelet":
             block = getattr(b, stack_type)(
@@ -486,7 +496,7 @@ class NBeatsNet(_NBeatsBase):
                   wavelet_type=self.wavelet_type,
                   backcast_wavelet_type=self.backcast_wavelet_type,
                   forecast_wavelet_type=self.forecast_wavelet_type)
-            if any(token in stack_type for token in ("V3VAE2", "V3VAE", "V3AE")):
+            if any(token in stack_type for token in ("V3VAE", "V3AE")):
               if "AELG" in stack_type:
                 _wavelet_kwargs["latent_gate_fn"] = self.latent_gate_fn
               block = getattr(b, stack_type)(
@@ -784,10 +794,7 @@ class NHiTSNet(_NBeatsBase):
     blocks operate on the correct input/output dimensions.
     """
     blocks = nn.ModuleList()
-    if stack_type not in BLOCKS:
-      raise ValueError(
-          f"Unknown stack type: {stack_type}. Please select one of {BLOCKS}"
-      )
+    _validate_stack_type(stack_type)
 
     if self.stack_basis_offsets and stack_idx < len(self.stack_basis_offsets):
       effective_offset = self.stack_basis_offsets[stack_idx]
@@ -912,7 +919,7 @@ class NHiTSNet(_NBeatsBase):
                 wavelet_type=self.wavelet_type,
                 backcast_wavelet_type=self.backcast_wavelet_type,
                 forecast_wavelet_type=self.forecast_wavelet_type)
-          if any(token in stack_type for token in ("V3VAE2", "V3VAE", "V3AE")):
+          if any(token in stack_type for token in ("V3VAE", "V3AE")):
             if "AELG" in stack_type:
               _wavelet_kwargs["latent_gate_fn"] = self.latent_gate_fn
             block = getattr(b, stack_type)(
