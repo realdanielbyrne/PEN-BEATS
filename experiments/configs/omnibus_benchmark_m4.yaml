@@ -724,6 +724,150 @@ configs:
       n_stacks: 10
       innovation_claim: active_g sweep for 3-branch AELG
 
+  # 14d. TrendAELG+DB3WaveletV3AELG alternating — Depth-matched AELG at 30 stacks
+  - name: TrendAELG+DB3WaveletV3AELG-30-skip
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks: [TrendAELG, DB3WaveletV3AELG]
+      repeats: 15
+    training:
+      active_g: forecast
+      skip_distance: 5
+      skip_alpha: 0.1
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+DB3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks higher order wavelet and skip connections for stability
+
+  # 14d. TrendAELG+DB3WaveletV3AELG alternating — Depth-matched AELG at 30 stacks
+  - name: TrendAELG+SynWaveletV3AELG-30-skip
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks: [TrendAELG, DB3WaveletV3AELG]
+      repeats: 15
+    training:
+      active_g: forecast
+      skip_distance: 5
+      skip_alpha: 0.1
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+DB3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: Depth-matched AELG alternating at 30 stacks higher order wavelet and skip connections for stability
+
+  # ════════════════════════════════════════════════════════════════════════
+  # Wavelet Family Sweep — TrendAELG alternating, latent_dim=32
+  # Sym3, Haar, Coif2 at 30 and 20 stacks
+  # ════════════════════════════════════════════════════════════════════════
+
+  # 18a. TrendAELG+Symlet3WaveletV3AELG-30
+  - name: TrendAELG+Symlet3WaveletV3AELG-30
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks: [TrendAELG, Symlet3WaveletV3AELG]
+      repeats: 15
+    training: {active_g: forecast}
+    block_params: {latent_dim: 32}
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Symlet3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG alternating Symlet3 wavelet family sweep
+
+  # 18b. TrendAELG+HaarWaveletV3AELG-30
+  - name: TrendAELG+HaarWaveletV3AELG-30
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks: [TrendAELG, HaarWaveletV3AELG]
+      repeats: 15
+    training: {active_g: forecast}
+    block_params: {latent_dim: 32}
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+HaarWaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG alternating Haar wavelet family sweep
+
+  # 18c. TrendAELG+Coif2WaveletV3-30
+  - name: TrendAELG+Coif2WaveletV3-30
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks: [TrendAELG, Coif2WaveletV3]
+      repeats: 15
+    training: {active_g: forecast}
+    block_params: {latent_dim: 32}
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 30
+      innovation_claim: AELG trend + non-AE Coif2 wavelet family sweep
+
+  # 18d. TrendAELG+Symlet3WaveletV3AELG-20
+  - name: TrendAELG+Symlet3WaveletV3AELG-20
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks: [TrendAELG, Symlet3WaveletV3AELG]
+      repeats: 10
+    training: {active_g: forecast}
+    block_params: {latent_dim: 32}
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Symlet3WaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG alternating Symlet3 20-stack depth comparison
+
+  # 18e. TrendAELG+HaarWaveletV3AELG-20
+  - name: TrendAELG+HaarWaveletV3AELG-20
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks: [TrendAELG, HaarWaveletV3AELG]
+      repeats: 10
+    training: {active_g: forecast}
+    block_params: {latent_dim: 32}
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+HaarWaveletV3AELG
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG alternating Haar 20-stack depth comparison
+
+  # 18f. TrendAELG+Coif2WaveletV3-20
+  - name: TrendAELG+Coif2WaveletV3-20
+    category: novel_aelg
+    stacks:
+      type: alternating
+      blocks: [TrendAELG, Coif2WaveletV3]
+      repeats: 10
+    training: {active_g: forecast}
+    block_params: {latent_dim: 32}
+    extra_fields:
+      arch_family: novel_aelg
+      block_type_primary: TrendAELG+Coif2WaveletV3
+      backbone: AERootBlockLG
+      stack_pattern: alternating
+      n_stacks: 20
+      innovation_claim: AELG trend + non-AE Coif2 20-stack depth comparison
 
 # ── Output ──────────────────────────────────────────────────────────────────
 output:
