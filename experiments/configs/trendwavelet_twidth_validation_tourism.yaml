@@ -3,20 +3,25 @@
 #
 # Validates TrendWaveletAE and TrendWaveletAELG with the
 # corrected t_width=256 (fixed from inadvertent g_width=512).
-# Tourism-Yearly dataset (H=4, backcast=8, forecast_multiplier=2).
+# Tourism-Yearly dataset (H=4).
 #
 # Design:
-#   - 2 block types × 4 wavelet families = 8 configs
-#   - Single pass: active_g=false
+#   - 3 block types × 4 wavelet families = 12 configs
+#   - 3 lookback passes: 5h, 6h, 7h (forecast_multiplier sweep)
 #   - eq_fcast: basis_dim=4 (= forecast_length H=4)
 #   - latent_dim=8 for AE, latent_dim=12 for AELG
-#   - 10 stacks, 5 runs per config = 40 total runs
+#   - generic_dim=5 for TrendWaveletGeneric reference blocks
+#   - 20 stacks, 5 runs per config/pass = 180 total runs
 #
-# Note on latent_dim: prior Tourism studies confirmed ld=16 is
-# critical for TrendWaveletAELG SOTA performance. This validation
-# uses ld=12 per the experiment spec to test corrected width in a
-# controlled setting comparable to M4 and Weather. A follow-on
-# study with ld=16 can assess peak Tourism performance.
+# Wavelet families chosen to span frequency ranges:
+#   haar  → sharpest, highest-frequency (1 vanishing moment)
+#   db3   → moderate, balanced (3 vanishing moments)
+#   db10  → smoother, lower-frequency (10 vanishing moments)
+#   sym20 → long-support, very smooth (20 vanishing moments)
+#
+# Note on short targets: H=4 gives pywt.dwt_max_level=0 for
+#   db10 and sym20. WaveletV3 short-target guard keeps level=0,
+#   producing approximation-only orthonormal bases.
 #
 # Usage:
 #   python experiments/run_from_yaml.py \
@@ -30,8 +35,9 @@
 experiment_name: trendwavelet_twidth_validation_tourism
 category: trendwavelet_twidth_validation
 description: >
-  TrendWaveletAE/AELG with corrected t_width=256 on Tourism-Yearly.
-  Validates the width bug fix across datasets. eq_fcast: basis_dim=4 (H=4).
+  TrendWaveletAE/AELG with corrected t_width=256 on Tourism-Yearly,
+  with TrendWaveletGeneric references and lookback sweep (5h/6h/7h).
+  Establishes parameter-efficient baseline and lookback sensitivity.
 
 dataset: tourism
 periods:
@@ -58,9 +64,33 @@ lr_scheduler:
 block_params:
   trend_thetas_dim: 3
   basis_dim: 4
+  generic_dim: 5
   t_width: 256
 
+# Lookback sweep: backcast_length = forecast_multiplier * forecast_length
+passes:
+  - name: trendwavelet_twidth_validation_tourism_lb5h
+    training:
+      forecast_multiplier: 5
+    extra_fields:
+      lookback_tag: lb5h
+      lookback_h: 5
+  - name: trendwavelet_twidth_validation_tourism_lb6h
+    training:
+      forecast_multiplier: 6
+    extra_fields:
+      lookback_tag: lb6h
+      lookback_h: 6
+  - name: trendwavelet_twidth_validation_tourism_lb7h
+    training:
+      forecast_multiplier: 7
+    extra_fields:
+      lookback_tag: lb7h
+      lookback_h: 7
+
 extra_csv_columns:
+  - lookback_tag
+  - lookback_h
   - block_type
   - backbone
   - wavelet_family
@@ -133,6 +163,9 @@ configs:
     block_params:
       wavelet_type: haar
       latent_dim: 12
+    training:
+      skip_distance: 5
+      skip_alpha: 0.1
     extra_fields:
       block_type: TrendWaveletAELG
       backbone: AERootBlockLG
@@ -147,6 +180,9 @@ configs:
     block_params:
       wavelet_type: db3
       latent_dim: 12
+    training:
+      skip_distance: 5
+      skip_alpha: 0.1
     extra_fields:
       block_type: TrendWaveletAELG
       backbone: AERootBlockLG
@@ -161,6 +197,9 @@ configs:
     block_params:
       wavelet_type: db10
       latent_dim: 12
+    training:
+      skip_distance: 5
+      skip_alpha: 0.1
     extra_fields:
       block_type: TrendWaveletAELG
       backbone: AERootBlockLG
@@ -175,9 +214,69 @@ configs:
     block_params:
       wavelet_type: sym20
       latent_dim: 12
+    training:
+      skip_distance: 5
+      skip_alpha: 0.1
     extra_fields:
       block_type: TrendWaveletAELG
       backbone: AERootBlockLG
+      wavelet_family: sym20
+
+# ── TrendWaveletGeneric (RootBlock, generic_dim=5) reference ──────────────────
+  - name: TWG_haar_td3_bd4_gd5
+    category: trendwaveletgeneric
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 20
+    block_params:
+      wavelet_type: haar
+      generic_dim: 5
+    extra_fields:
+      block_type: TrendWaveletGeneric
+      backbone: RootBlock
+      wavelet_family: haar
+
+  - name: TWG_db3_td3_bd4_gd5
+    category: trendwaveletgeneric
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 20
+    block_params:
+      wavelet_type: db3
+      generic_dim: 5
+    extra_fields:
+      block_type: TrendWaveletGeneric
+      backbone: RootBlock
+      wavelet_family: db3
+
+  - name: TWG_db10_td3_bd4_gd5
+    category: trendwaveletgeneric
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 20
+    block_params:
+      wavelet_type: db10
+      generic_dim: 5
+    extra_fields:
+      block_type: TrendWaveletGeneric
+      backbone: RootBlock
+      wavelet_family: db10
+
+  - name: TWG_sym20_td3_bd4_gd5
+    category: trendwaveletgeneric
+    stacks:
+      type: homogeneous
+      block: TrendWaveletGeneric
+      n: 20
+    block_params:
+      wavelet_type: sym20
+      generic_dim: 5
+    extra_fields:
+      block_type: TrendWaveletGeneric
+      backbone: RootBlock
       wavelet_family: sym20
 
 runs:
@@ -198,6 +297,11 @@ logging:
 hardware:
   accelerator: auto
   num_workers: 0
+  worker_id: ""
+
+analysis:
+  enabled: true
+  ranking: true
   worker_id: ""
 
 analysis:
