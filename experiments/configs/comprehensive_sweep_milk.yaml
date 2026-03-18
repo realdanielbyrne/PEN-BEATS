@@ -60,7 +60,7 @@ training:
   active_g: false
   sum_losses: false
   activation: ReLU
-  max_epochs: 200
+  max_epochs: 100
   patience: 20
   n_blocks_per_stack: 1
   share_weights: true

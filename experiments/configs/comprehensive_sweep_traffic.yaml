@@ -67,7 +67,7 @@ training:
   sum_losses: false
   activation: ReLU
   max_epochs: 200
-  patience: 20
+  patience: 30
   n_blocks_per_stack: 1
   share_weights: true
   loss: MSELoss
