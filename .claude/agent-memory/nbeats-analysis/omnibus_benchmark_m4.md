@@ -1,27 +1,31 @@
 ---
 name: omnibus_benchmark_m4_findings
-description: First head-to-head omnibus benchmark of 36 configs on M4-Yearly with 10 seeds each under identical training (200ep, patience=20)
+description: Comprehensive omnibus benchmark of 52 unique configs on M4-Yearly (689 runs) and M4-Quarterly (182 runs) with 10 seeds each under identical training
 type: project
 ---
 
-## Omnibus Benchmark M4-Yearly (2026-03-16)
+## Omnibus Benchmark M4 Comprehensive (2026-03-17)
 
-- See `experiments/analysis/analysis_reports/omnibus_benchmark_m4_analysis.md`
-- See notebook: `experiments/analysis/notebooks/omnibus_benchmark_m4_insights.ipynb`
-- **356 runs, 36 configs, 10 seeds, zero divergences. Only Yearly complete (no Quarterly yet).**
-- **1 config incomplete:** TrendAELG+Coif2WaveletV3AELG-30-activeG (1/10 runs). 11 YAML configs have no results.
+- See `experiments/analysis/analysis_reports/omnibus_m4_comprehensive_analysis.md`
+- See notebook: `experiments/analysis/notebooks/omnibus_m4_comprehensive_analysis.ipynb`
+- **871 rows, 69 named configs (52 unique after dedup), Yearly + Quarterly, zero divergences on Yearly, 1 bimodal on Quarterly.**
 
-**Key findings:**
-- Top 10 separated by only 0.097 SMAPE (13.508-13.605). No pairwise top-5 differences are significant (all MWU p>0.57).
-- **NBEATS-I+G-activeG is best paper baseline** (SMAPE=13.508, 36M params).
-- **TrendAELG+Coif2WavV3AELG-30 is best novel config** (SMAPE=13.521, 2.9M params, 10 runs).
-- **TrendWaveletAELG-10 is most parameter-efficient** (SMAPE=13.579, 436K params = 82x fewer than I+G).
-- **active_g is NOT beneficial for most configs.** Hurts NBEATS-G significantly (p=0.049). Zero effect on Trend/Seasonality (bit-identical runs). Only potentially helps NBEATS-I+G (p=0.16, ns).
-- **Family hierarchy: novel_nonae >= paper_baseline ~ novel_aelg >> novel_ae.**
-- **Backbone hierarchy confirmed: AELG >= RootBlock > AERootBlock** (matched Coif2 30-stack comparison).
-- **DB3 vs Coif2: no significant difference** on M4-Yearly.
-- **Stability: wavelet+AE configs are most stable** (std 0.054-0.097). Generic/Bottleneck AE are most unstable (std 0.215-0.337).
-- **No config reaches prior SOTA of 13.410** (wavelet_study_2, 50 fixed epochs, 3 seeds). Training protocol difference (early stopping) is likely cause.
+**Data quality issues:**
+- **forecast_basis_dim sweep FAILED:** `_bd32/_bd64/_bd128` produce run-level identical results. Parameter not applied. 6 config groups affected. Implementation bug needs fixing.
+- **Naming aliases:** `NBEATS-I-activeG` = `NBEATS-I-baseline` (active_g has no effect on I blocks). `SynWavelet` skip = DB3 skip (identical runs).
 
-**Why:** This is the first apples-to-apples comparison under uniform training conditions. Prior studies used different epoch counts, seeds, and stopping criteria.
-**How to apply:** Use these rankings as the ground truth for M4-Yearly architecture recommendations. Prior SOTA of 13.410 may be a protocol artifact — needs 50-epoch fixed-training confirmation run.
+**Key findings (updated from prior analysis):**
+- Top 10 Yearly within OWA 0.003. Statistical tie (all MWU p>0.23).
+- **M4-Yearly best:** NBEATS-I+G-activeG (OWA=0.8026, 36M) and TrendAELG+Coif2WaveletV3AELG-30 (OWA=0.8027, 2.9M) -- equivalent quality, 12x param difference.
+- **M4-Quarterly best:** Trend+Coif2WaveletV3-30 (OWA=0.8850, 15.4M).
+- **Cross-period champion:** Trend+Coif2WaveletV3-30 (top 4 Yearly, #1 Quarterly).
+- **active_g is a non-factor:** Hurts 11/15 comparisons, 0/15 significant. Do NOT enable by default.
+- **Backbone: RootBlock = AELG >> AE** (KW p<0.0001). AELG learned gate essential.
+- **Wavelet family: non-factor for AELG** (KW p=0.79). Bottleneck homogenizes basis.
+- **Skip connections: reduce variance, do not improve mean.** Not recommended for stable architectures.
+- **NBEATS-G unstable on Quarterly:** 1/10 bimodal divergence (seed 50, SMAPE=34). activeG prevents it.
+- **Pareto frontier:** TrendWaveletAELG-10 (0.44M, OWA=0.808) is 82x more param-efficient than NBEATS-I+G with only +0.6% OWA gap.
+- **Most stable:** TrendAE+DB3WaveletV3AE-30-activeG (std=0.0045). AE bottleneck regularizes training.
+
+**Why:** First apples-to-apples comparison across both M4-Yearly and M4-Quarterly under uniform training.
+**How to apply:** Use Trend+Coif2WaveletV3-30 for cross-period robustness. Use TrendAELG+Coif2WaveletV3AELG-30 for quality-first M4-Yearly. Use TrendWaveletAELG-10 for resource-constrained.
