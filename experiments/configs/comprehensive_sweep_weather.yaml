@@ -37,8 +37,7 @@
 #       experiments/configs/comprehensive_sweep_weather.yaml --dry-run
 #   python experiments/run_from_yaml.py \
 #       experiments/configs/comprehensive_sweep_weather.yaml
-#   python experiments/run_from_yaml.py \
-#       experiments/configs/comprehensive_sweep_weather.yaml --worker-id gpu0
+#   python experiments/run_from_yaml.py experiments/configs/comprehensive_sweep_weather.yaml --worker-id gpu0
 # ============================================================
 
 experiment_name: comprehensive_sweep_weather
