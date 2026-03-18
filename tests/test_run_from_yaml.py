@@ -97,7 +97,7 @@ def test_run_experiment_forwards_protocol_settings(monkeypatch, tmp_path):
     assert captured["run_single_experiment"]["val_ratio"] == pytest.approx(0.1)
     assert captured["run_single_experiment"]["loss_override"] == "MSELoss"
     assert captured["run_single_experiment"]["forecast_multiplier"] == 5
-    assert captured["run_single_experiment"]["batch_size"] == rub.BATCH_SIZES[("traffic", "Traffic-96")]
+    assert captured["run_single_experiment"]["batch_size"] == 256  # explicit YAML value takes precedence over tuned table
     assert captured["run_single_experiment"]["latent_gate_fn"] == "wavy_sigmoid"
     assert captured["run_single_experiment"]["dataset_name"] == "traffic"
     assert captured["run_single_experiment"]["worker_id"] == "yaml-worker-1"

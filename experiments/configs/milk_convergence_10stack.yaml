@@ -11,8 +11,7 @@
 #   - Milk10_activeG:  active_g=True,  activation=ReLU
 #
 # Usage:
-#   python experiments/run_from_yaml.py \
-#       experiments/configs/milk_convergence_10stack.yaml
+#   python experiments/run_from_yaml.py experiments/configs/milk_convergence_10stack.yaml
 # ============================================================
 
 experiment_name: milk_convergence_10stack
@@ -24,6 +23,9 @@ description: >
 
 dataset: milk
 periods: [Milk]
+
+protocol:
+  datamodule: univariate    # match old script's TimeSeriesDataModule (80/20 random split)
 
 training:
   activation: ReLU

@@ -434,7 +434,7 @@ Three AE backbone variants are available:
 - `GenericAELG`, `BottleneckGenericAELG`, `GenericAEBackcastAELG`
 - `TrendAELG`, `SeasonalityAELG`, `AutoEncoderAELG`
 
-**`AERootBlockVAE`** — Variational AE backbone: stochastic latent space with `fc2_mu`/`fc2_logvar` heads and reparameterization trick. KL divergence loss (weight 0.001) is accumulated and added during `training_step()`:
+**`AERootBlockVAE`** — Variational AE backbone: stochastic latent space with `fc2_mu`/`fc2_logvar` heads and reparameterization trick. KL divergence loss is accumulated and added during `training_step()`, scaled by the model-level `kl_weight` parameter (default `0.1`):
 
 - `GenericVAE`, `BottleneckGenericVAE`, `GenericAEBackcastVAE`
 - `TrendVAE`, `SeasonalityVAE`, `AutoEncoderVAE`

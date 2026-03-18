@@ -10,11 +10,6 @@
 #   - Milk6_baseline: active_g=False, activation=ReLU
 #   - Milk6_activeG:  active_g=True,  activation=ReLU
 #
-# NOTE: Original script uses TimeSeriesDataModule (single-series 80/20 split).
-# This YAML uses the collection-based loader with batch_size=64 override.
-# Key testable parameters (active_g, activation, n_stacks, n_runs) are
-# faithfully reproduced.
-#
 # Usage:
 #   python experiments/run_from_yaml.py experiments/configs/milk_convergence.yaml
 # ============================================================
@@ -29,6 +24,9 @@ description: >
 dataset: milk
 periods: [Milk]
 
+protocol:
+  datamodule: univariate    # match old script's TimeSeriesDataModule (80/20 random split)
+
 training:
   activation: ReLU
   loss: SMAPELoss
@@ -38,7 +36,7 @@ training:
   patience: 20
   n_blocks_per_stack: 1
   share_weights: true
-  batch_size: 64         # original uses 64 (default auto resolves to 128)
+  batch_size: 64
   sum_losses: false
   # forecast_multiplier: 4  # auto-resolved: Milk → 4, backcast = 4 * 6 = 24
 

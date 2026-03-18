@@ -605,13 +605,24 @@ def _resolve_forecast_multiplier(training: dict, dataset) -> int:
 def _resolve_basis_dim(raw, dataset) -> int:
     """Resolve basis_dim from YAML value.
 
-    Accepts an integer or the string ``"forecast"`` (alias for eq_fcast),
-    which resolves to ``dataset.forecast_length`` at runtime.  This allows
-    a single YAML config to produce the correct eq_fcast basis_dim across
+    Accepts an integer or a string label that resolves at runtime:
+
+    * ``"forecast"`` / ``"eq_fcast"`` → ``dataset.forecast_length``
+    * ``"2*eq_fcast"`` / ``"2x_fcast"`` → ``2 * dataset.forecast_length``
+    * ``"lt_fcast"`` → ``max(forecast_length // 2, forecast_length - 2)``
+
+    This allows a single YAML config to produce the correct basis_dim across
     multiple periods (e.g. M4 Yearly H=6 and Quarterly H=8).
     """
-    if isinstance(raw, str) and raw.lower() in ("forecast", "eq_fcast"):
-        return int(dataset.forecast_length)
+    if isinstance(raw, str):
+        low = raw.lower().strip()
+        if low in ("forecast", "eq_fcast"):
+            return int(dataset.forecast_length)
+        if low in ("2*eq_fcast", "2x_fcast"):
+            return int(2 * dataset.forecast_length)
+        if low == "lt_fcast":
+            fl = int(dataset.forecast_length)
+            return max(fl // 2, fl - 2)
     return int(raw)
 
 
@@ -791,11 +802,13 @@ def run_single_config(
         loss_override=training.get("loss"),
         normalize=bool(protocol.get("normalize", False)),
         val_ratio=protocol.get("val_ratio"),
+        datamodule_type=protocol.get("datamodule", "columnar"),
         seed=seed,
         skip_distance=int(training.get("skip_distance", 0)),
         skip_alpha=training.get("skip_alpha", 0.0),
         generic_dim=int(block_params.get("generic_dim", 5)),
         t_width=int(block_params.get("t_width", 256)),
+        kl_weight=float(block_params.get("kl_weight", 0.1)),
     )
 
 

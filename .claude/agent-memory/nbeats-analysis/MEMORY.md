@@ -220,12 +220,18 @@
 - See `omnibus_benchmark_m4.md` for full details
 - 356 runs, 36 configs, 10 seeds, zero divergences. Top 10 within 0.097 SMAPE (no sig. differences).
 - Best 10-run: TrendAELG+Coif2WavV3AELG-30 (SMAPE=13.521, 2.9M params). Most efficient: TrendWaveletAELG-10 (13.579, 436K).
-- active_g NOT beneficial for most configs. Hurts NBEATS-G (p=0.049).
+- active_g NOT beneficial for peak quality in omnibus (hurts NBEATS-G p=0.049), but convergence study shows it eliminates stuck runs -- see `active_g_convergence.md`.
 - No config reaches prior SOTA 13.410 (different training protocol — early stopping vs fixed epochs).
 
 ## FM Sweep + Ensemble Plan (pending omnibus completion)
 
 - See `fm_sweep_ensemble_plan.md` for details
+
+## Active_G Convergence Study (2026-03-17)
+
+- See `active_g_convergence.md` for full details
+- active_g eliminates bimodal stuck-mode failures (63% on Milk, 4.5% on M4). Use `active_g="forecast"` as default for Generic blocks.
+- Quality cost vs converged baseline: 0.6% on M4, 48% on Milk (univariate artifact). activeG=True and "forecast" are equivalent (p>0.08).
 
 ## Critical Methodology Lesson
 

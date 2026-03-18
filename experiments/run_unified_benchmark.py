@@ -81,6 +81,7 @@ from lightningnbeats.models import NBeatsNet
 from lightningnbeats.loaders import (
     ColumnarCollectionTimeSeriesDataModule,
     ColumnarCollectionTimeSeriesTestDataModule,
+    TimeSeriesDataModule,
 )
 from lightningnbeats.data import M4Dataset, TourismDataset, MilkDataset, TrafficDataset, WeatherDataset
 
@@ -604,16 +605,14 @@ def load_dataset(dataset_name, period, train_ratio=None, include_target=None):
 def get_batch_size(dataset_name, period, override=None):
     """Look up per-dataset/period batch size, with optional override.
 
-    Tuned per-dataset/period values in BATCH_SIZES always take precedence
-    over the CLI override to prevent divergence (e.g. M4 Yearly needs 32768).
-    The override is only applied to dataset/period combos that are NOT in
-    BATCH_SIZES.
+    Priority: explicit override > tuned per-dataset/period > DEFAULT_BATCH_SIZE.
+    The override comes from YAML training.batch_size or CLI --batch-size.
     """
+    if override is not None:
+        return override
     tuned = BATCH_SIZES.get((dataset_name, period))
     if tuned is not None:
         return tuned
-    if override is not None:
-        return override
     return DEFAULT_BATCH_SIZE
 
 
@@ -880,6 +879,7 @@ def run_single_experiment(
     loss_override=None,      # None → uses module-level LOSS constant
     normalize=False,
     val_ratio=None,
+    datamodule_type="columnar",  # "columnar" (temporal split) or "univariate" (80/20 random split)
     seed=None,               # None → BASE_SEED + run_idx
     wavelet_type="db3",      # Wavelet family for TrendWaveletAE/TrendWaveletAELG blocks
     backcast_wavelet_type=None,   # Override wavelet family for backcast path only
@@ -888,6 +888,7 @@ def run_single_experiment(
     skip_alpha=0.0,               # Mixing weight for skip injection (float or "learnable")
     generic_dim=5,                # Learned generic branch rank for TrendWaveletGeneric* blocks
     t_width=256,                  # Hidden layer width for Trend/TrendWavelet-family blocks
+    kl_weight=0.1,                # KL divergence loss weight for VAE-family blocks
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -972,6 +973,7 @@ def run_single_experiment(
             skip_distance=skip_distance,
             skip_alpha=skip_alpha,
             t_width=t_width,
+            kl_weight=kl_weight,
         )
 
         n_params = count_parameters(model)
@@ -981,18 +983,32 @@ def run_single_experiment(
         test_data = dataset.test_data
 
         pin_memory = num_workers > 0
-        dm = ColumnarCollectionTimeSeriesDataModule(
-            train_data,
-            backcast_length=backcast_length,
-            forecast_length=forecast_length,
-            batch_size=batch_size,
-            no_val=False,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            normalize=normalize,
-            val_ratio=val_ratio,
-        )
-        dm.setup()
+        if datamodule_type == "univariate":
+            # Single-series mode: flat numpy array, 80/20 random split
+            # Matches standalone convergence scripts (e.g. run_milk_convergence_10stack.py)
+            flat_data = train_data.values.flatten().astype(np.float32)
+            dm = TimeSeriesDataModule(
+                data=flat_data,
+                batch_size=batch_size,
+                backcast_length=backcast_length,
+                forecast_length=forecast_length,
+                num_workers=num_workers,
+                pin_memory=pin_memory,
+            )
+            dm.setup()
+        else:
+            dm = ColumnarCollectionTimeSeriesDataModule(
+                train_data,
+                backcast_length=backcast_length,
+                forecast_length=forecast_length,
+                batch_size=batch_size,
+                no_val=False,
+                num_workers=num_workers,
+                pin_memory=pin_memory,
+                normalize=normalize,
+                val_ratio=val_ratio,
+            )
+            dm.setup()
 
         test_dm = ColumnarCollectionTimeSeriesTestDataModule(
             train_data,
@@ -1002,8 +1018,8 @@ def run_single_experiment(
             batch_size=batch_size,
             num_workers=num_workers,
             pin_memory=pin_memory,
-            col_means=dm.col_means,
-            col_stds=dm.col_stds,
+            col_means=dm.col_means if hasattr(dm, 'col_means') else None,
+            col_stds=dm.col_stds if hasattr(dm, 'col_stds') else None,
         )
 
         # Trainer

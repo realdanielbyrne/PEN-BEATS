@@ -199,6 +199,7 @@ protocol:
   loss: null                # fallback when training.loss is not explicitly set
   forecast_multiplier: null # fallback when training.forecast_multiplier is not explicitly set
   batch_size: null          # fallback when training.batch_size is not explicitly set
+  datamodule: columnar      # "columnar" (default) or "univariate" (80/20 random split)
 ```
 
 Notes:
@@ -207,7 +208,8 @@ Notes:
 - `normalize` and `val_ratio` are passed into `ColumnarCollectionTimeSeriesDataModule`.
 - `train_ratio` and `include_target` are applied when loading the Traffic or Weather dataset.
 - `loss`, `forecast_multiplier`, and `batch_size` act as **fallbacks** only when the same fields are not explicitly set under `training`.
-- The tuned `BATCH_SIZES` table still takes precedence over `protocol.batch_size` or `training.batch_size` for protected dataset/period combinations such as `Traffic-96`.
+- An explicit `training.batch_size` takes precedence over the tuned `BATCH_SIZES` table. When `training.batch_size` is not set, the tuned table provides the default.
+- `datamodule: univariate` selects `TimeSeriesDataModule` with a flat numpy array and 80/20 random train/val split (via `torch.utils.data.random_split`). This matches the behavior of standalone convergence scripts (e.g. `run_milk_convergence_10stack.py`). Only meaningful for single-series datasets like Milk.
 
 ---
 

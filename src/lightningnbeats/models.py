@@ -1,3 +1,4 @@
+from numbers import Real
 from time import time
 import numpy as np
 import torch
@@ -49,6 +50,7 @@ class _NBeatsBase(pl.LightningModule):
       optimizer_name: str = 'Adam',
       learning_rate: float = 1e-3,
       sum_losses: bool = False,
+      kl_weight: float = 0.1,
       lr_scheduler_config: dict = None,
   ):
     super(_NBeatsBase, self).__init__()
@@ -58,6 +60,7 @@ class _NBeatsBase(pl.LightningModule):
     self.optimizer_name = optimizer_name
     self.learning_rate = learning_rate
     self.sum_losses = sum_losses
+    self.kl_weight = kl_weight
     self.lr_scheduler_config = lr_scheduler_config
     self.loss_fn = self.configure_loss()
 
@@ -111,13 +114,12 @@ class _NBeatsBase(pl.LightningModule):
       loss = loss + backcast_loss * 0.25
 
     # Collect KL divergence loss from any VAE blocks
-    kl_loss = torch.tensor(0.0, device=x.device)
+    kl_loss = loss.new_tensor(0.0)
     for stack in self.stacks:
       for block in stack:
         if isinstance(block, (b.AERootBlockVAE, b.VAE)):
           kl_loss = kl_loss + block.kl_loss
-    if kl_loss.item() > 0:
-      loss = loss + kl_loss * 0.002
+    loss = loss + self.kl_weight * kl_loss
 
     self.log('train_loss', loss, prog_bar=True)
     return loss
@@ -178,6 +180,7 @@ class NBeatsNet(_NBeatsBase):
       latent_dim:int = 5,
       latent_gate_fn: str = 'sigmoid',
       sum_losses:bool = False,
+      kl_weight: float = 0.1,
       basis_dim:int = 32,
       basis_offset:int = 0,
       stack_basis_offsets:list = None,
@@ -265,6 +268,9 @@ class NBeatsNet(_NBeatsBase):
         Default : False.
     sum_losses : bool, optional
         If True, the total loss is defined as forecast_loss + 1/4 Backcast_loss.  This is an experimental feature. Default False.
+    kl_weight : float, optional
+        Multiplier applied to the summed KL divergence from VAE-family blocks
+        during training. Set to 0.0 to disable KL regularization. Default 0.1.
     latent_dim : int, optional
         The dimensionality of the latent space in the AutoEncoder blocks. Default 5.
     latent_gate_fn : str, optional
@@ -327,11 +333,14 @@ class NBeatsNet(_NBeatsBase):
         raise ValueError(f"skip_alpha must be a float or 'learnable', got '{skip_alpha}'")
     elif not isinstance(skip_alpha, (int, float)) or isinstance(skip_alpha, bool):
       raise ValueError(f"skip_alpha must be a float or 'learnable', got {skip_alpha!r}")
+    if not isinstance(kl_weight, Real) or isinstance(kl_weight, bool) or kl_weight < 0:
+      raise ValueError(f"kl_weight must be a non-negative real number, got {kl_weight!r}")
 
     super(NBeatsNet, self).__init__(
         loss=loss, frequency=frequency, no_val=no_val,
         optimizer_name=optimizer_name, learning_rate=learning_rate,
-        sum_losses=sum_losses, lr_scheduler_config=lr_scheduler_config,
+        sum_losses=sum_losses, kl_weight=kl_weight,
+        lr_scheduler_config=lr_scheduler_config,
     )
 
     self.backcast_length = backcast_length
@@ -622,6 +631,9 @@ class NHiTSNet(_NBeatsBase):
       ``'wavy_sigmoid'``, or ``'wavelet_sigmoid'``. Default ``'sigmoid'``.
   sum_losses : bool, optional
       Add 0.25 × backcast-reconstruction loss to forecast loss. Default False.
+  kl_weight : float, optional
+      Multiplier applied to the summed KL divergence from VAE-family blocks
+      during training. Set to 0.0 to disable KL regularization. Default 0.1.
   basis_dim : int, optional
       Wavelet basis dimensionality. Default 32.
   basis_offset : int, optional
@@ -664,6 +676,7 @@ class NHiTSNet(_NBeatsBase):
       latent_dim: int = 5,
       latent_gate_fn: str = 'sigmoid',
       sum_losses: bool = False,
+      kl_weight: float = 0.1,
       basis_dim: int = 32,
       basis_offset: int = 0,
       stack_basis_offsets: list = None,
@@ -694,6 +707,8 @@ class NHiTSNet(_NBeatsBase):
         raise ValueError(f"skip_alpha must be a float or 'learnable', got '{skip_alpha}'")
     elif not isinstance(skip_alpha, (int, float)) or isinstance(skip_alpha, bool):
       raise ValueError(f"skip_alpha must be a float or 'learnable', got {skip_alpha!r}")
+    if not isinstance(kl_weight, Real) or isinstance(kl_weight, bool) or kl_weight < 0:
+      raise ValueError(f"kl_weight must be a non-negative real number, got {kl_weight!r}")
 
     n_stacks = len(stack_types)
 
@@ -717,7 +732,8 @@ class NHiTSNet(_NBeatsBase):
     super(NHiTSNet, self).__init__(
         loss=loss, frequency=frequency, no_val=no_val,
         optimizer_name=optimizer_name, learning_rate=learning_rate,
-        sum_losses=sum_losses, lr_scheduler_config=lr_scheduler_config,
+        sum_losses=sum_losses, kl_weight=kl_weight,
+        lr_scheduler_config=lr_scheduler_config,
     )
 
     self.backcast_length = backcast_length

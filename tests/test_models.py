@@ -23,6 +23,17 @@ def _make_model(stack_types, **kwargs):
     return NBeatsNet(**defaults)
 
 
+class _ConstantLoss(torch.nn.Module):
+    """Deterministic loss stub for isolating KL weighting behavior."""
+
+    def __init__(self, value):
+        super().__init__()
+        self.value = value
+
+    def forward(self, forecast, y):
+        return forecast.new_tensor(self.value)
+
+
 # --- Width selection tests ---
 
 class TestWidthSelection:
@@ -236,6 +247,15 @@ class TestModelDefaults:
         assert model.latent_gate_fn == "sigmoid"
         assert model.stacks[0][0].latent_gate_fn == "sigmoid"
 
+    def test_kl_weight_defaults_to_point_one(self):
+        model = NBeatsNet(
+            backcast_length=20,
+            forecast_length=5,
+            stack_types=["VAE"],
+            n_blocks_per_stack=1,
+        )
+        assert model.kl_weight == 0.1
+
 
 # --- sum_losses semantic fix tests ---
 
@@ -275,6 +295,76 @@ class TestSumLossesBehavior:
 
         assert loss is not None
         assert isinstance(loss, torch.Tensor)
+
+
+# --- KL weighting tests ---
+
+class TestKLWeightBehavior:
+    """Verify configurable KL weighting in shared training logic."""
+
+    def test_nbeats_invalid_kl_weight_raises(self):
+        with pytest.raises(ValueError, match="kl_weight must be a non-negative real number"):
+            _make_model(["VAE"], kl_weight=-0.1)
+        with pytest.raises(ValueError, match="kl_weight must be a non-negative real number"):
+            _make_model(["VAE"], kl_weight="bad")
+        with pytest.raises(ValueError, match="kl_weight must be a non-negative real number"):
+            _make_model(["VAE"], kl_weight=True)
+        with pytest.raises(ValueError, match="kl_weight must be a non-negative real number"):
+            _make_model(["VAE"], kl_weight=False)
+
+    def test_nbeats_zero_kl_weight_disables_kl_term(self):
+        model = _make_model(["VAE"], kl_weight=0.0, ae_width=32)
+        model.loss_fn = _ConstantLoss(2.0)
+        model.forward = lambda x: (
+            torch.zeros(x.shape[0], model.backcast_length, device=x.device, dtype=x.dtype),
+            torch.zeros(x.shape[0], model.forecast_length, device=x.device, dtype=x.dtype),
+        )
+        model.stacks[0][0].kl_loss = torch.tensor(5.0)
+
+        loss = model.training_step((torch.randn(4, 20), torch.randn(4, 5)), 0)
+
+        assert torch.isclose(loss, torch.tensor(2.0))
+
+    def test_nbeats_custom_kl_weight_scales_loss(self):
+        model = _make_model(["VAE"], kl_weight=0.3, ae_width=32)
+        model.loss_fn = _ConstantLoss(2.0)
+        model.forward = lambda x: (
+            torch.zeros(x.shape[0], model.backcast_length, device=x.device, dtype=x.dtype),
+            torch.zeros(x.shape[0], model.forecast_length, device=x.device, dtype=x.dtype),
+        )
+        model.stacks[0][0].kl_loss = torch.tensor(5.0)
+
+        loss = model.training_step((torch.randn(4, 20), torch.randn(4, 5)), 0)
+
+        assert torch.isclose(loss, torch.tensor(3.5))
+
+    def test_nhits_zero_kl_weight_disables_kl_term(self):
+        model = _make_nhits(["VAE"], kl_weight=0.0, ae_width=32,
+                            n_pools_kernel_size=[1], n_freq_downsample=[1])
+        model.loss_fn = _ConstantLoss(2.0)
+        model.forward = lambda x: (
+            torch.zeros(x.shape[0], model.backcast_length, device=x.device, dtype=x.dtype),
+            torch.zeros(x.shape[0], model.forecast_length, device=x.device, dtype=x.dtype),
+        )
+        model.stacks[0][0].kl_loss = torch.tensor(5.0)
+
+        loss = model.training_step((torch.randn(4, 24), torch.randn(4, 6)), 0)
+
+        assert torch.isclose(loss, torch.tensor(2.0))
+
+    def test_nhits_custom_kl_weight_scales_loss(self):
+        model = _make_nhits(["VAE"], kl_weight=0.3, ae_width=32,
+                            n_pools_kernel_size=[1], n_freq_downsample=[1])
+        model.loss_fn = _ConstantLoss(2.0)
+        model.forward = lambda x: (
+            torch.zeros(x.shape[0], model.backcast_length, device=x.device, dtype=x.dtype),
+            torch.zeros(x.shape[0], model.forecast_length, device=x.device, dtype=x.dtype),
+        )
+        model.stacks[0][0].kl_loss = torch.tensor(5.0)
+
+        loss = model.training_step((torch.randn(4, 24), torch.randn(4, 6)), 0)
+
+        assert torch.isclose(loss, torch.tensor(3.5))
 
 
 # --- NormalizedDeviationLoss configuration tests ---
@@ -566,6 +656,16 @@ class TestNHiTSNetConstruction:
         with pytest.raises(ValueError, match="trend_thetas_dim must be a positive integer"):
             _make_nhits(["Trend"], trend_thetas_dim=0)
 
+    def test_invalid_kl_weight_raises(self):
+        with pytest.raises(ValueError, match="kl_weight must be a non-negative real number"):
+            _make_nhits(["VAE"], kl_weight=-0.1, n_pools_kernel_size=[1], n_freq_downsample=[1])
+        with pytest.raises(ValueError, match="kl_weight must be a non-negative real number"):
+            _make_nhits(["VAE"], kl_weight="bad", n_pools_kernel_size=[1], n_freq_downsample=[1])
+        with pytest.raises(ValueError, match="kl_weight must be a non-negative real number"):
+            _make_nhits(["VAE"], kl_weight=True, n_pools_kernel_size=[1], n_freq_downsample=[1])
+        with pytest.raises(ValueError, match="kl_weight must be a non-negative real number"):
+            _make_nhits(["VAE"], kl_weight=False, n_pools_kernel_size=[1], n_freq_downsample=[1])
+
     def test_n_pools_kernel_size_length_mismatch_raises(self):
         with pytest.raises(ValueError, match="n_pools_kernel_size length"):
             _make_nhits(["Generic", "Generic"], n_pools_kernel_size=[2])
@@ -578,6 +678,10 @@ class TestNHiTSNetConstruction:
         model = _make_nhits(["Generic", "Generic"])
         assert model.n_pools_kernel_size == [2, 2]
         assert model.n_freq_downsample == [1, 1]
+
+    def test_kl_weight_defaults_to_point_one(self):
+        model = _make_nhits(["VAE"], n_pools_kernel_size=[1], n_freq_downsample=[1])
+        assert model.kl_weight == 0.1
 
     def test_custom_pools_stored(self):
         model = _make_nhits(
