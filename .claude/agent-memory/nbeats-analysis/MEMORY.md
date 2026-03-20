@@ -1,5 +1,9 @@
 # Persistent Notes
 
+## KL Weight Sweep (2026-03-19)
+- See [kl_weight_sweep.md](kl_weight_sweep.md) for full findings.
+- **kl_weight=0.001 is the confirmed optimal VAE default.** Beats 0.1 (p=0.004) and 0.0001 (p=0.048) on M4. Non-monotonic V-shape. Double-VAE still fails at low kl. Higher kl increases variance.
+
 ## Block Architecture
 
 - WaveletV3 now respects `pywt.dwt_max_level(...)=0` and keeps `level=0` instead of forcing an invalid level-1 decomposition.
@@ -128,7 +132,7 @@
 - **TrendVAE + deterministic wavelet combos** also underperform: best on M4 is TrendVAE+Haar (SMAPE=15.41, +15% vs best). On Tourism they catastrophically fail (SMAPE 65-72 vs best 21.3).
 - **Backbone hierarchy extended:** RootBlock > AERootBlockLG > AERootBlock >> AERootBlockVAE. VAE is strictly worst across all datasets.
 - **One exception worth noting:** On Weather, TrendVAE+WaveletV3VAE (VAE-coif2-coif2, MSE=1848) beat the AELG equivalent (AELG-coif2-coif2, MSE=2132) in the same AsymWavelet study. But AELG-sym20-coif2 (MSE=1804) still beat VAE.
-- **KL divergence penalty likely too aggressive** for the residual N-BEATS architecture. The stochastic latent disrupts the precise backcast subtraction that N-BEATS relies on.
+- **KL divergence penalty WAS too aggressive at old default (0.1/1.0).** CONFIRMED: kl_weight=0.001 is optimal (see kl_weight_sweep.md). VAE gap vs non-AE narrows from +6.6% to +1.2% on M4-Yearly. Double-VAE still fails even at kl=0.001.
 
 ## TrendWaveletAE vs TrendWaveletAELG Comprehensive Study (2026-03-08)
 
