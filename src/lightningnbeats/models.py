@@ -50,7 +50,7 @@ class _NBeatsBase(pl.LightningModule):
       optimizer_name: str = 'Adam',
       learning_rate: float = 1e-3,
       sum_losses: bool = False,
-      kl_weight: float = 0.1,
+      kl_weight: float = 0.001,
       lr_scheduler_config: dict = None,
   ):
     super(_NBeatsBase, self).__init__()
@@ -180,7 +180,7 @@ class NBeatsNet(_NBeatsBase):
       latent_dim:int = 5,
       latent_gate_fn: str = 'sigmoid',
       sum_losses:bool = False,
-      kl_weight: float = 0.1,
+      kl_weight: float = 0.001,
       basis_dim:int = 32,
       basis_offset:int = 0,
       stack_basis_offsets:list = None,
@@ -676,7 +676,7 @@ class NHiTSNet(_NBeatsBase):
       latent_dim: int = 5,
       latent_gate_fn: str = 'sigmoid',
       sum_losses: bool = False,
-      kl_weight: float = 0.1,
+      kl_weight: float = 0.001,
       basis_dim: int = 32,
       basis_offset: int = 0,
       stack_basis_offsets: list = None,
