@@ -844,6 +844,207 @@ def gen_K_genericae_ld():
     return configs
 
 
+def gen_L_bottleneckgeneric():
+    """L. BottleneckGeneric (RootBlock) — active_g x depth sweep. 4 configs.
+
+    Proves: F1 (active_g on Bottleneck), F7 (active_g rescues without skip),
+            F9 (parameter contrast vs Generic baseline).
+
+    {10,30} x {ag0,agf} = 4
+    """
+    configs = []
+    for n in STACKS:
+        for ag in ACTIVE_G_VALUES:
+            name = f"BNG_{n}s_{_ag_tag(ag)}"
+            configs.append(
+                {
+                    "name": name,
+                    "category": "bottleneckgeneric",
+                    "stacks": {
+                        "type": "homogeneous",
+                        "block": "BottleneckGeneric",
+                        "n": n,
+                    },
+                    "training": {"active_g": ag},
+                    "extra_fields": _extra(
+                        arch_family="bottleneckgeneric",
+                        block_type_primary="BottleneckGeneric",
+                        backbone="RootBlock",
+                        stack_pattern="homogeneous",
+                        n_stacks=n,
+                        active_g_cfg=_ag_yaml(ag),
+                    ),
+                }
+            )
+    return configs
+
+
+def gen_M_bottleneckgenericae():
+    """M. BottleneckGenericAE latent_dim contrast. 4 configs.
+
+    Proves: F5 (higher ld hurts AE), F8 (AE < AELG backbone).
+    Mirrors group K but with the Bottleneck projection.
+
+    10s x {ld8,ld16,ld32} x ag0 = 3
+    10s x ld16 x agf = 1
+    """
+    configs = []
+    for ld in LATENT_DIMS:
+        name = f"BNAE_10s_ld{ld}_ag0"
+        configs.append(
+            {
+                "name": name,
+                "category": "bottleneckgenericae",
+                "stacks": {
+                    "type": "homogeneous",
+                    "block": "BottleneckGenericAE",
+                    "n": 10,
+                },
+                "training": {"active_g": False},
+                "block_params": {"latent_dim": ld},
+                "extra_fields": _extra(
+                    arch_family="bottleneckgeneric_ae",
+                    block_type_primary="BottleneckGenericAE",
+                    backbone="AERootBlock",
+                    stack_pattern="homogeneous",
+                    n_stacks=10,
+                    latent_dim_cfg=ld,
+                ),
+            }
+        )
+
+    # active_g check at ld=16
+    configs.append(
+        {
+            "name": "BNAE_10s_ld16_agf",
+            "category": "bottleneckgenericae",
+            "stacks": {
+                "type": "homogeneous",
+                "block": "BottleneckGenericAE",
+                "n": 10,
+            },
+            "training": {"active_g": "forecast"},
+            "block_params": {"latent_dim": 16},
+            "extra_fields": _extra(
+                arch_family="bottleneckgeneric_ae",
+                block_type_primary="BottleneckGenericAE",
+                backbone="AERootBlock",
+                stack_pattern="homogeneous",
+                n_stacks=10,
+                latent_dim_cfg=16,
+                active_g_cfg="forecast",
+            ),
+        }
+    )
+
+    return configs
+
+
+def gen_N_bottleneckgenericaelg():
+    """N. BottleneckGenericAELG — skip + active_g interaction. 8 configs.
+
+    Proves: F6 (skip rescue at depth), F7 (active_g rescues without skip).
+    Mirrors group I but with the Bottleneck+LG backbone.
+
+    N1: 30s x ld16 x {ag0,agf} x {skip0,skip5} = 4
+    N2: 10s x ld16 x {ag0,agf} = 2  (baseline depth)
+    N3: 30s x ld32 x ag0 x {skip0,skip5} = 2  (ld sensitivity at depth)
+    """
+    configs = []
+
+    # N1: 2x2 interaction at 30 stacks
+    for ag in ACTIVE_G_VALUES:
+        for sd in [0, 5]:
+            sd_tag = f"_sd{sd}" if sd > 0 else ""
+            name = f"BNAELG_30s_ld16_{_ag_tag(ag)}{sd_tag}"
+            training = {"active_g": ag}
+            if sd > 0:
+                training["skip_distance"] = sd
+                training["skip_alpha"] = SKIP_ALPHA
+            configs.append(
+                {
+                    "name": name,
+                    "category": "bottleneckgenericaelg",
+                    "stacks": {
+                        "type": "homogeneous",
+                        "block": "BottleneckGenericAELG",
+                        "n": 30,
+                    },
+                    "training": training,
+                    "block_params": {"latent_dim": 16},
+                    "extra_fields": _extra(
+                        arch_family="bottleneckgeneric_aelg",
+                        block_type_primary="BottleneckGenericAELG",
+                        backbone="AERootBlockLG",
+                        stack_pattern="homogeneous",
+                        n_stacks=30,
+                        latent_dim_cfg=16,
+                        skip_distance_cfg=sd,
+                        active_g_cfg=_ag_yaml(ag),
+                    ),
+                }
+            )
+
+    # N2: 10-stack baseline
+    for ag in ACTIVE_G_VALUES:
+        name = f"BNAELG_10s_ld16_{_ag_tag(ag)}"
+        configs.append(
+            {
+                "name": name,
+                "category": "bottleneckgenericaelg",
+                "stacks": {
+                    "type": "homogeneous",
+                    "block": "BottleneckGenericAELG",
+                    "n": 10,
+                },
+                "training": {"active_g": ag},
+                "block_params": {"latent_dim": 16},
+                "extra_fields": _extra(
+                    arch_family="bottleneckgeneric_aelg",
+                    block_type_primary="BottleneckGenericAELG",
+                    backbone="AERootBlockLG",
+                    stack_pattern="homogeneous",
+                    n_stacks=10,
+                    latent_dim_cfg=16,
+                    active_g_cfg=_ag_yaml(ag),
+                ),
+            }
+        )
+
+    # N3: ld=32 at 30 stacks (ld sensitivity)
+    for sd in [0, 5]:
+        sd_tag = f"_sd{sd}" if sd > 0 else ""
+        name = f"BNAELG_30s_ld32_ag0{sd_tag}"
+        training = {"active_g": False}
+        if sd > 0:
+            training["skip_distance"] = sd
+            training["skip_alpha"] = SKIP_ALPHA
+        configs.append(
+            {
+                "name": name,
+                "category": "bottleneckgenericaelg",
+                "stacks": {
+                    "type": "homogeneous",
+                    "block": "BottleneckGenericAELG",
+                    "n": 30,
+                },
+                "training": training,
+                "block_params": {"latent_dim": 32},
+                "extra_fields": _extra(
+                    arch_family="bottleneckgeneric_aelg",
+                    block_type_primary="BottleneckGenericAELG",
+                    backbone="AERootBlockLG",
+                    stack_pattern="homogeneous",
+                    n_stacks=30,
+                    latent_dim_cfg=32,
+                    skip_distance_cfg=sd,
+                ),
+            }
+        )
+
+    return configs
+
+
 # ── YAML serialization ─────────────────────────────────────────────────────
 
 
@@ -1093,6 +1294,9 @@ CATEGORY_LABELS = [
     ("genericaelg_skip", "GenericAELG Skip + active_g Interaction"),
     ("trendwaveletgenericaelg", "TrendWaveletGenericAELG (Pareto optimal)"),
     ("genericae", "GenericAE (latent_dim contrast)"),
+    ("bottleneckgeneric", "BottleneckGeneric RootBlock (active_g x depth)"),
+    ("bottleneckgenericae", "BottleneckGenericAE (latent_dim contrast)"),
+    ("bottleneckgenericaelg", "BottleneckGenericAELG (skip + active_g interaction)"),
 ]
 
 
@@ -1146,6 +1350,9 @@ def main():
         + gen_I_genericaelg_skip_ag()
         + gen_J_trendwaveletgenericaelg()
         + gen_K_genericae_ld()
+        + gen_L_bottleneckgeneric()
+        + gen_M_bottleneckgenericae()
+        + gen_N_bottleneckgenericaelg()
     )
 
     print(f"Total configs per dataset: {len(all_configs)}")
