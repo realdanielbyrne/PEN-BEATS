@@ -37,8 +37,7 @@
 #       experiments/configs/comprehensive_sweep_milk.yaml --dry-run
 #   python experiments/run_from_yaml.py \
 #       experiments/configs/comprehensive_sweep_milk.yaml
-#   python experiments/run_from_yaml.py \
-#       experiments/configs/comprehensive_sweep_milk.yaml --worker-id gpu0
+#   python experiments/run_from_yaml.py experiments/configs/comprehensive_sweep_milk.yaml --worker-id milk1
 # ============================================================
 
 experiment_name: comprehensive_sweep_milk
@@ -68,6 +67,7 @@ training:
   optimizer: Adam
   learning_rate: 0.001
   forecast_multiplier: 5
+  batch_size: 32
 
 lr_scheduler:
   warmup_epochs: 15
