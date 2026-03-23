@@ -1,7 +1,9 @@
 # ============================================================
-# Paper-Ready Comprehensive Sweep — M4
+# Paper-Ready Comprehensive Sweep — WEATHER (fm7)
 #
-# Designed to prove all major findings in one clean experiment.
+# Re-run with forecast_multiplier=7 (backcast=672) to test whether
+# the active_g catastrophe (SMAPE ~98-101) was caused by insufficient
+# backcast length at fm5 (backcast=480).
 # Random seeds (saved in CSV for reproducibility).
 #
 # Total configs: 112
@@ -34,27 +36,32 @@
 #
 # Usage:
 #   python experiments/run_from_yaml.py \
-#       experiments/configs/comprehensive_sweep_m4.yaml --dry-run
+#       experiments/configs/comprehensive_sweep_weather_fm7.yaml --dry-run
 #   python experiments/run_from_yaml.py \
-#       experiments/configs/comprehensive_sweep_m4.yaml
-#   python experiments/run_from_yaml.py experiments/configs/comprehensive_sweep_m4.yaml --worker-id gpu0
+#       experiments/configs/comprehensive_sweep_weather_fm7.yaml
+#   python experiments/run_from_yaml.py experiments/configs/comprehensive_sweep_weather_fm7.yaml --worker-id w1g0 --gpu-id 0
 # ============================================================
 
-experiment_name: comprehensive_sweep_m4
+experiment_name: comprehensive_sweep_weather_fm7
 category: comprehensive_sweep
 description: >
-  Paper-ready comprehensive sweep on M4.
+  Paper-ready comprehensive sweep on WEATHER with forecast_multiplier=7.
+  Tests whether longer backcast (672 vs 480) resolves active_g catastrophe.
   Covers paper baselines, TrendWavelet (RootBlock/AE/AELG),
   alternating TrendAELG+WaveletV3AELG, alternating Trend+WaveletV3,
   GenericAELG skip/active_g interaction, and Pareto-optimal configs.
   Random seeds for unbiased estimation.
 
-dataset: m4
+dataset: weather
 periods:
-  - Yearly
-  - Quarterly
-  - Monthly
+  - Weather-96
 
+
+protocol:
+  normalize: true
+  train_ratio: 0.7
+  val_ratio: 0.1
+  include_target: true
 
 
 training:
@@ -68,7 +75,7 @@ training:
   loss: SMAPELoss
   optimizer: Adam
   learning_rate: 0.001
-  forecast_multiplier: 5
+  forecast_multiplier: 7
 
 lr_scheduler:
   warmup_epochs: 15
@@ -2743,7 +2750,7 @@ runs:
 
 output:
   results_dir: experiments/results
-  csv_filename: comprehensive_sweep_m4_results.csv
+  csv_filename: comprehensive_sweep_weather_results.csv
   save_predictions: false
 
 logging:

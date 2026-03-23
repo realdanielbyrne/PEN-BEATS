@@ -1,5 +1,22 @@
 # Persistent Notes
 
+## Training Dynamics: Unified vs Comprehensive (2026-03-22)
+- See [training_dynamics_findings.md](training_dynamics_findings.md) for details.
+- **Three factors explain UB vs CS gap:** LR warmup (most impactful), patience=20, max_epochs=200. Not just epoch count.
+- **LR warmup prevents bimodal convergence** (1.7% -> 0.2% on M4-Yearly). BottleneckGeneric and standalone wavelet blocks most affected.
+- **patience=20 helps 47% of M4-Yearly runs** (2.25% val_loss improvement). Alternating Trend+Wavelet RootBlock configs benefit most (70%+).
+- **Optimal defaults:** max_epochs=200, patience=20, warmup=15. Tourism can use max100/pat10.
+- **UB CSV has 466/1479 misaligned rows** (epochs_trained='False'). Filter with pd.to_numeric.
+
+## Comprehensive Sweep Cross-Dataset (2026-03-22) **LATEST**
+- See [comprehensive_sweep_findings.md](comprehensive_sweep_findings.md) for details.
+- **CRITICAL: active_g=forecast is CATASTROPHIC on Weather-96** (SMAPE ~100 vs ~44). Never use agf on Weather. It's a dataset-level setting.
+- **Best generalist: TALG+DB3V3ALG_10s_ag0** (mean rank 14.6/112, 2.4M params). Safe for any dataset.
+- **Only 2/12 prior findings confirmed (F9 param efficiency, F12 Pareto optimality).** 7 denied, 3 partially confirmed.
+- **Wavelet type DOES matter** (KW p<0.05 on 3/4 datasets). db3 safest cross-dataset. Prior "barely matters" is wrong.
+- **td5 beats td3 on M4-Yearly** (p=0.009). td3 still safe default elsewhere.
+- Safe defaults: ag0, skip=0, ld=8-16, eq_fcast, td3, db3, 10 stacks.
+
 ## KL Weight Sweep (2026-03-19)
 - See [kl_weight_sweep.md](kl_weight_sweep.md) for full findings.
 - **kl_weight=0.001 is the confirmed optimal VAE default.** Beats 0.1 (p=0.004) and 0.0001 (p=0.048) on M4. Non-monotonic V-shape. Double-VAE still fails at low kl. Higher kl increases variance.
