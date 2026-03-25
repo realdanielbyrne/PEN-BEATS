@@ -35,6 +35,16 @@ See notebook: `experiments/analysis/notebooks/comprehensive_sweep_cross_dataset.
 - Weather: TALG+DB3V3ALG_10s_ag0 (SMAPE=41.540, 2.4M params)
 - Milk: T+Sym10V3_30s_bdeq (SMAPE=1.262, 15.2M params, 50% divergence)
 
+### FM7 Lookback Experiment (2026-03-24)
+
+**Increasing forecast_multiplier from 5 to 7 (bl=480->672) does NOT rescue active_g catastrophe and HARMS all configs.**
+- 41 configs tested at fm7, 10 runs each (406 total rows).
+- 9/11 agf configs remain catastrophic (SMAPE ~100-102). 2 NBEATS-IG agf configs regressed from ~44 to ~51.
+- ALL 30 ag0 configs worse at fm7 (Wilcoxon p=9.3e-10, d=4.04). Mean degradation +6.51 SMAPE.
+- Best fm5 ag0: 42.20 SMAPE. Best fm7 ag0: 48.52 SMAPE. No overlap in quality.
+- **Optimal Weather-96 lookback: fm5 (5x, bl=480). Do NOT use fm7 or higher.**
+- active_g catastrophe is architectural, not lookback-related.
+
 ### Safe Defaults
 - active_g=False (NEVER agf on Weather)
 - skip_distance=0 (disabled)
@@ -43,4 +53,5 @@ See notebook: `experiments/analysis/notebooks/comprehensive_sweep_cross_dataset.
 - trend_thetas_dim=3
 - wavelet_family=db3
 - n_stacks=10
+- forecast_multiplier=5 for Weather-96 (fm7 is strictly worse)
 - share_weights=True, n_blocks_per_stack=1
