@@ -53,6 +53,9 @@ dataset: traffic
 periods:
   - Traffic-96
 
+hardware:
+  pin_memory: true
+  num_workers: 4
 
 protocol:
   normalize: false

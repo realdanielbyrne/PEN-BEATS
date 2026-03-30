@@ -1,0 +1,21 @@
+# Augment Code indexer exclusions
+# Augment also respects .gitignore, so .venv, lightning_logs/, wandb/, etc. are already excluded.
+
+# Experiment result CSVs (large, not source code)
+**/*.csv
+
+# Experiment result artifacts
+experiments/results/
+experiments/.claims/
+
+# Notebook checkpoints
+**/.ipynb_checkpoints/
+
+# Large binary / data files
+**/*.npz
+**/*.pt
+**/*.ckpt
+**/*.gz
+**/*.tar.gz
+**/*.zip
+
