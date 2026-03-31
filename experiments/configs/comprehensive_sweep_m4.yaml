@@ -55,7 +55,9 @@ periods:
   - Quarterly
   - Monthly
 
-
+hardware:
+  pin_memory: true
+  num_workers: 4
 
 training:
   active_g: false
