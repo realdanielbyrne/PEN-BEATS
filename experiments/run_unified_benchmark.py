@@ -57,6 +57,7 @@ if sys.platform == "win32":
         finally:
             file_obj.seek(0)
             msvcrt.locking(file_obj.fileno(), msvcrt.LK_UNLCK, 1)
+
 else:
     import fcntl
 
@@ -67,6 +68,7 @@ else:
             yield
         finally:
             fcntl.flock(file_obj, fcntl.LOCK_UN)
+
 
 import numpy as np
 import torch
@@ -83,7 +85,13 @@ from lightningnbeats.loaders import (
     ColumnarCollectionTimeSeriesTestDataModule,
     TimeSeriesDataModule,
 )
-from lightningnbeats.data import M4Dataset, TourismDataset, MilkDataset, TrafficDataset, WeatherDataset
+from lightningnbeats.data import (
+    M4Dataset,
+    TourismDataset,
+    MilkDataset,
+    TrafficDataset,
+    WeatherDataset,
+)
 
 torch.set_float32_matmul_precision("medium")
 
@@ -105,8 +113,10 @@ def _signal_handler(signum, frame):
     _shutdown_requested = True
     if _shutdown_event is not None:
         _shutdown_event.set()
-    print("\n[SIGNAL] Shutdown requested. Finishing current run... "
-          "(signal again to force)")
+    print(
+        "\n[SIGNAL] Shutdown requested. Finishing current run... "
+        "(signal again to force)"
+    )
 
 
 signal.signal(signal.SIGINT, _signal_handler)
@@ -139,18 +149,18 @@ STALE_CLAIM_SECONDS = 7200  # 2 hours — assume crashed worker
 # ---------------------------------------------------------------------------
 
 M4_PERIODS = {
-    "Yearly":    {"frequency": 1,  "horizon": 6},
-    "Quarterly": {"frequency": 4,  "horizon": 8},
-    "Monthly":   {"frequency": 12, "horizon": 18},
-    "Weekly":    {"frequency": 1,  "horizon": 13},
-    "Daily":     {"frequency": 1,  "horizon": 14},
-    "Hourly":    {"frequency": 24, "horizon": 48},
+    "Yearly": {"frequency": 1, "horizon": 6},
+    "Quarterly": {"frequency": 4, "horizon": 8},
+    "Monthly": {"frequency": 12, "horizon": 18},
+    "Weekly": {"frequency": 1, "horizon": 13},
+    "Daily": {"frequency": 1, "horizon": 14},
+    "Hourly": {"frequency": 24, "horizon": 48},
 }
 
 TOURISM_PERIODS = {
-    "Tourism-Yearly":    {"frequency": 1,  "horizon": 4},
-    "Tourism-Monthly":   {"frequency": 12, "horizon": 24},
-    "Tourism-Quarterly": {"frequency": 4,  "horizon": 8},
+    "Tourism-Yearly": {"frequency": 1, "horizon": 4},
+    "Tourism-Monthly": {"frequency": 12, "horizon": 24},
+    "Tourism-Quarterly": {"frequency": 4, "horizon": 8},
 }
 
 MILK_PERIODS = {
@@ -158,12 +168,12 @@ MILK_PERIODS = {
 }
 
 TRAFFIC_PERIODS = {
-    "Traffic-96":  {"frequency": 24, "horizon": 96},
+    "Traffic-96": {"frequency": 24, "horizon": 96},
     "Traffic-192": {"frequency": 24, "horizon": 192},
 }
 
 WEATHER_PERIODS = {
-    "Weather-96":  {"frequency": 144, "horizon": 96},
+    "Weather-96": {"frequency": 144, "horizon": 96},
     "Weather-192": {"frequency": 144, "horizon": 192},
 }
 
@@ -189,13 +199,18 @@ FORECAST_MULTIPLIERS = {
 
 BATCH_SIZES = {
     ("m4", "Yearly"): 16384,
+    ("m4", "Quarterly"): 16384,
+    ("m4", "Monthly"): 16384,
+    ("m4", "Weekly"): 4096,
+    ("m4", "Daily"): 4096,
+    ("m4", "Hourly"): 4096,
     ("tourism", "Tourism-Yearly"): 8192,
     ("tourism", "Tourism-Monthly"): 32768,
     ("tourism", "Tourism-Quarterly"): 65536,
     ("milk", "Milk"): 128,
-    ("traffic", "Traffic-96"):  65536,
+    ("traffic", "Traffic-96"): 65536,
     ("traffic", "Traffic-192"): 65536,
-    ("weather", "Weather-96"):  65536,
+    ("weather", "Weather-96"): 65536,
     ("weather", "Weather-192"): 65536,
 }
 DEFAULT_BATCH_SIZE = 65536
@@ -214,15 +229,40 @@ MILK_N_RUNS = 100
 # ---------------------------------------------------------------------------
 
 CSV_COLUMNS = [
-    "experiment", "config_name", "category", "stack_types",
-    "period", "frequency", "forecast_length", "backcast_length",
-    "n_stacks", "n_blocks_per_stack", "share_weights",
-    "run", "seed",
-    "smape", "mase", "mae", "mse", "owa", "norm_mae", "norm_mse",
-    "n_params", "t_width", "training_time_seconds", "epochs_trained",
-    "active_g", "sum_losses", "activation", "stopping_reason",
-    "best_val_loss", "final_val_loss", "final_train_loss",
-    "best_epoch", "loss_ratio", "diverged",
+    "experiment",
+    "config_name",
+    "category",
+    "stack_types",
+    "period",
+    "frequency",
+    "forecast_length",
+    "backcast_length",
+    "n_stacks",
+    "n_blocks_per_stack",
+    "share_weights",
+    "run",
+    "seed",
+    "smape",
+    "mase",
+    "mae",
+    "mse",
+    "owa",
+    "norm_mae",
+    "norm_mse",
+    "n_params",
+    "t_width",
+    "training_time_seconds",
+    "epochs_trained",
+    "active_g",
+    "sum_losses",
+    "activation",
+    "stopping_reason",
+    "best_val_loss",
+    "final_val_loss",
+    "final_train_loss",
+    "best_epoch",
+    "loss_ratio",
+    "diverged",
     "val_loss_curve",
 ]
 
@@ -250,7 +290,6 @@ UNIFIED_CONFIGS = {
         "n_blocks_per_stack": 1,
         "share_weights": True,
     },
-
     # --- Novel Homogeneous — AE Backbone (3) ---
     "GenericAE": {
         "category": "novel_ae",
@@ -270,7 +309,6 @@ UNIFIED_CONFIGS = {
         "n_blocks_per_stack": 1,
         "share_weights": True,
     },
-
     # --- Novel Homogeneous — Basis Alternatives (3) ---
     "BottleneckGeneric": {
         "category": "novel_basis",
@@ -290,7 +328,6 @@ UNIFIED_CONFIGS = {
         "n_blocks_per_stack": 1,
         "share_weights": True,
     },
-
     # --- Novel Mixed Stacks (7) ---
     "Trend+Coif2WaveletV3": {
         "category": "novel_mixed",
@@ -341,6 +378,7 @@ UNIFIED_CONFIGS = {
 # Milk Config Scaler
 # ---------------------------------------------------------------------------
 
+
 def scale_config_for_milk(cfg):
     """Adapt a 30-stack config to 6 stacks for Milk dataset.
 
@@ -359,27 +397,29 @@ def scale_config_for_milk(cfg):
         return stack_types, n_blocks
 
     # I+G pattern: starts with Trend, Seasonality, then 28x same block
-    if (n_stacks == 30
-            and stack_types[0] == "Trend"
-            and stack_types[1] == "Seasonality"
-            and len(set(stack_types[2:])) == 1):
+    if (
+        n_stacks == 30
+        and stack_types[0] == "Trend"
+        and stack_types[1] == "Seasonality"
+        and len(set(stack_types[2:])) == 1
+    ):
         # 2 interpretable + 4 generic-backend
         return ["Trend", "Seasonality"] + [stack_types[2]] * 4, n_blocks
 
     # I+G variant: Trend, Seasonality then 28 of same block (already covered above)
     # But also handle TrendAE-style if any exist
-    if (n_stacks == 30
-            and "Trend" in stack_types[0]
-            and "Seasonality" in stack_types[1]
-            and len(set(stack_types[2:])) == 1):
+    if (
+        n_stacks == 30
+        and "Trend" in stack_types[0]
+        and "Seasonality" in stack_types[1]
+        and len(set(stack_types[2:])) == 1
+    ):
         return [stack_types[0], stack_types[1]] + [stack_types[2]] * 4, n_blocks
 
     # Alternating mixed: [A, B] * 15 -> [A, B] * 3
     if n_stacks == 30 and len(unique) == 2:
         pattern = stack_types[:2]
-        is_alternating = all(
-            stack_types[i] == pattern[i % 2] for i in range(n_stacks)
-        )
+        is_alternating = all(stack_types[i] == pattern[i % 2] for i in range(n_stacks))
         if is_alternating:
             return pattern * 3, n_blocks
 
@@ -395,8 +435,16 @@ def scale_config_for_milk(cfg):
 # Logger Helpers
 # ---------------------------------------------------------------------------
 
-def build_loggers(log_dir, log_name, wandb_enabled, wandb_project, wandb_group, wandb_config,
-                  tb_enabled=False):
+
+def build_loggers(
+    log_dir,
+    log_name,
+    wandb_enabled,
+    wandb_project,
+    wandb_group,
+    wandb_config,
+    tb_enabled=False,
+):
     """Build list of loggers (optionally TensorBoard + W&B).
 
     TensorBoard is disabled by default for benchmark runs to avoid
@@ -407,14 +455,16 @@ def build_loggers(log_dir, log_name, wandb_enabled, wandb_project, wandb_group, 
     if tb_enabled:
         loggers.append(pl_loggers.TensorBoardLogger(save_dir=log_dir, name=log_name))
     if wandb_enabled:
-        loggers.append(pl_loggers.WandbLogger(
-            project=wandb_project,
-            group=wandb_group,
-            name=log_name,
-            config=wandb_config,
-            save_dir=log_dir,
-            reinit=True,
-        ))
+        loggers.append(
+            pl_loggers.WandbLogger(
+                project=wandb_project,
+                group=wandb_group,
+                name=log_name,
+                config=wandb_config,
+                save_dir=log_dir,
+                reinit=True,
+            )
+        )
     return loggers if loggers else False
 
 
@@ -422,12 +472,14 @@ def finish_wandb(wandb_enabled):
     """Cleanly close the current wandb run if enabled."""
     if wandb_enabled:
         import wandb
+
         wandb.finish(quiet=True)
 
 
 # ---------------------------------------------------------------------------
 # Utility Functions
 # ---------------------------------------------------------------------------
+
 
 def set_seed(seed):
     pl.seed_everything(seed, workers=True)
@@ -620,6 +672,7 @@ def get_batch_size(dataset_name, period, override=None):
 # DivergenceDetector Callback
 # ---------------------------------------------------------------------------
 
+
 class DivergenceDetector(pl.Callback):
     """Stop training when val_loss exceeds best by relative_threshold for consecutive epochs."""
 
@@ -653,7 +706,10 @@ class DivergenceDetector(pl.Callback):
             self.bad_epoch_count = 0
             return
 
-        if self.best_val_loss > 0 and val_loss > self.best_val_loss * self.relative_threshold:
+        if (
+            self.best_val_loss > 0
+            and val_loss > self.best_val_loss * self.relative_threshold
+        ):
             self.bad_epoch_count += 1
         else:
             self.bad_epoch_count = 0
@@ -688,6 +744,7 @@ class ConvergenceTracker(pl.Callback):
 # CSV Helpers
 # ---------------------------------------------------------------------------
 
+
 def init_csv(path, columns=None):
     """Create CSV with header if it doesn't exist, or migrate header if schema changed."""
     columns = columns or CSV_COLUMNS
@@ -708,8 +765,10 @@ def init_csv(path, columns=None):
         return
 
     # Schema mismatch — migrate the file
-    print(f"  [MIGRATE] {os.path.basename(path)}: "
-          f"header {len(existing_header)} cols -> {len(columns)} cols")
+    print(
+        f"  [MIGRATE] {os.path.basename(path)}: "
+        f"header {len(existing_header)} cols -> {len(columns)} cols"
+    )
     with open(path, "r", newline="") as f:
         reader = csv.reader(f)
         old_header = next(reader)
@@ -723,7 +782,7 @@ def init_csv(path, columns=None):
                 row_dict[col_name] = raw[i]
         if len(raw) > len(old_header):
             missing_cols = [c for c in columns if c not in old_header]
-            extra_values = raw[len(old_header):]
+            extra_values = raw[len(old_header) :]
             for j, col_name in enumerate(missing_cols):
                 if j < len(extra_values):
                     row_dict[col_name] = extra_values[j]
@@ -757,10 +816,12 @@ def result_exists(path, experiment, config_name, period, run):
     with open(path, "r", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if (row["experiment"] == experiment
-                    and row["config_name"] == config_name
-                    and row["period"] == period
-                    and row["run"] == str(run)):
+            if (
+                row["experiment"] == experiment
+                and row["config_name"] == config_name
+                and row["period"] == period
+                and row["run"] == str(run)
+            ):
                 return True
     return False
 
@@ -787,15 +848,19 @@ def claim_job(config_name, dataset_name, horizon_label, run_idx, worker_id=""):
     try:
         file_descriptor = os.open(claim_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         with os.fdopen(file_descriptor, "w") as claim_file:
-            claim_file.write(json.dumps({
-                "worker_id": worker_id,
-                "pid": os.getpid(),
-                "claimed_at": time.time(),
-                "config_name": config_name,
-                "dataset": dataset_name,
-                "horizon": horizon_label,
-                "run": run_idx,
-            }))
+            claim_file.write(
+                json.dumps(
+                    {
+                        "worker_id": worker_id,
+                        "pid": os.getpid(),
+                        "claimed_at": time.time(),
+                        "config_name": config_name,
+                        "dataset": dataset_name,
+                        "horizon": horizon_label,
+                        "run": run_idx,
+                    }
+                )
+            )
         return True
     except FileExistsError:
         try:
@@ -833,6 +898,7 @@ def release_claim(config_name, dataset_name, horizon_label, run_idx):
 # ---------------------------------------------------------------------------
 # Single Run Function
 # ---------------------------------------------------------------------------
+
 
 def run_single_experiment(
     experiment_name,
@@ -875,20 +941,20 @@ def run_single_experiment(
     trend_thetas_dim=None,
     lr_scheduler_config=None,
     optimizer_name="Adam",
-    learning_rate=None,      # None → uses module-level LEARNING_RATE constant
-    loss_override=None,      # None → uses module-level LOSS constant
+    learning_rate=None,  # None → uses module-level LEARNING_RATE constant
+    loss_override=None,  # None → uses module-level LOSS constant
     normalize=False,
     val_ratio=None,
     datamodule_type="columnar",  # "columnar" (temporal split) or "univariate" (80/20 random split)
-    seed=None,               # None → BASE_SEED + run_idx
-    wavelet_type="db3",      # Wavelet family for TrendWaveletAE/TrendWaveletAELG blocks
-    backcast_wavelet_type=None,   # Override wavelet family for backcast path only
-    forecast_wavelet_type=None,   # Override wavelet family for forecast path only
-    skip_distance=0,              # Re-inject original input every N stacks (0 = disabled)
-    skip_alpha=0.0,               # Mixing weight for skip injection (float or "learnable")
-    generic_dim=5,                # Learned generic branch rank for TrendWaveletGeneric* blocks
-    t_width=256,                  # Hidden layer width for Trend/TrendWavelet-family blocks
-    kl_weight=0.1,                # KL divergence loss weight for VAE-family blocks
+    seed=None,  # None → BASE_SEED + run_idx
+    wavelet_type="db3",  # Wavelet family for TrendWaveletAE/TrendWaveletAELG blocks
+    backcast_wavelet_type=None,  # Override wavelet family for backcast path only
+    forecast_wavelet_type=None,  # Override wavelet family for forecast path only
+    skip_distance=0,  # Re-inject original input every N stacks (0 = disabled)
+    skip_alpha=0.0,  # Mixing weight for skip injection (float or "learnable")
+    generic_dim=5,  # Learned generic branch rank for TrendWaveletGeneric* blocks
+    t_width=256,  # Hidden layer width for Trend/TrendWavelet-family blocks
+    kl_weight=0.1,  # KL divergence loss weight for VAE-family blocks
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -896,7 +962,9 @@ def run_single_experiment(
 
     # Check resumability
     if result_exists(csv_path, experiment_name, config_name, period, run_idx):
-        print(f"  {prefix}[SKIP] {config_name} / {period} / run {run_idx} -- already exists")
+        print(
+            f"  {prefix}[SKIP] {config_name} / {period} / run {run_idx} -- already exists"
+        )
         return
 
     effective_dataset_name = dataset_name or getattr(dataset, "name", "unknown")
@@ -931,7 +999,7 @@ def run_single_experiment(
         if accelerator == "cuda" and torch.cuda.is_bf16_supported():
             precision = "bf16-mixed"
         elif accelerator == "cuda":
-            precision = "32-true"           # fp16 overflows; fall back to fp32
+            precision = "32-true"  # fp16 overflows; fall back to fp32
         else:
             precision = "32-true"
 
@@ -1018,8 +1086,8 @@ def run_single_experiment(
             batch_size=batch_size,
             num_workers=num_workers,
             pin_memory=pin_memory,
-            col_means=dm.col_means if hasattr(dm, 'col_means') else None,
-            col_stds=dm.col_stds if hasattr(dm, 'col_stds') else None,
+            col_means=dm.col_means if hasattr(dm, "col_means") else None,
+            col_stds=dm.col_stds if hasattr(dm, "col_stds") else None,
         )
 
         # Trainer
@@ -1139,25 +1207,25 @@ def run_single_experiment(
         )
         final_val_loss = (
             convergence_tracker.val_losses[-1]
-            if convergence_tracker.val_losses else float("nan")
+            if convergence_tracker.val_losses
+            else float("nan")
         )
         final_train_loss = (
             convergence_tracker.train_losses[-1]
-            if convergence_tracker.train_losses else float("nan")
+            if convergence_tracker.train_losses
+            else float("nan")
         )
         best_epoch = (
             int(np.argmin(convergence_tracker.val_losses))
-            if convergence_tracker.val_losses else 0
+            if convergence_tracker.val_losses
+            else 0
         )
         loss_ratio = (
             final_val_loss / best_val_loss
             if best_val_loss > 0 and math.isfinite(best_val_loss)
             else float("nan")
         )
-        diverged = (
-            divergence_detector.diverged
-            or not math.isfinite(best_val_loss)
-        )
+        diverged = divergence_detector.diverged or not math.isfinite(best_val_loss)
 
         # Inference
         preds, targets = run_inference(model, test_dm, device)
@@ -1255,6 +1323,7 @@ def run_single_experiment(
 # Multi-GPU Support
 # ---------------------------------------------------------------------------
 
+
 def resolve_n_gpus(args):
     """Determine number of GPUs to use for parallel execution."""
     if args.accelerator not in ("auto", "cuda"):
@@ -1279,15 +1348,17 @@ def _build_job_list(periods, n_runs, dataset_name, batch_size_override):
         for pass_name, active_g in passes:
             for config_name, cfg in UNIFIED_CONFIGS.items():
                 for run_idx in range(n_runs):
-                    jobs.append({
-                        "period": period,
-                        "pass_name": pass_name,
-                        "active_g": active_g,
-                        "config_name": config_name,
-                        "cfg": cfg,
-                        "run_idx": run_idx,
-                        "batch_size": batch_size,
-                    })
+                    jobs.append(
+                        {
+                            "period": period,
+                            "pass_name": pass_name,
+                            "active_g": active_g,
+                            "config_name": config_name,
+                            "cfg": cfg,
+                            "run_idx": run_idx,
+                            "batch_size": batch_size,
+                        }
+                    )
     return jobs
 
 
@@ -1372,6 +1443,7 @@ def _gpu_worker(gpu_id, job_queue, shutdown_event, worker_args):
 # Main Orchestrator
 # ---------------------------------------------------------------------------
 
+
 def _resolve_benchmark_params(args, dataset_override=None):
     """Resolve common benchmark parameters from CLI args.
 
@@ -1392,8 +1464,10 @@ def _resolve_benchmark_params(args, dataset_override=None):
     if args.periods:
         periods = [p for p in args.periods if p in all_periods]
         if not periods:
-            print(f"[ERROR] No valid periods for dataset '{dataset_name}'. "
-                  f"Available: {list(all_periods.keys())}")
+            print(
+                f"[ERROR] No valid periods for dataset '{dataset_name}'. "
+                f"Available: {list(all_periods.keys())}"
+            )
             return None
     else:
         periods = list(all_periods.keys())
@@ -1401,7 +1475,9 @@ def _resolve_benchmark_params(args, dataset_override=None):
     # Resolve run count and training params
     if is_milk:
         n_runs = args.n_runs if args.n_runs is not None else MILK_N_RUNS
-        max_epochs = args.max_epochs if args.max_epochs != MAX_EPOCHS else MILK_MAX_EPOCHS
+        max_epochs = (
+            args.max_epochs if args.max_epochs != MAX_EPOCHS else MILK_MAX_EPOCHS
+        )
         patience = MILK_PATIENCE
     else:
         n_runs = args.n_runs if args.n_runs is not None else N_RUNS_DEFAULT
@@ -1533,19 +1609,30 @@ def _run_parallel(args, params, n_gpus):
 
     # Build flat job list
     jobs = _build_job_list(
-        periods, n_runs, dataset_name, params["batch_size_override"],
+        periods,
+        n_runs,
+        dataset_name,
+        params["batch_size_override"],
     )
 
     # Pre-filter completed jobs
     pending_jobs = [
-        job for job in jobs
-        if not result_exists(csv_path, job["pass_name"], job["config_name"],
-                             job["period"], job["run_idx"])
+        job
+        for job in jobs
+        if not result_exists(
+            csv_path,
+            job["pass_name"],
+            job["config_name"],
+            job["period"],
+            job["run_idx"],
+        )
     ]
 
     n_complete = len(jobs) - len(pending_jobs)
-    print(f"  Jobs: {len(jobs)} total, {len(pending_jobs)} pending, "
-          f"{n_complete} already complete")
+    print(
+        f"  Jobs: {len(jobs)} total, {len(pending_jobs)} pending, "
+        f"{n_complete} already complete"
+    )
 
     if not pending_jobs:
         print("  All jobs already complete!")
@@ -1617,7 +1704,9 @@ def _run_dataset_benchmark(args, params, n_gpus):
     print(f"\n{'='*70}")
     print(f"Unified Benchmark — {dataset_name.upper()}")
     print(f"  Periods: {periods}")
-    print(f"  Configs: {total_configs}  |  Passes: {total_passes}  |  Runs/config: {n_runs}")
+    print(
+        f"  Configs: {total_configs}  |  Passes: {total_passes}  |  Runs/config: {n_runs}"
+    )
     print(f"  Max epochs: {max_epochs}  |  Patience: {patience}")
     print(f"  Total runs per period: {total_configs * total_passes * n_runs}")
     if n_gpus >= 2:
@@ -1664,8 +1753,10 @@ def run_unified_benchmark(args):
                 print("[SHUTDOWN] Exiting before next dataset.")
                 return
 
-            print(f"\n  >>> Dataset {ds_idx}/{len(all_dataset_names)}: "
-                  f"{dataset_name.upper()} <<<")
+            print(
+                f"\n  >>> Dataset {ds_idx}/{len(all_dataset_names)}: "
+                f"{dataset_name.upper()} <<<"
+            )
 
             params = _resolve_benchmark_params(args, dataset_override=dataset_name)
             if params is None:
@@ -1691,62 +1782,75 @@ def run_unified_benchmark(args):
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Unified Benchmark for N-BEATS Lightning paper experiments"
     )
     parser.add_argument(
-        "--dataset", required=True,
+        "--dataset",
+        required=True,
         choices=["m4", "tourism", "milk", "traffic", "weather", "all"],
-        help="Dataset to benchmark (use 'all' to run all datasets sequentially)"
+        help="Dataset to benchmark (use 'all' to run all datasets sequentially)",
     )
     parser.add_argument(
-        "--periods", nargs="+", default=None,
-        help="Filter to specific periods (default: all for dataset)"
+        "--periods",
+        nargs="+",
+        default=None,
+        help="Filter to specific periods (default: all for dataset)",
     )
     parser.add_argument(
-        "--max-epochs", type=int, default=MAX_EPOCHS,
-        help=f"Maximum training epochs (default: {MAX_EPOCHS}; Milk auto-uses {MILK_MAX_EPOCHS})"
+        "--max-epochs",
+        type=int,
+        default=MAX_EPOCHS,
+        help=f"Maximum training epochs (default: {MAX_EPOCHS}; Milk auto-uses {MILK_MAX_EPOCHS})",
     )
     parser.add_argument(
-        "--batch-size", type=int, default=None,
-        help="Override default batch size"
+        "--batch-size", type=int, default=None, help="Override default batch size"
     )
     parser.add_argument(
-        "--n-runs", type=int, default=None,
-        help=f"Runs per config (default: {N_RUNS_DEFAULT}; Milk auto-uses {MILK_N_RUNS})"
+        "--n-runs",
+        type=int,
+        default=None,
+        help=f"Runs per config (default: {N_RUNS_DEFAULT}; Milk auto-uses {MILK_N_RUNS})",
     )
     parser.add_argument(
-        "--n-gpus", type=int, default=None,
-        help="Number of GPUs for parallel execution (default: auto-detect)"
+        "--n-gpus",
+        type=int,
+        default=None,
+        help="Number of GPUs for parallel execution (default: auto-detect)",
     )
     parser.add_argument(
-        "--accelerator", default="auto", choices=["auto", "cuda", "mps", "cpu"],
-        help="Accelerator (default: auto)"
+        "--accelerator",
+        default="auto",
+        choices=["auto", "cuda", "mps", "cpu"],
+        help="Accelerator (default: auto)",
     )
     parser.add_argument(
-        "--num-workers", type=int, default=0,
-        help="DataLoader workers (default: 0)"
+        "--num-workers", type=int, default=0, help="DataLoader workers (default: 0)"
     )
     parser.add_argument(
-        "--wandb", action="store_true",
-        help="Enable Weights & Biases logging"
+        "--wandb", action="store_true", help="Enable Weights & Biases logging"
     )
     parser.add_argument(
-        "--wandb-project", default="nbeats-lightning",
-        help="W&B project name"
+        "--wandb-project", default="nbeats-lightning", help="W&B project name"
     )
     parser.add_argument(
-        "--save-predictions", action="store_true", default=True,
-        help="Save NPZ predictions (default: True)"
+        "--save-predictions",
+        action="store_true",
+        default=True,
+        help="Save NPZ predictions (default: True)",
     )
     parser.add_argument(
-        "--no-save-predictions", action="store_false", dest="save_predictions",
-        help="Disable NPZ prediction saving"
+        "--no-save-predictions",
+        action="store_false",
+        dest="save_predictions",
+        help="Disable NPZ prediction saving",
     )
     parser.add_argument(
-        "--tensorboard", action="store_true",
-        help="Enable TensorBoard logging (disabled by default to save disk space)"
+        "--tensorboard",
+        action="store_true",
+        help="Enable TensorBoard logging (disabled by default to save disk space)",
     )
 
     args = parser.parse_args()
