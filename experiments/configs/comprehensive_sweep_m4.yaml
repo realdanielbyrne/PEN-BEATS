@@ -51,8 +51,7 @@ description: >
 
 dataset: m4
 periods:
-  - Yearly
-  - Quarterly
+
   - Monthly
 
 hardware:
