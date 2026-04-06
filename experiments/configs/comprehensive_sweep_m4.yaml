@@ -51,8 +51,7 @@ description: >
 
 dataset: m4
 periods:
-
-  - Monthly
+  - Daily
 
 hardware:
   pin_memory: true
