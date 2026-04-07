@@ -1,4 +1,4 @@
-# N-BEATS Architecture Explorations and the Impact of Block Type on Performance
+# Beyond Fourier and Polynomial: Wavelet and Autoencoder Basis Expansions for Parameter-Efficient N-BEATS
 
 **Daniel Byrne**
 
@@ -6,1002 +6,808 @@
 
 ## Abstract
 
-[TODO: Experiments ongoing. Abstract will be written upon completion of all benchmark runs across M4 periods.]
+N-BEATS demonstrated that a pure deep learning architecture built on doubly residual stacking of basis expansion blocks could match or exceed state-of-the-art statistical methods on major forecasting benchmarks. However, the original work explored only three basis types: polynomial (Trend), Fourier (Seasonality), and fully learned (Generic). We present a systematic exploration of alternative basis expansions and backbone architectures within the N-BEATS framework, introducing wavelet basis blocks with orthonormal discrete wavelet transform (DWT) bases, autoencoder-compressed backbone variants, and hybrid TrendWavelet blocks that combine polynomial and wavelet decompositions in a single block. We evaluate 112 configurations across 10 random seeds on four datasets spanning nine forecasting tasks: M4 (Yearly, Quarterly, Monthly, Weekly, Daily, Hourly), Tourism-Yearly, Weather-96, and Milk. Our wavelet-augmented architectures beat paper baselines on six of nine dataset-periods, while sub-1M parameter TrendWavelet models achieve within 0.5% of the best configurations on most datasets --- a 10--50$\times$ parameter reduction compared to the 26M-parameter original. These results expose fundamental overparameterization in the original N-BEATS design: 30-stack Generic configurations diverge in 40--50% of training runs on small datasets, while autoencoder-compressed variants with 10--50$\times$ fewer parameters converge reliably. We further characterize the convergence-vs-optimality trade-off of the `active_g` post-basis activation, the dataset-dependent reversal of backbone hierarchy preferences, and horizon-dependent stack architecture selection rules. Our implementation is released as the `lightningnbeats` PyTorch Lightning package.
 
 ---
 
 ## 1. Introduction
 
-Time series forecasting is one of the oldest and most consequential problems in quantitative science. From inventory planning and financial risk management to energy load scheduling and epidemiological surveillance, accurate forecasts translate directly into better decisions and measurable economic value. For decades, the field was dominated by classical statistical methods--exponential smoothing, ARIMA, and their many variants--that offered strong theoretical grounding, interpretability, and reliable performance on the small-to-moderate datasets typical of business applications. Deep learning, despite its transformative impact on computer vision and natural language processing, was widely regarded as unnecessary or even counterproductive for univariate time series, where the number of observations per series is often modest and the risk of overfitting substantial.
+Time series forecasting is one of the oldest and most consequential problems in quantitative science. From inventory planning and financial risk management to energy load scheduling and epidemiological surveillance, accurate forecasts translate directly into better decisions and measurable economic value. For decades, the field was dominated by classical statistical methods --- exponential smoothing, ARIMA, and their many variants --- that offered strong theoretical grounding, interpretability, and reliable performance on the small-to-moderate datasets typical of business applications. Deep learning, despite its transformative impact on computer vision and natural language processing, was widely regarded as unnecessary or even counterproductive for univariate time series, where the number of observations per series is often modest and the risk of overfitting substantial.
 
-The M4 competition (Makridakis et al., 2018; 2020) marked a turning point in this narrative. Among 60 submitted methods, the six "pure" machine learning entries ranked 23rd through 57th, seemingly confirming the skeptics' view. Yet the competition winner, Smyl's ES-RNN (2020), was a hybrid that fused an LSTM-based deep learning component with classical Holt-Winters exponential smoothing, outperforming all purely statistical methods. This result established that deep learning could contribute meaningfully to forecasting accuracy, but left open the question of whether a *pure* deep learning architecture--one requiring no hand-crafted statistical components--could achieve competitive or superior results.
+The M4 competition (Makridakis et al., 2018; 2020) marked a turning point. Among 60 submitted methods, the six "pure" machine learning entries ranked 23rd through 57th, seemingly confirming the skeptics' view. Yet the competition winner, Smyl's ES-RNN (2020), was a hybrid that fused an LSTM-based deep learning component with classical Holt-Winters exponential smoothing, outperforming all purely statistical methods. This result established that deep learning could contribute meaningfully to forecasting accuracy, but left open the question of whether a *pure* deep learning architecture --- one requiring no hand-crafted statistical components --- could achieve competitive or superior results.
 
-Oreshkin et al. (2019) answered this question with N-BEATS (Neural Basis Expansion Analysis for Time Series), a fully deep learning architecture that surpassed both the M4 winner and all prior statistical methods on the M4, M3, and Tourism benchmarks. N-BEATS introduced a distinctive design built on doubly residual stacking of basic blocks, each consisting of a multi-layer fully connected network that forks into backcast and forecast paths via learned or constrained basis expansion coefficients. The architecture offered two configurations: a Generic model using fully learnable basis functions, and an Interpretable model constraining basis functions to polynomial (Trend) and Fourier (Seasonality) forms. The success of N-BEATS demonstrated that the choice of basis function within each block is a critical design decision--one that determines how the network decomposes and reconstructs the input signal.
+Oreshkin et al. (2019) answered this question with N-BEATS (Neural Basis Expansion Analysis for Time Series), a fully deep learning architecture that surpassed both the M4 winner and all prior statistical methods on the M4, M3, and Tourism benchmarks. N-BEATS introduced a distinctive design built on doubly residual stacking of basic blocks, each consisting of a multi-layer fully connected network that forks into backcast and forecast paths via learned or constrained basis expansion coefficients. The architecture offered two configurations: a Generic model using fully learnable basis functions, and an Interpretable model constraining basis functions to polynomial (Trend) and Fourier (Seasonality) forms. The success of N-BEATS demonstrated that the choice of basis function within each block is a critical design decision --- one that determines how the network decomposes and reconstructs the input signal.
 
-This observation motivates the present work. If polynomial and Fourier bases can achieve state-of-the-art results when embedded within the N-BEATS doubly residual framework, what happens when we substitute alternative basis expansions? Wavelets offer multi-resolution time-frequency localization that neither polynomials nor Fourier series provide. Autoencoders learn compressed, data-driven representations that may capture structure not well-described by any fixed analytical basis. Bottleneck projections offer rank-constrained factorizations that trade expressiveness for parameter efficiency. Each of these alternatives embodies a different inductive bias about the structure of time series signals, and the N-BEATS framework provides a controlled setting in which to evaluate them head-to-head.
+This observation motivates the present work. If polynomial and Fourier bases can achieve state-of-the-art results when embedded within the N-BEATS doubly residual framework, what happens when we substitute alternative basis expansions? Wavelets offer multi-resolution time-frequency localization that neither polynomials nor Fourier series provide. Autoencoders learn compressed, data-driven representations that may capture structure not well-described by any fixed analytical basis. Combining these --- polynomial trend bases with orthonormal wavelet bases in a single block --- yields a hybrid decomposition that separates slow-varying macro-trends from transient micro-structure, all within one parameter-efficient unit.
 
-We present a systematic exploration of these alternative block types within the N-BEATS architecture, implemented as the `lightningnbeats` PyTorch Lightning package. Our contributions include: (1) novel block types--wavelet basis blocks (Haar, Daubechies, Coiflets, Symlets), autoencoder blocks with separated encoder-decoder paths, bottleneck generic blocks with rank-d factorized projections, and hybrid AE-backbone variants of all original block types; (2) a rigorous benchmark framework enabling 1:1 comparison with the original N-BEATS paper's configurations on the M4 dataset using paper-faithful hyperparameters; and (3) ablation studies examining the impact of training extensions (active_g post-basis activation, sum_losses backcast regularization) and alternative activation functions. This is a work in progress, with experiments currently running across all six M4 periods.
+We present a systematic exploration of these alternative block types and backbone architectures within the N-BEATS framework, implemented as the `lightningnbeats` PyTorch Lightning package. Our comprehensive benchmark evaluates 112 configurations across 10 random seeds on four datasets spanning nine forecasting tasks. The results reveal several findings that reshape the understanding of the N-BEATS architecture:
 
----
+1. **Wavelet dominance.** Wavelet-augmented architectures beat the original N-BEATS baselines on six of nine dataset-periods tested, including M4-Yearly, M4-Monthly, M4-Weekly, Tourism-Yearly, Weather-96, and Milk.
 
-## 2. Prior Work
+2. **Extreme parameter efficiency.** Sub-1M parameter TrendWavelet models with autoencoder-compressed backbones achieve within 0.5% of the best configurations on most datasets, representing a 10--50$\times$ parameter reduction compared to the 26M-parameter original N-BEATS-G.
 
-### 2.1 Classical Statistical Forecasting
+3. **Overparameterization exposed.** The original 30-stack Generic architecture diverges in 40--50% of training runs on small datasets (Milk, Tourism), while autoencoder-compressed variants with orders of magnitude fewer parameters converge reliably. This reveals that the original architecture is massively overparameterized for most forecasting tasks.
 
-The foundation of modern time series forecasting rests on statistical methods developed over the latter half of the 20th century. Exponential smoothing (Holt, 1957; Winters, 1960) and its state-space formulation ETS (Hyndman et al., 2002) provide a flexible framework for capturing level, trend, and seasonal components through weighted combinations of past observations with exponentially decaying weights. The Box-Jenkins ARIMA methodology (Box & Jenkins, 1976) and its seasonal extension SARIMA model time series as linear functions of their own past values and past forecast errors, with automatic model selection procedures (Hyndman & Khandakar, 2008) making these methods accessible to non-specialists. The Theta method (Assimakopoulos & Nikolopoulos, 2000), winner of the M3 competition, decomposes the original series into "theta lines"--modified versions of the series with amplified or dampened curvature--and combines their extrapolations. STL decomposition (Cleveland et al., 1990) provides a robust loess-based procedure for separating seasonal, trend, and remainder components that remains widely used for exploratory analysis and as a preprocessing step.
+4. **Dataset-dependent architecture selection.** No single configuration is universally optimal. Backbone hierarchy, stack architecture (unified vs. alternating), optimal depth, and wavelet family preferences all reverse across datasets, necessitating dataset-aware architecture selection.
 
-These methods share several important properties: they are computationally inexpensive, require minimal training data, produce interpretable decompositions, and perform reliably across a wide range of domains. Their primary limitation is their reliance on linear or locally linear assumptions about the data-generating process, which can constrain their ability to capture complex nonlinear dynamics.
+5. **Convergence regularization trade-offs.** The `active_g` post-basis activation mechanism eliminates catastrophic divergence but imposes a small expressiveness penalty, with the magnitude varying from negligible on large benchmarks (~1%) to prohibitive on small univariate series (54--76%).
 
-### 2.2 The M Competitions and the Rise of Deep Learning
-
-The Makridakis competitions have served as the primary empirical proving ground for forecasting methods since 1982. The M3 competition (Makridakis & Hibon, 2000) established that simple statistical methods, particularly the Theta method, could outperform more complex approaches across a diverse set of 3,003 time series. This finding reinforced a widespread skepticism toward complex models, including neural networks, for forecasting tasks.
-
-The M4 competition (Makridakis et al., 2018; 2020) dramatically expanded the scale to 100,000 univariate time series spanning six sampling frequencies (Yearly, Quarterly, Monthly, Weekly, Daily, Hourly) drawn from diverse domains including demographics, finance, industry, and macroeconomics. The competition introduced the Overall Weighted Average (OWA) metric, which normalizes sMAPE and MASE scores against a seasonally-adjusted Naive2 baseline so that OWA = 1.0 corresponds to naive forecast performance. The competition winner, Smyl's ES-RNN (2020), achieved an OWA of 0.821 by combining a dilated residual/attention LSTM stack with a per-series Holt-Winters statistical model whose parameters were jointly optimized via gradient descent. The second-place entry (Montero-Manso et al., 2020) used gradient boosted trees to combine the outputs of nine classical statistical methods. Notably, the six purely machine learning submissions ranked in the bottom half of entries, leading Makridakis et al. to suggest that hybrid approaches were "the way forward" for forecasting.
-
-### 2.3 Deep Learning Architectures for Time Series
-
-The landscape of deep learning approaches to time series forecasting has evolved rapidly. DeepAR (Salinas et al., 2020) uses autoregressive recurrent neural networks to produce probabilistic forecasts, modeling the conditional distribution of future values at each time step. WaveNet-inspired architectures (van den Oord et al., 2016) introduced dilated causal convolutions that capture long-range dependencies with manageable parameter counts. Temporal Fusion Transformers (Lim et al., 2021) combine variable selection networks, gating mechanisms, and multi-head attention to handle both static and time-varying covariates with interpretable attention patterns.
-
-More recently, the field has seen a shift toward simpler architectures that challenge the perceived necessity of complex temporal inductive biases. N-HiTS (Challu et al., 2023) extends N-BEATS with hierarchical interpolation and multi-rate signal sampling, achieving competitive results with improved computational efficiency. DLinear (Zeng et al., 2023) demonstrated that simple linear models applied to decomposed trend and seasonal components could match or exceed Transformer-based approaches on several benchmarks. PatchTST (Nie et al., 2023) applies Vision Transformer-style patching to time series, treating contiguous subsequences as tokens and achieving state-of-the-art long-horizon forecasting through channel independence and patch-level attention.
-
-### 2.4 N-BEATS: Neural Basis Expansion Analysis
-
-N-BEATS (Oreshkin et al., 2019) introduced a pure deep learning architecture for univariate time series forecasting that achieved state-of-the-art results without any time-series-specific components. The architecture is built from basic blocks, each consisting of four fully connected layers with ReLU activations followed by a fork into backcast and forecast paths. The key innovation is the *doubly residual stacking* principle: each block's backcast output is subtracted from the block's input before passing to the next block (backward residual connection, enabling iterative signal decomposition), while each block's forecast output is summed into the global forecast (forward residual connection, enabling hierarchical forecast aggregation). The final forecast is the sum of all blocks' partial forecasts: $\hat{y} = \sum_\ell \hat{y}_\ell$.
-
-Within each block, the four FC layers produce a hidden representation $h$ from which expansion coefficients $\theta^b$ and $\theta^f$ are computed via linear projections. These coefficients are then multiplied by basis function matrices to produce the backcast $\hat{x} = g^b(\theta^b)$ and forecast $\hat{y} = g^f(\theta^f)$. The architecture offers two configurations:
-
-- **N-BEATS-G (Generic)**: Basis functions $g^b$ and $g^f$ are fully learnable linear projections. The columns of the learned weight matrix $V^f$ can be interpreted as waveform basis vectors in the time domain, but carry no inherent structural constraint.
-- **N-BEATS-I (Interpretable)**: Basis functions are constrained to specific functional forms. The Trend stack uses Vandermonde polynomial matrices $T = [1, t, t^2, \ldots, t^p]$ to produce slowly-varying outputs. The Seasonality stack uses Fourier basis matrices $S = [1, \cos(2\pi t), \ldots, \cos(2\pi \lfloor H/2-1 \rfloor t), \sin(2\pi t), \ldots, \sin(2\pi \lfloor H/2-1 \rfloor t)]$ to produce periodic outputs.
-
-The original paper reported that a 180-model ensemble (combining models trained on three loss functions, six backcast lengths from 2H to 7H, and multiple random seeds) achieved OWA of 0.795 on the M4 dataset, with individual architectures (N-BEATS-G, N-BEATS-I) each independently outperforming the M4 competition winner. The same architecture and hyperparameters generalized across M3 and Tourism datasets without modification.
-
-### 2.5 Wavelets in Signal Processing and Time Series
-
-Wavelets provide a mathematical framework for multi-resolution analysis of signals, offering simultaneous localization in both time and frequency domains--a property that neither purely temporal (polynomial) nor purely spectral (Fourier) bases possess. The discrete wavelet transform (DWT) decomposes a signal into approximation coefficients (capturing low-frequency trend) and detail coefficients (capturing high-frequency fluctuations) at progressively coarser scales (Mallat, 1989; Daubechies, 1992).
-
-Different wavelet families offer different trade-offs between time and frequency localization. Haar wavelets are the simplest, consisting of step functions, and provide maximal time localization at the cost of poor frequency resolution. Daubechies wavelets (db2, db3, db4, ...) provide increasingly smooth basis functions with wider support, trading time localization for better frequency resolution. Coiflets are designed for near-symmetry and vanishing moments in both the scaling and wavelet functions. Symlets are near-symmetric modifications of Daubechies wavelets.
-
-In the context of time series forecasting, wavelets have been used primarily as preprocessing transforms--decomposing series into sub-bands that are forecast independently and then reconstructed (Aminghafari et al., 2006). More recently, Pramanick et al. (2024) applied this decomposition strategy directly to N-BEATS, using DWT to separate stock price series into approximation and detail components and training separate N-BEATS models on each subband before recombining forecasts. Their approach treats N-BEATS as an unmodified black-box forecaster within a wavelet preprocessing pipeline. In contrast, the present work integrates wavelet basis functions directly into the N-BEATS block architecture, replacing the basis expansion function rather than preprocessing the input--preserving the doubly residual topology and enabling end-to-end training within a single model. The idea of using wavelet functions directly as basis expansions within a neural network block is less explored. By replacing the Fourier or polynomial basis in an N-BEATS block with a wavelet basis, we aim to provide the network with time-frequency localized basis functions that may better capture transient phenomena, regime changes, and localized oscillations in the input series.
-
-### 2.6 Autoencoders for Time Series
-
-Autoencoders (Hinton & Salakhutdinov, 2006) learn compressed representations of input data by training an encoder to map inputs to a lower-dimensional latent space and a decoder to reconstruct the original inputs from this representation. The bottleneck forces the network to learn salient features while discarding noise. In time series contexts, autoencoders have been applied to anomaly detection (Malhotra et al., 2016), representation learning for downstream classification tasks, and denoising (Vincent et al., 2008).
-
-The application of autoencoder architectures within the N-BEATS framework takes two forms in this work. First, we replace the standard four-FC-layer backbone with an encoder-decoder architecture (the AERootBlock), where the input is progressively compressed through layers of decreasing width before being expanded back to the original width. Second, we introduce dedicated AutoEncoder blocks where the post-backbone fork into backcast and forecast paths is itself structured as separate encoder-decoder pipelines, with optional weight sharing between the backcast and forecast encoders. These designs explore whether the compression bottleneck provides useful regularization or feature extraction within the doubly residual stacking framework.
+Our contributions include: (a) novel block types --- orthonormal wavelet basis blocks (WaveletV3), hybrid TrendWavelet blocks, three-way TrendWaveletGeneric blocks, and autoencoder/learned-gate/variational backbone variants of all original and novel block types; (b) a rigorous benchmark framework evaluating 112 configurations across 10 seeds on four diverse datasets; (c) diagnosis and characterization of overparameterization in the original N-BEATS architecture; and (d) practical architecture selection guidelines for practitioners.
 
 ---
 
-## 3. Method: N-BEATS Architecture and Extensions
+## 2. Related Work
 
-### 3.1 Original N-BEATS Architecture
+### 2.1 N-BEATS and Variants
 
-The N-BEATS architecture (Oreshkin et al., 2019) is composed of blocks organized into stacks. Each basic block accepts an input vector $x_\ell \in \mathbb{R}^t$ (where $t$ is the lookback window length) and outputs a backcast $\hat{x}_\ell \in \mathbb{R}^t$ and a forecast $\hat{y}_\ell \in \mathbb{R}^H$ (where $H$ is the forecast horizon).
+N-BEATS (Oreshkin et al., 2019) introduced a pure deep learning architecture for univariate time series forecasting built on doubly residual stacking of basis expansion blocks. Each block consists of four fully connected layers followed by a fork into backcast and forecast paths via basis expansion coefficients. The backward residual connection (subtracting each block's backcast from its input) implements iterative signal decomposition, while the forward residual connection (summing all blocks' forecasts) implements hierarchical forecast aggregation. The architecture achieved state-of-the-art results on M4, M3, and Tourism benchmarks without any time-series-specific components, using only two configurations: Generic (fully learnable basis) and Interpretable (polynomial Trend + Fourier Seasonality basis).
 
-**Basic Block.** The core computation within each block begins with four fully connected layers, each followed by a ReLU activation:
+N-HiTS (Challu et al., 2023) extends N-BEATS with multi-rate input pooling and hierarchical forecast interpolation, achieving competitive results with improved computational efficiency. Crucially, the N-HiTS modifications operate at the stack level (pooling inputs and interpolating outputs) rather than at the block level, meaning the block interface --- accepting a backcast-length input and producing backcast/forecast outputs --- remains unchanged. This architectural separation means that novel block types developed for N-BEATS can be deployed in N-HiTS without modification.
 
-$$h_1 = \text{ReLU}(W_1 x + b_1), \quad h_2 = \text{ReLU}(W_2 h_1 + b_2), \quad h_3 = \text{ReLU}(W_3 h_2 + b_3), \quad h_4 = \text{ReLU}(W_4 h_3 + b_4)$$
+ES-RNN (Smyl, 2020), the M4 competition winner, demonstrated that hybrid architectures combining deep learning with classical statistical components could outperform either approach alone. More recently, DLinear (Zeng et al., 2023) showed that simple linear models applied to decomposed trend and seasonal components could match Transformer-based approaches, and PatchTST (Nie et al., 2023) achieved state-of-the-art long-horizon forecasting through patch-level attention with channel independence. These results collectively suggest that architectural inductive biases aligned with time series structure --- decomposition, multi-scale representation, basis expansion --- are more important than model complexity per se.
 
-The hidden representation $h_4 \in \mathbb{R}^{units}$ is then projected to produce expansion coefficients $\theta^b = W^b h_4$ and $\theta^f = W^f h_4$ via linear layers (without bias in the original Generic formulation). These coefficients are passed through basis functions to produce the outputs:
+### 2.2 Wavelets in Time Series Forecasting
+
+Wavelets provide a mathematical framework for multi-resolution analysis of signals, offering simultaneous localization in both time and frequency domains --- a property that neither purely temporal (polynomial) nor purely spectral (Fourier) bases possess. The discrete wavelet transform (DWT) decomposes a signal into approximation coefficients (capturing low-frequency trend) and detail coefficients (capturing high-frequency fluctuations) at progressively coarser scales (Mallat, 1989; Daubechies, 1992).
+
+In forecasting, wavelets have been used primarily as preprocessing transforms --- decomposing series into sub-bands that are forecast independently and then reconstructed (Aminghafari et al., 2006). Pramanick et al. (2024) applied this decomposition strategy directly to N-BEATS, using DWT to separate stock price series into approximation and detail components and training separate N-BEATS models on each sub-band before recombining forecasts. Their approach treats N-BEATS as an unmodified black-box forecaster within a wavelet preprocessing pipeline.
+
+In contrast, the present work integrates wavelet basis functions directly into the N-BEATS block architecture, replacing the basis expansion function rather than preprocessing the input. This preserves the doubly residual topology and enables end-to-end training within a single model. The idea of using wavelet functions directly as basis expansions within neural network blocks is less explored. By replacing the Fourier or polynomial basis with an orthonormal wavelet basis, we provide the network with time-frequency localized basis functions that capture transient phenomena, regime changes, and localized oscillations that neither polynomial nor Fourier bases can efficiently represent.
+
+### 2.3 Autoencoders and Compression in Neural Forecasting
+
+Autoencoders (Hinton & Salakhutdinov, 2006) learn compressed representations of input data through an encoder-decoder architecture with a bottleneck layer. The compression forces the network to learn salient features while discarding noise. In time series contexts, autoencoders have been applied to anomaly detection (Malhotra et al., 2016), representation learning, and denoising (Vincent et al., 2008).
+
+We apply the autoencoder principle in two ways within N-BEATS. First, we replace the standard four-FC-layer backbone with an encoder-decoder architecture (AERootBlock), where the input is progressively compressed through an hourglass structure to a low-dimensional latent space before expansion. Second, we introduce a learned-gate variant (AERootBlockLG) that applies a sigmoid-gated mask at the latent bottleneck, allowing the network to discover the effective latent dimensionality during training. These compressed backbones serve as implicit regularizers, achieving dramatic parameter reduction while maintaining forecasting accuracy --- a property that proves central to our overparameterization findings.
+
+### 2.4 Overparameterization in Deep Learning
+
+The observation that neural networks can perform well with far fewer parameters than their full capacity suggests has been extensively studied. The lottery ticket hypothesis (Frankle & Carlin, 2019) demonstrated that sparse subnetworks within overparameterized models can match the full model's accuracy. Network pruning (Han et al., 2015) and knowledge distillation (Hinton et al., 2015) provide practical approaches to model compression.
+
+In time series forecasting, overparameterization is particularly concerning because datasets are often small relative to model capacity. The original N-BEATS-G configuration uses approximately 26M parameters for a 6-step-ahead forecast --- roughly 4.3M parameters per output dimension. On the Milk dataset (a single series with 156 training observations), this represents a 167,000$\times$ ratio of parameters to observations. Our results demonstrate that this extreme overparameterization is not merely wasteful but actively harmful: it induces training instability that causes 40--50% of runs to diverge on small datasets. Autoencoder-compressed variants with 400K--2M parameters eliminate this instability while maintaining equivalent accuracy, providing direct evidence that the vast majority of parameters in the original architecture are redundant.
+
+---
+
+## 3. Method
+
+### 3.1 N-BEATS Preliminaries
+
+The N-BEATS architecture (Oreshkin et al., 2019) is composed of blocks organized into stacks. Each basic block accepts an input vector $x_\ell \in \mathbb{R}^L$ (where $L$ is the lookback window length) and outputs a backcast $\hat{x}_\ell \in \mathbb{R}^L$ and a forecast $\hat{y}_\ell \in \mathbb{R}^H$ (where $H$ is the forecast horizon).
+
+**Basic Block.** The core computation within each block begins with four fully connected layers, each followed by an activation function $\sigma$ (default ReLU):
+
+$$h_1 = \sigma(W_1 x + b_1), \quad h_2 = \sigma(W_2 h_1 + b_2), \quad h_3 = \sigma(W_3 h_2 + b_3), \quad h_4 = \sigma(W_4 h_3 + b_4)$$
+
+The hidden representation $h_4 \in \mathbb{R}^{w}$ (where $w$ is the layer width, or `units`) is then projected to produce expansion coefficients that are passed through basis functions to produce outputs:
 
 $$\hat{x}_\ell = g^b(\theta^b_\ell), \quad \hat{y}_\ell = g^f(\theta^f_\ell)$$
 
-**Basis Functions.** The choice of $g^b$ and $g^f$ determines the block type:
+**Original Basis Functions.** The choice of $g^b$ and $g^f$ determines the block type:
 
-- *Generic*: $g^b$ and $g^f$ are learnable linear projections. The expansion coefficients $\theta^f$ and $\theta^b$ are projected directly to the target lengths: $\hat{y} = V^f \theta^f$ where $V^f \in \mathbb{R}^{H \times \dim(\theta^f)}$ is a learned weight matrix. In our implementation, the Generic block follows the paper faithfully by using separate linear layers that project directly from units to `backcast_length` and `forecast_length` respectively--the projection matrices serve as both the theta extraction and basis expansion in a single step, with no intermediate bottleneck dimension.
+- *Generic*: Basis functions are fully learnable linear projections. The coefficients $\theta$ are projected directly to the target length: $\hat{y} = V^f \theta^f$ where $V^f \in \mathbb{R}^{H \times w}$ is a learned weight matrix. In our implementation, the Generic block follows the original paper faithfully --- the projection matrices serve as both theta extraction and basis expansion in a single step, with no intermediate bottleneck.
 
-- *Trend*: $g^b$ and $g^f$ are polynomial (Vandermonde) basis expansions. The expansion coefficients $\theta \in \mathbb{R}^p$ represent polynomial coefficients, and the basis matrix is $T = [1, t, t^2, \ldots, t^{p-1}]^T$ where $t$ is a normalized time vector on $[0, 1)$. With small polynomial degree $p$ (typically 2-3), the output is constrained to slowly varying functions suitable for modeling trend.
+- *Trend*: Basis functions are polynomial Vandermonde matrices. The expansion coefficients $\theta \in \mathbb{R}^p$ represent polynomial coefficients, and the basis matrix is $T = [1, t, t^2, \ldots, t^{p-1}]^T$ where $t$ is a normalized time vector on $[0, 1)$. With small polynomial degree $p$ (typically 2--3), the output is constrained to slowly varying functions.
 
-- *Seasonality*: $g^b$ and $g^f$ are Fourier basis expansions. The basis matrix consists of cosine and sine vectors at integer multiples of the fundamental frequency: $S = [1, \cos(2\pi t), \ldots, \cos(2\pi \lfloor L/2-1 \rfloor t), \sin(2\pi t), \ldots, \sin(2\pi \lfloor L/2-1 \rfloor t)]^T$ where $L$ is the target length. The expansion coefficients $\theta$ represent Fourier coefficients, constraining the output to periodic functions.
+- *Seasonality*: Basis functions are Fourier matrices. The basis consists of cosine and sine vectors at integer multiples of the fundamental frequency: $S = [1, \cos(2\pi t), \ldots, \cos(2\pi \lfloor L/2-1 \rfloor t), \sin(2\pi t), \ldots, \sin(2\pi \lfloor L/2-1 \rfloor t)]^T$.
 
-**Doubly Residual Stacking.** Blocks are organized into stacks, and the doubly residual topology connects them via residual connections inspired by deep residual learning (He et al., 2016):
+**Doubly Residual Stacking.** Blocks are connected via residual connections:
 
 $$x_\ell = x_{\ell-1} - \hat{x}_{\ell-1}, \quad \hat{y} = \sum_\ell \hat{y}_\ell$$
 
-Each block subtracts its backcast from the input (removing the signal component it has modeled) before passing the residual to the next block. All forecast partial outputs are summed to produce the final forecast. This creates an iterative decomposition: early blocks capture the most prominent signal components, while later blocks model progressively finer residual structure.
+Each block subtracts its backcast from the input (removing the signal component it has modeled) before passing the residual to the next block. All forecast partial outputs are summed to produce the final forecast. This creates an iterative decomposition: early blocks capture prominent signal components, while later blocks model progressively finer residual structure.
 
-**Weight Sharing.** When weight sharing is enabled within a stack, all blocks in that stack use the same parameters. The original paper found that weight sharing improved validation performance for the interpretable architecture (3 blocks per stack for both Trend and Seasonality stacks, with shared weights).
+### 3.2 Novel Backbone Architectures
 
-### 3.2 Novel Block Extensions
+The original N-BEATS block uses a backbone of four fully connected layers of equal width $w$ (the `units` parameter), which we term **RootBlock**. We introduce three alternative backbone architectures that replace this uniform-width design with hourglass-shaped encoder-decoder structures, each providing different regularization properties.
 
-We introduce several families of novel block types that explore alternative basis expansions and backbone architectures within the N-BEATS doubly residual framework.
+[**Figure 1**: Architecture diagram showing the four backbone variants side-by-side. Left: RootBlock with uniform $w$-width layers. Center-left: AERootBlock with hourglass $w/2 \rightarrow d \rightarrow w/2 \rightarrow w$ structure. Center-right: AERootBlockLG with the same hourglass plus a learned gate $\sigma(\mathbf{g})$ applied at the latent bottleneck. Right: AERootBlockVAE with split $\mu$/$\log\sigma^2$ heads and reparameterization at the bottleneck. Parameter counts annotated for each variant with $L=30$, $w=512$, $d=16$. *To be produced.*]
 
-#### 3.2.1 BottleneckGeneric Block
+#### 3.2.1 AERootBlock (Autoencoder Backbone)
 
-The paper-faithful Generic block projects directly from hidden units to the target length in a single linear layer. The BottleneckGeneric block introduces an intermediate bottleneck dimension `thetas_dim` $= d$, factoring this projection into two steps:
+The AERootBlock replaces the four equal-width layers with an encoder-decoder hourglass:
 
-$$\theta^b = W_1^b h_4, \quad \hat{x} = W_2^b \theta^b, \quad \theta^f = W_1^f h_4, \quad \hat{y} = W_2^f \theta^f$$
+$$h_1 = \sigma(W_1 x + b_1), \quad W_1 \in \mathbb{R}^{w/2 \times L}$$
+$$h_2 = \sigma(W_2 h_1 + b_2), \quad W_2 \in \mathbb{R}^{d \times w/2}$$
+$$h_3 = \sigma(W_3 h_2 + b_3), \quad W_3 \in \mathbb{R}^{w/2 \times d}$$
+$$h_4 = \sigma(W_4 h_3 + b_4), \quad W_4 \in \mathbb{R}^{w \times w/2}$$
 
-where $W_1 \in \mathbb{R}^{d \times units}$ and $W_2 \in \mathbb{R}^{target\_length \times d}$ (with $W_2$ having no bias). This is equivalent to a rank-$d$ factorization of the basis expansion matrix: instead of learning a full $target\_length \times units$ matrix, the network learns the product of two smaller matrices, providing a tunable knob to control basis complexity. With `thetas_dim` = 5 (the default), this dramatically constrains the effective rank of the basis while potentially acting as a regularizer. When `share_weights` is True, the first-stage linear layers $W_1^b$ and $W_1^f$ share parameters.
+where $d$ is the latent dimension (`latent_dim`). This creates a compression bottleneck ($L \rightarrow w/2 \rightarrow d \rightarrow w/2 \rightarrow w$) that forces the network to learn a compact representation. With typical settings ($w = 512$, $d = 16$), the bottleneck compresses the representation to just 16 dimensions before expansion.
 
-#### 3.2.2 AutoEncoder Block
+**Parameter comparison.** The RootBlock backbone contains $Lw + 3w^2$ weight parameters (plus biases). The AERootBlock contains $Lw/2 + dw + w^2/2$ weight parameters. For $L = 30$, $w = 512$, $d = 16$:
 
-The AutoEncoder block retains the standard four-FC-layer backbone from RootBlock but replaces the simple linear basis expansion with a two-stage encoder-decoder pipeline for each of the backcast and forecast paths:
+| Backbone | Weight parameters | Ratio |
+|----------|:--:|:--:|
+| RootBlock | $30 \times 512 + 3 \times 512^2 = 801{,}792$ | 1.0$\times$ |
+| AERootBlock | $30 \times 256 + 16 \times 512 + 256^2 = 81{,}408$ | 0.10$\times$ |
 
-$$z^b = \text{Encoder}^b(h_4), \quad \hat{x} = \text{Decoder}^b(z^b)$$
-$$z^f = \text{Encoder}^f(h_4), \quad \hat{y} = \text{Decoder}^f(z^f)$$
+The AE backbone achieves a 10$\times$ reduction in backbone parameters alone. When combined with the projection heads and stacked into a full model, this translates to 5--50$\times$ total parameter reduction depending on the basis type.
 
-Each encoder is a linear layer ($units \rightarrow thetas\_dim$) followed by ReLU. Each decoder consists of a linear layer ($thetas\_dim \rightarrow units$), ReLU, and a final linear layer ($units \rightarrow target\_length$). When `share_weights` is True, the backcast and forecast encoders share parameters, though the decoders remain separate since they map to different target lengths. This design provides a latent bottleneck representation analogous to the BottleneckGeneric but with nonlinear encoding and a richer decoding path.
+#### 3.2.2 AERootBlockLG (Learned-Gate Backbone)
 
-#### 3.2.3 GenericAEBackcast Block
+The AERootBlockLG extends AERootBlock with a learnable gate vector $\mathbf{g} \in \mathbb{R}^d$ applied at the latent bottleneck:
 
-The GenericAEBackcast is a hybrid block that uses an autoencoder-style path for backcast reconstruction while retaining a bottleneck linear projection for the forecast:
+$$h_2' = h_2 \odot \sigma_g(\mathbf{g})$$
 
-- **Backcast path**: $h_4 \rightarrow \text{ReLU}(\text{Linear}(units, thetas\_dim)) \rightarrow \text{ReLU}(\text{Linear}(thetas\_dim, units)) \rightarrow \text{Linear}(units, backcast\_length)$
-- **Forecast path**: $h_4 \rightarrow \text{Linear}(units, thetas\_dim) \rightarrow \text{Linear}(thetas\_dim, forecast\_length)$
+where $\sigma_g$ is a gating function (default: sigmoid) and $\odot$ denotes element-wise multiplication. The gate is initialized as $\mathbf{g} = \mathbf{1}$ (all ones, so $\sigma(\mathbf{1}) \approx 0.73$, passing most information initially). During training, the network learns to suppress uninformative latent dimensions by driving their gate values toward zero, effectively discovering the minimal latent dimensionality required for the task.
 
-The rationale is that backcast reconstruction (estimating the input from a compressed representation) is fundamentally a reconstruction task well-suited to autoencoder architectures, while the forecast path may benefit from the simpler bottleneck projection that directly maps compressed coefficients to future values.
+This adds only $d$ trainable parameters (the gate vector) beyond the AERootBlock, but provides a soft mechanism for automatic dimensionality selection. On datasets where fewer latent dimensions suffice, the gate learns to zero out redundant dimensions; on more complex datasets, it retains a larger effective latent space.
 
-#### 3.2.4 AERootBlock Variants
+#### 3.2.3 AERootBlockVAE (Variational Backbone)
 
-All blocks described above use the standard RootBlock backbone: four FC layers of equal width `units`. We introduce a parallel hierarchy of blocks using the AERootBlock backbone, which replaces the four equal-width layers with an encoder-decoder structure:
+The variational backbone replaces the deterministic bottleneck with a stochastic latent space. The encoder produces mean and log-variance vectors:
 
-$$h_1 = \text{ReLU}(W_1 x + b_1), \quad W_1 \in \mathbb{R}^{units/2 \times backcast\_length}$$
-$$h_2 = \text{ReLU}(W_2 h_1 + b_2), \quad W_2 \in \mathbb{R}^{latent\_dim \times units/2}$$
-$$h_3 = \text{ReLU}(W_3 h_2 + b_3), \quad W_3 \in \mathbb{R}^{units/2 \times latent\_dim}$$
-$$h_4 = \text{ReLU}(W_4 h_3 + b_4), \quad W_4 \in \mathbb{R}^{units \times units/2}$$
+$$\mu = W_\mu h_1', \quad \log \sigma^2 = W_{\log\sigma^2} h_1'$$
 
-This creates an hourglass shape ($backcast\_length \rightarrow units/2 \rightarrow latent\_dim \rightarrow units/2 \rightarrow units$) that forces the network to learn a compressed representation of the input before the fork into backcast and forecast paths. With `latent_dim` = 4 and `units` = 512, the bottleneck compresses the representation to just 4 dimensions in the middle layers, compared to the standard backbone's uniform 512-dimensional hidden states.
+During training, the latent representation is sampled via the reparameterization trick:
 
-Every block type from the standard hierarchy has an AE-backbone counterpart: GenericAE, BottleneckGenericAE, TrendAE, SeasonalityAE, AutoEncoderAE, and GenericAEBackcastAE. These use the same post-backbone basis expansions as their standard counterparts but with the AERootBlock backbone. This results in significantly fewer parameters--for example, GenericAE with `units` = 512 and `latent_dim` = 4 has approximately 4.8M parameters at 30 stacks, compared to 24.7M for the standard Generic at the same scale.
+$$z = \mu + \sigma \odot \epsilon, \quad \epsilon \sim \mathcal{N}(0, I)$$
 
-#### 3.2.5 Wavelet Blocks
+During evaluation, $z = \mu$ (deterministic). The KL divergence loss $D_{KL}(q(z|x) \| p(z)) = -\frac{1}{2}\sum(1 + \log\sigma^2 - \mu^2 - \sigma^2)$ is accumulated across all VAE blocks in the model and added to the forecast loss with weight $\lambda_{KL}$ (default 0.001). Our comprehensive sweep results show that VAE backbones consistently underperform their deterministic counterparts (+2--50% SMAPE penalty across all datasets), with double-VAE alternating stacks exhibiting catastrophic performance degradation (7--8$\times$ worse on short horizons). We include the VAE backbone for completeness but do not recommend it for forecasting applications.
 
-Wavelet blocks replace the learnable or fixed analytical basis functions with discrete wavelet basis matrices derived from specific wavelet families. We implement two wavelet block designs:
+### 3.3 Novel Basis Expansion Blocks
 
-**Standard Wavelet (square basis with learned downsampling).** The wavelet basis generator constructs a square basis matrix $W \in \mathbb{R}^{basis\_dim \times basis\_dim}$ from the scaling function $\phi$ and wavelet function $\psi$ of the chosen wavelet family. The functions are evaluated at `basis_dim` uniformly spaced points via interpolation from PyWavelets' high-resolution wavelet function evaluations. The first half of the basis columns are filled with cyclic shifts of $\phi$; the second half with cyclic shifts of $\psi$. The forward pass proceeds as:
+We introduce several families of novel block types that explore alternative basis expansions within the N-BEATS doubly residual framework. Each block type can be instantiated with any of the four backbone architectures described above, yielding a combinatorial design space.
 
-$$\theta = \text{Linear}(h_4, basis\_dim), \quad z = W^T \theta, \quad \hat{y} = \text{Linear}(z, target\_length)$$
+#### 3.3.1 WaveletV3: Orthonormal DWT Basis Expansion
 
-The square wavelet basis produces a `basis_dim`-dimensional output that requires a learned downsampling layer to map to the target length. This adds trainable parameters but allows the network to learn which components of the wavelet expansion are most relevant for the target.
+**Motivation.** Wavelets offer multi-resolution time-frequency localization that is well-suited to time series with transient phenomena, regime changes, or localized oscillations. Unlike Fourier bases which assume global periodicity, wavelet bases can capture structure that is localized in both time and frequency.
 
-**AltWavelet (rectangular basis with direct projection).** The alternative wavelet generator constructs a rectangular basis matrix $W \in \mathbb{R}^{basis\_dim \times target\_length}$ using the same wavelet functions but with columns indexed by the target length rather than the basis dimension. This allows direct projection without a learned downsampling layer:
+**V1/V2 Failure and the Conditioning Problem.** Our initial wavelet block implementations (V1 and V2) constructed basis matrices by evaluating the scaling function $\phi$ and wavelet function $\psi$ at uniformly spaced points and assembling cyclic shifts into a square or rectangular matrix. This naive construction produced severely ill-conditioned basis matrices --- the DB3 wavelet basis had a condition number of approximately 604,000. When these matrices were used as frozen basis expansions in gradient-trained blocks, the ill-conditioning amplified gradient magnitudes during backpropagation, causing 67--100% training failure rates. Failure modes ranged from immediate NaN at epoch 1 (Haar, DB3Alt) to gradual MASE explosion to $10^{31}$ (DB3, Symlet3). These failures demonstrated that **basis matrix conditioning is a prerequisite for integration into gradient-trained architectures**.
 
-$$\theta = \text{Linear}(h_4, basis\_dim), \quad \hat{y} = W^T \theta$$
+**V3 Solution: Impulse-Response Synthesis + SVD Orthogonalization.** The WaveletV3 basis generator resolves the conditioning problem through a two-stage construction:
 
-Concrete wavelet block subclasses are thin wrappers that set the wavelet type string: HaarWavelet, DB2Wavelet, DB3Wavelet, DB4Wavelet, DB10Wavelet (Daubechies family), Coif1Wavelet through Coif10Wavelet (Coiflets), and Symlet2Wavelet through Symlet20Wavelet (Symlets). Each exists in both standard (Wavelet) and alternative (AltWavelet) variants, yielding a library of over 30 wavelet block types registered in the block constant registry.
+1. **Impulse-response synthesis.** For a target length $n$ and wavelet family, compute the DWT coefficient structure via `pywt.wavedec`. For each coefficient position across all decomposition levels, construct an impulse (a single 1.0 in the coefficient vector, zeros elsewhere) and reconstruct the corresponding time-domain waveform via `pywt.waverec`. Stack all reconstructed waveforms as rows of a raw synthesis matrix $R \in \mathbb{R}^{m \times n}$ where $m$ is the total number of DWT coefficients.
 
-### 3.3 Training Extensions
+2. **SVD orthogonalization.** Compute the SVD $R = U \Sigma V^T$. The rows of $V^T$ form an orthonormal basis for the column space of $R$, ordered by singular value magnitude (low-to-high frequency). All non-trivial singular values are equal (typically 1.0), yielding a basis with condition number exactly 1.0.
 
-#### 3.3.1 Active G (`active_g`)
+The resulting basis matrix $B \in \mathbb{R}^{k \times n}$ is selected as a contiguous frequency band from $V^T$:
 
-The original N-BEATS paper does not apply any activation function after the basis expansion--the outputs of $g^b$ and $g^f$ are linear combinations of basis vectors. We introduce an optional `active_g` parameter that, when enabled, applies the block's activation function (default ReLU) to the backcast and/or forecast outputs after the basis expansion:
+$$B = V^T[\text{offset} : \text{offset} + k, :]$$
+
+where $k$ is the `basis_dim` parameter and `offset` controls the frequency band (offset = 0 selects the lowest frequencies). This basis is stored as a frozen `nn.Parameter` (non-trainable). Different wavelet families (Haar, Daubechies, Coiflets, Symlets) produce different orthonormal bases with distinct time-frequency localization properties, but all share the crucial property of unit condition number.
+
+[**Figure 2**: Comparison of V1 and V3 basis matrices for DB3 wavelet at target length 30. Left: V1 basis matrix heatmap showing irregular structure with condition number $\kappa \approx 604{,}000$. Right: V3 orthonormal basis with condition number $\kappa = 1.0$. Bottom: Singular value spectrum for each, showing V1's spread versus V3's uniform spectrum. *To be produced.*]
+
+**WaveletV3 Block Forward Pass.** The WaveletV3 block uses a RootBlock (or AE variant) backbone followed by linear projection to `basis_dim` coefficients and basis expansion:
+
+$$h = \text{Backbone}(x), \quad \theta^b = W^b h, \quad \theta^f = W^f h$$
+$$\hat{x} = B^b \theta^b, \quad \hat{y} = B^f \theta^f$$
+
+where $B^b \in \mathbb{R}^{k_b \times L}$ and $B^f \in \mathbb{R}^{k_f \times H}$ are independent frozen wavelet bases for the backcast and forecast paths. The `basis_dim` parameter controls the number of basis vectors used, effectively selecting the frequency bandwidth of the decomposition. Separate `forecast_basis_dim` allows asymmetric regularization when $L \gg H$.
+
+Concrete wavelet block subclasses (HaarWaveletV3, DB3WaveletV3, Coif2WaveletV3, etc.) are thin wrappers that set the wavelet type string. The generic WaveletV3 class accepts `wavelet_type` as a parameter, supporting any family available in PyWavelets.
+
+#### 3.3.2 TrendWavelet: Unified Polynomial + DWT Decomposition
+
+The TrendWavelet block combines polynomial and wavelet basis expansions within a single block, implementing an additive decomposition:
+
+$$\hat{x} = T^b \theta^b_{\text{trend}} + B^b \theta^b_{\text{wavelet}}, \quad \hat{y} = T^f \theta^f_{\text{trend}} + B^f \theta^f_{\text{wavelet}}$$
+
+where $T$ is a Vandermonde polynomial basis and $B$ is an orthonormal wavelet basis. The backbone produces a single hidden representation that is projected to a combined coefficient vector, which is then split:
+
+$$\theta = W h, \quad \theta_{\text{trend}} = \theta[:p], \quad \theta_{\text{wavelet}} = \theta[p:]$$
+
+where $p$ is the polynomial degree (`trend_dim`, typically 3) and the remaining coefficients drive the wavelet expansion.
+
+[**Figure 3**: TrendWavelet block schematic. The backbone (RootBlock or AE variant) processes the input into a hidden representation. A single linear projection produces $p + k$ coefficients. The first $p$ coefficients multiply the Vandermonde polynomial basis (capturing smooth trend), while the remaining $k$ coefficients multiply the orthonormal wavelet basis (capturing transient structure). Both components are summed to produce backcast and forecast outputs. *To be produced.*]
+
+**Design rationale.** The pairing of polynomial trend with wavelet detail is natural and well-motivated. The Vandermonde basis captures slow-varying macro-trends (level, slope, curvature) with very few coefficients ($p = 3$ captures constant, linear, and quadratic trends). The wavelet basis captures the residual micro-structure --- transient events, localized oscillations, regime changes --- that polynomials are blind to. By combining both in a single block, TrendWavelet implements within-block signal decomposition that parallels the between-stack decomposition of the original N-BEATS Interpretable architecture (Trend stack + Seasonality stack), but at a fraction of the parameter cost.
+
+**Parameter efficiency.** The TrendWavelet block with AE backbone is the most parameter-efficient competitive design in our sweep. With `units` = 256, `latent_dim` = 16, `trend_dim` = 3, `basis_dim` = $\text{eq\_fcast}$ (equal to forecast length), and 10 stacks, the full model requires only 418K--436K parameters. This compares to 26M for N-BEATS-G (30 stacks) and 19.6M for N-BEATS-I+G (10 stacks), representing a 45--60$\times$ reduction.
+
+#### 3.3.3 TrendWaveletGeneric: Three-Way Decomposition
+
+TrendWaveletGeneric extends TrendWavelet with a third branch: a learned generic basis that captures data-driven patterns not represented by either the polynomial or wavelet bases:
+
+$$\hat{y} = T^f \theta^f_{\text{trend}} + B^f \theta^f_{\text{wavelet}} + V^f \theta^f_{\text{generic}}$$
+
+where $V^f \in \mathbb{R}^{H \times g}$ is a trainable weight matrix with `generic_dim` $= g$ columns (typically 5). The generic branch provides extra capacity for patterns that escape both analytical bases, at the cost of $g \times H$ additional trainable parameters per block. The `active_g` mechanism (Section 3.5), when enabled, applies activation only to the generic branch, leaving the trend and wavelet components linear.
+
+#### 3.3.4 Other Novel Blocks
+
+**BottleneckGeneric.** Factors the Generic block's direct projection ($w \rightarrow \text{target\_length}$) into two steps through an intermediate bottleneck: $w \rightarrow d \rightarrow \text{target\_length}$. This is equivalent to a rank-$d$ factorization of the basis expansion matrix. With $d = 5$ (default `thetas_dim`), this constrains the effective rank but provides a tunable regularization knob.
+
+**AutoEncoder Block.** Retains the standard RootBlock backbone but replaces the simple linear basis expansion with an encoder-decoder pipeline for each path: $h \rightarrow \text{Encoder}(h) \rightarrow z \rightarrow \text{Decoder}(z) \rightarrow \hat{y}$. The encoder is a linear layer ($w \rightarrow d$) with activation; the decoder consists of two layers ($d \rightarrow w \rightarrow \text{target\_length}$).
+
+**GenericAEBackcast.** A hybrid block using an autoencoder path for backcast reconstruction (where the reconstruction task is natural) and a simpler bottleneck projection for the forecast path.
+
+All of these blocks exist in standard (RootBlock), AE, AELG, and VAE backbone variants, yielding a combinatorial library of over 185 registered block types.
+
+### 3.4 Stack Architecture Design Space
+
+A key implementation feature of our framework is the ability to compose arbitrary ordered sequences of any block type via the `stack_types` parameter. This enables three primary architectural patterns:
+
+**Unified (homogeneous) stacks.** All blocks in the model are identical --- for example, 10$\times$ TrendWavelet. This tests the capacity of a single block type to handle all aspects of signal decomposition through the doubly residual mechanism alone.
+
+**Alternating stacks.** Two complementary block types interleave --- for example, (Trend, DB3WaveletV3)$\times$15. This mirrors the original Interpretable architecture's separation of concerns (trend vs. detail) but substitutes wavelet blocks for Seasonality blocks. The alternating pattern allows each block type to specialize: Trend blocks extract the smooth component, leaving wavelet blocks to model the residual high-frequency structure.
+
+**Prefix-body stacks.** A small number of interpretable blocks (e.g., Trend + Seasonality) precede a larger body of generic or wavelet blocks. This is the pattern used by the original NBEATS-I+G configuration.
+
+**Table 1: Configuration Grid Overview**
+
+Our comprehensive sweep evaluates 112 configurations spanning the following dimensions:
+
+| Dimension | Values | Count |
+|-----------|--------|:-----:|
+| Backbone | RootBlock, AERootBlock, AERootBlockLG | 3 |
+| Block type | Generic, BottleneckGeneric, Trend+WaveletV3, TrendWavelet, TrendWaveletGeneric, paper baselines | 7 families |
+| Stack depth | 10, 30 | 2 |
+| active_g | False, 'forecast' | 2 |
+| Wavelet family | Haar, DB3, Coif2, Sym10 | 4 |
+| Latent dim (AE) | 8, 16, 32 | 3 |
+| Basis dim | eq\_fcast, 2$\times$eq\_fcast | 2 |
+
+Not all dimension combinations are tested (the full factorial would exceed 1,000 configs); the 112 configurations represent a curated grid covering the most informative comparisons.
+
+### 3.5 The `active_g` Mechanism
+
+The original N-BEATS architecture does not apply any activation function after basis expansion --- the outputs of $g^b$ and $g^f$ are linear combinations of basis vectors. We introduce `active_g`, an optional post-expansion activation:
 
 $$\hat{x} = \sigma(g^b(\theta^b)), \quad \hat{y} = \sigma(g^f(\theta^f))$$
 
-The parameter supports four modes: `active_g=False` (paper-faithful, no activation), `active_g=True` (activation on both paths), `active_g='backcast'` (activation on backcast path only), and `active_g='forecast'` (activation on forecast path only). The split modes enable disentangling which path drives the convergence-vs-optimality trade-off identified in the convergence studies (Section 5.6).
+The parameter supports four modes: `False` (paper-faithful), `True` (activation on both paths), `'backcast'` (backcast only), and `'forecast'` (forecast only). Our convergence studies (detailed in Section 5.3) reveal that `active_g` implements a convergence-vs-optimality trade-off:
 
-The motivation is empirical: we observed that Generic-type blocks sometimes fail to converge without this post-expansion activation. The Trend and Seasonality blocks implicitly constrain their outputs through their fixed basis functions (polynomials are smooth, Fourier series are periodic), which may provide sufficient regularization. Generic blocks, whose basis functions are entirely learned, lack this constraint and may benefit from the additional nonlinearity. This parameter is available for all block types but is most impactful for Generic and BottleneckGeneric variants.
+**Convergence benefit.** ReLU-activated forecasts constrain partial forecasts $\hat{y}_\ell \geq 0$, preventing catastrophic cancellation in the forecast sum $\hat{y} = \sum_\ell \hat{y}_\ell$. This eliminates the sharp, narrow loss minima that cause bimodal convergence in Generic blocks.
 
-#### 3.3.2 Sum Losses (`sum_losses`)
+**Expressiveness cost.** ReLU-activated backcasts constrain $\hat{x}_\ell \geq 0$, making the residual chain monotonically decreasing: $x_\ell \leq x_{\ell-1}$. This prevents blocks from adding signal back after over-extraction, restricting the bidirectional correction that the doubly residual topology was designed to enable.
 
-The standard N-BEATS training objective is the forecast loss alone: $\mathcal{L} = \text{loss}(\hat{y}, y)$. The `sum_losses` extension adds a weighted backcast reconstruction loss:
+**Split-mode recommendation.** The `'forecast'` mode applies activation only to the forecast path, achieving the convergence benefit (100% convergence) while preserving backcast expressiveness. Our sweep uses `active_g = \text{False}` (safe globally) and `active_g = \text{'forecast'}` as the two tested settings.
 
-$$\mathcal{L} = \text{loss}(\hat{y}, y) + 0.25 \cdot \text{loss}(\hat{x}_{residual}, \mathbf{0})$$
+### 3.6 NHiTS Compatibility
 
-where $\hat{x}_{residual}$ is the final backcast residual (the portion of the input not reconstructed by any block) and $\mathbf{0}$ is a zero vector. The coefficient 0.25 weights the backcast loss at one quarter the forecast loss. This regularization encourages the backcast path to fully reconstruct the input signal, pushing the residual toward zero. The intuition is that a model that can accurately reconstruct the input has learned a more complete representation of the signal, which should improve forecast quality. This is inspired by the doubly residual architecture's design intent: the backcast path exists specifically to decompose the input signal, and explicitly optimizing this decomposition may improve the quality of the resulting partial forecasts.
-
-### 3.4 Customizable Stack Composition
-
-A key implementation feature of our framework is the ability to compose arbitrary ordered sequences of any block type. The `stack_types` parameter accepts a list of block type strings, and the model constructs one stack for each entry. This enables configurations that would not be possible in the original implementation:
-
-- **Homogeneous stacks**: 30 copies of a single novel block type (e.g., `["HaarWavelet"] * 30`) for direct comparison with N-BEATS-G's 30 Generic stacks.
-- **Interpretable combinations**: Trend + Seasonality at the original 2-stack scale, or with AE-backbone variants (`["TrendAE", "SeasonalityAE"]`).
-- **Mixed compositions**: Alternating Trend and Wavelet stacks (`["Trend", "DB3Wavelet"] * 15`), or prepending interpretable stacks to generic ones (`["Trend", "Seasonality"] + ["Generic"] * 28`).
-
-This compositional flexibility is central to our experimental design, as it allows us to isolate the effect of individual block types while keeping all other architectural decisions (depth, residual topology, training protocol) constant.
+All novel block types introduced in this work are fully compatible with N-HiTS (Challu et al., 2023). The N-HiTS architecture adds two stack-level operations --- multi-rate input pooling (MaxPool1d with configurable kernel size per stack) and hierarchical forecast interpolation --- that operate outside the block interface. Since our blocks accept a 1D input and produce (backcast, forecast) tuples, they plug into N-HiTS unchanged. The pooling reduces the effective input length seen by each block (reducing computational cost), while the interpolation upsamples the block's reduced-resolution forecast to the target horizon. We include `NHiTSNet` in the `lightningnbeats` package with full support for all novel block types; systematic evaluation of novel blocks within N-HiTS is deferred to future work (Appendix D).
 
 ---
 
-## 4. Experiment Setup
+## 4. Experimental Setup
 
-### 4.1 Dataset
+### 4.1 Datasets
 
-All experiments use the M4 competition dataset (Makridakis et al., 2018; 2020), comprising 100,000 univariate time series across six sampling frequencies. The dataset provides standardized train/test splits, with test set lengths equal to the forecast horizon $H$ for each period.
+We evaluate on four datasets spanning nine forecasting tasks that cover diverse data regimes: large multi-series competition benchmarks (M4), medium-scale tourism forecasting (Tourism), multivariate weather prediction (Weather), and small univariate time series (Milk).
 
-| Period    | Frequency ($m$) | Forecast Horizon ($H$) | Backcast Length ($5 \times H$) | Number of Series |
-|-----------|:-:|:-:|:-:|:-:|
-| Yearly    | 1  | 6   | 30  | 23,000 |
-| Quarterly | 4  | 8   | 40  | 24,000 |
-| Monthly   | 12 | 18  | 90  | 48,000 |
-| Weekly    | 1  | 13  | 65  | 359    |
-| Daily     | 1  | 14  | 70  | 4,227  |
-| Hourly    | 24 | 48  | 240 | 414    |
+**Table 2: Dataset Characteristics**
 
-### 4.2 Baseline Reference Values
+| Dataset | Series | Horizon $H$ | Lookback $L$ | Frequency | Primary Metric |
+|---------|-------:|:----:|:-----:|-----------|:---------:|
+| M4-Yearly | 23,000 | 6 | 30 | Annual | SMAPE, OWA |
+| M4-Quarterly | 24,000 | 8 | 40 | Quarterly | SMAPE, OWA |
+| M4-Monthly | 48,000 | 18 | 90 | Monthly | SMAPE, OWA |
+| M4-Weekly | 359 | 13 | 65 | Weekly | SMAPE, OWA |
+| M4-Daily$^\dagger$ | 4,227 | 14 | 70 | Daily | SMAPE, OWA |
+| M4-Hourly | 414 | 48 | 240 | Hourly | SMAPE, OWA |
+| Tourism-Yearly | 518 | 4 | 20 | Annual | SMAPE |
+| Weather-96 | 52,696 windows | 96 | 480 | 10-min | MSE |
+| Milk | 1 series | 6 | 30 | Monthly | SMAPE |
 
-Performance is measured relative to the Naive2 seasonal baseline from the M4 competition. The Naive2 method produces forecasts using the last observed seasonal cycle, and its sMAPE and MASE values serve as the denominator for OWA computation:
+$^\dagger$M4-Daily results are preliminary: only 14 of 112 configurations have been evaluated (paper baselines + TrendWavelet RootBlock variants). Full sweep is in progress.
 
-| Period    | Naive2 sMAPE | Naive2 MASE |
-|-----------|:--:|:--:|
-| Yearly    | 16.342 | 3.974 |
-| Quarterly | 11.012 | 1.371 |
-| Monthly   | 14.427 | 1.063 |
-| Weekly    | 9.161  | 2.777 |
-| Daily     | 3.045  | 3.278 |
-| Hourly    | 18.383 | 2.395 |
+The **M4 dataset** (Makridakis et al., 2018; 2020) comprises 100,000 univariate time series across six sampling frequencies drawn from diverse domains including demographics, finance, industry, and macroeconomics. We use the standard train/test splits with test set length equal to the forecast horizon $H$ for each period.
 
-### 4.3 Model Configurations (Part 1: Block Benchmark)
+The **Tourism-Yearly** dataset contains 518 annual tourism demand series. With a short forecast horizon ($H = 4$) and moderate number of series, it tests model behavior on a simpler forecasting task where overparameterization risks are intermediate.
 
-We evaluate 17 model configurations grouped into four categories. All configurations use the same training hyperparameters for fair comparison. The three paper baseline configurations replicate the original N-BEATS paper's architecture choices.
+The **Weather-96** dataset consists of 21 meteorological indicators recorded at 10-minute intervals. We use a 96-step forecast horizon with a 480-step lookback ($L = 5H$), creating 52,696 training windows. As a multivariate dataset with long horizons, it tests model behavior in a regime very different from the M4 competition format.
 
-| Config Name | Stack Types | Stacks | Blocks/Stack | Share Weights | Approx. Params |
-|-------------|-------------|:------:|:------------:|:---:|---:|
-| **Paper Baselines** | | | | | |
-| NBEATS-G | Generic x30 | 30 | 1 | Yes | ~24.7M |
-| NBEATS-I | Trend, Seasonality | 2 | 3 | Yes | ~12.9M |
-| NBEATS-I+G | Trend, Seasonality, Generic x28 | 30 | 1 | Yes | ~36.0M |
-| **Novel Single-Type** | | | | | |
-| BottleneckGeneric | BottleneckGeneric x30 | 30 | 1 | Yes | ~24.2M |
-| AutoEncoder | AutoEncoder x30 | 30 | 1 | Yes | ~24.9M |
-| GenericAE | GenericAE x30 | 30 | 1 | Yes | ~4.8M |
-| BottleneckGenericAE | BottleneckGenericAE x30 | 30 | 1 | Yes | ~4.3M |
-| GenericAEBackcast | GenericAEBackcast x30 | 30 | 1 | Yes | ~24.8M |
-| HaarWavelet | HaarWavelet x30 | 30 | 1 | Yes | ~26.2M |
-| DB3Wavelet | DB3Wavelet x30 | 30 | 1 | Yes | ~26.2M |
-| DB3AltWavelet | DB3AltWavelet x30 | 30 | 1 | Yes | ~26.1M |
-| Coif2Wavelet | Coif2Wavelet x30 | 30 | 1 | Yes | ~26.2M |
-| Symlet3Wavelet | Symlet3Wavelet x30 | 30 | 1 | Yes | ~26.2M |
-| **Novel Interpretable** | | | | | |
-| NBEATS-I-AE | TrendAE, SeasonalityAE | 2 | 3 | Yes | ~2.2M |
-| **Novel Mixed Stacks** | | | | | |
-| Trend+HaarWavelet | (Trend, HaarWavelet) x15 | 30 | 1 | Yes | ~16.2M |
-| Trend+DB3Wavelet | (Trend, DB3Wavelet) x15 | 30 | 1 | Yes | ~16.2M |
-| Generic+DB3Wavelet | (Generic, DB3Wavelet) x15 | 30 | 1 | Yes | ~25.4M |
+The **Milk** dataset is a single univariate monthly time series of U.S. milk production (168 observations). With only one series and 156 training windows, it represents the extreme small-data regime where overparameterization effects are most pronounced.
 
-Parameter counts are approximate and vary slightly by period due to differences in backcast_length and forecast_length affecting the first layer and projection layer sizes. The counts shown are representative of the Yearly period.
+### 4.2 Training Protocol
 
-### 4.4 Training Protocol
+All experiments share a common training configuration:
 
-All experiments share the following training configuration, chosen to match the original N-BEATS paper where applicable:
+| Parameter | Value |
+|-----------|-------|
+| Maximum epochs | 200 |
+| Early stopping patience | 20 epochs |
+| Learning rate | 0.001 |
+| LR warmup | 15 epochs |
+| Optimizer | Adam (default parameters) |
+| Loss function | SMAPELoss (M4, Tourism, Milk); MSELoss (Weather) |
+| Batch size | 1024 |
+| Backcast multiplier | 5$\times$ forecast horizon ($L = 5H$) |
+| Seeds per configuration | 10 (seeds 0--9) |
+| Blocks per stack | 1 |
+| Weight sharing | True (within each stack) |
+| Activation | ReLU |
 
-- **Batch size**: 1024 (paper: 1024)
-- **Optimizer**: Adam with default parameters
-- **Learning rate**: 1e-3 (paper: 1e-3)
-- **Loss function**: SMAPELoss (paper's primary metric)
-- **Early stopping**: patience = 10, monitoring validation loss
-- **Maximum epochs**: 100 (early stopping typically terminates training well before this limit)
-- **Backcast multiplier**: 5x forecast horizon (paper uses 2H-7H for ensemble; 5H is a representative single point)
-- **Seeds**: 5 runs per configuration (seeds 42, 43, 44, 45, 46)
-- **Thetas dim**: 5 (polynomial degree for Trend; bottleneck dimension for BottleneckGeneric)
-- **Latent dim**: 4 (for AE-backbone blocks)
-- **Basis dim**: 128 (for Wavelet blocks)
+The training protocol was chosen to balance computational feasibility with statistical rigor. The 10-seed design provides substantially greater statistical power than the 3--5 seeds typical in the literature, enabling reliable detection of medium effect sizes.
 
-Data is loaded using the columnar data module (`ColumnarCollectionTimeSeriesDataModule`), which handles the M4 dataset's variable-length series by NaN-padding shorter series. Training/validation splits are created by holding out the last `backcast_length + forecast_length` observations for validation. Test evaluation uses a dedicated test data module that concatenates the tail of the training data with the test set to provide the required lookback window for inference.
-
-### 4.5 Evaluation Metrics
-
-We report three standard metrics for each experiment:
+### 4.3 Evaluation Metrics
 
 **sMAPE** (Symmetric Mean Absolute Percentage Error):
 $$\text{sMAPE} = \frac{100}{H} \sum_{i=1}^{H} \frac{|y_i - \hat{y}_i|}{(|y_i| + |\hat{y}_i|)/2 + \epsilon}$$
 
-**MASE** (Mean Absolute Scaled Error), computed per-series using the full training history for the naive seasonal denominator:
-$$\text{MASE}_i = \frac{\frac{1}{H}\sum_{j=1}^{H} |y_{T+j} - \hat{y}_{T+j}|}{\frac{1}{T-m}\sum_{j=m+1}^{T} |y_j - y_{j-m}|}$$
+**MASE** (Mean Absolute Scaled Error), computed per-series using seasonal naive scaling:
+$$\text{MASE} = \frac{\frac{1}{H}\sum_{j=1}^{H} |y_{T+j} - \hat{y}_{T+j}|}{\frac{1}{T-m}\sum_{j=m+1}^{T} |y_j - y_{j-m}|}$$
 
-where $m$ is the seasonal period and $T$ is the training set length. The reported MASE is the mean across all valid series.
-
-**OWA** (Overall Weighted Average):
+**OWA** (Overall Weighted Average, M4 only):
 $$\text{OWA} = \frac{1}{2}\left(\frac{\text{sMAPE}}{\text{sMAPE}_{\text{Naive2}}} + \frac{\text{MASE}}{\text{MASE}_{\text{Naive2}}}\right)$$
 
-OWA = 1.0 corresponds to the performance of the seasonally-adjusted naive baseline. Lower values indicate better performance.
+where Naive2 values are the M4 competition's seasonally-adjusted naive baseline. OWA = 1.0 corresponds to naive performance.
 
-### 4.6 Ablation Study Design (Part 2)
+**MSE** (Mean Squared Error, Weather only).
 
-The ablation study evaluates training extensions and alternative activation functions using the 30-stack Generic configuration as the base architecture. All ablation runs share the same training protocol as the block benchmark.
+**Divergence rate**: percentage of runs where training produces degenerate solutions (sMAPE > threshold or extreme loss ratio). A run is classified as *healthy* if it produces finite metrics with sMAPE below a dataset-specific threshold.
 
-| Config Name | active_g | sum_losses | Activation |
-|-------------|:---:|:---:|:---:|
-| Generic_baseline | False | False | ReLU |
-| Generic_activeG | True | False | ReLU |
-| Generic_sumLosses | False | True | ReLU |
-| Generic_activeG+sumL | True | True | ReLU |
-| Generic_GELU | False | False | GELU |
-| Generic_ELU | False | False | ELU |
-| Generic_LeakyReLU | False | False | LeakyReLU |
-| Generic_SELU | False | False | SELU |
-
-The baseline (first row) is identical to NBEATS-G from Part 1, providing a control for comparison. Each subsequent configuration modifies exactly one or two factors, enabling isolation of individual effects.
-
-### 4.7 Ensemble Strategy (Part 3)
-
-The ensemble experiment follows the original N-BEATS paper's multi-horizon strategy. For each of the three paper architectures (NBEATS-G, NBEATS-I, NBEATS-I+G), models are trained at six backcast multipliers (2H, 3H, 4H, 5H, 6H, 7H) with three random seeds each, yielding 18 models per architecture per period. The final ensemble forecast is the element-wise **median** across all individual model predictions, following the paper's aggregation function. Both individual model metrics and ensemble metrics are recorded.
-
-### 4.8 Implementation
-
-All models are implemented using PyTorch Lightning via the `lightningnbeats` package. The experiment script (`experiments/run_experiments.py`) supports incremental execution with CSV-based resumability--completed runs are detected and skipped on restart. Automatic accelerator detection selects CUDA, MPS (Apple Silicon), or CPU as available. TensorBoard logging captures training curves for all runs.
+**Statistical tests**: Kruskal-Wallis H-test (non-parametric omnibus), Wilcoxon signed-rank test (pairwise), with Bonferroni correction where applicable. Effect sizes reported as Cohen's $d$ or $\eta^2$.
 
 ---
 
 ## 5. Results
 
-We report results from the block benchmark (Part 1) across three of six M4 periods (Yearly, Quarterly, Monthly), the ensemble experiment (Part 3) for the Yearly period, and a statistical significance analysis testing whether block type meaningfully affects forecasting accuracy. Ablation results (Part 2) are pending. Remaining periods (Weekly, Daily, Hourly) will be added upon completion.
+We report results from the comprehensive sweep of 112 configurations across 10 seeds on nine dataset-periods, totaling approximately 9,521 training runs. Throughout this section, a run is classified as *healthy* if it produced finite metrics below dataset-specific thresholds; *divergent* runs are excluded from mean calculations but included in divergence rate reporting.
 
-Throughout this section, a run is classified as **healthy** if it produced non-NaN metrics with OWA < 2.0 and MASE < 10⁶. Runs failing these criteria are classified as **divergent** (produced extreme but finite values) or **failed** (produced NaN, typically at epoch 1). The **convergence rate** reports the fraction of seeds that produced healthy runs.
+### 5.1 Main Results: Novel Blocks Beat Baselines on 6/9 Dataset-Periods
 
-### 5.1 Block Benchmark Results
+Table 3 presents the best configuration per dataset-period, ranked by the primary metric (SMAPE for M4/Tourism/Milk; MSE for Weather). Wavelet-augmented architectures win on six of nine dataset-periods. Paper baselines only win decisively on M4-Hourly (long horizon, $H = 48$) and M4-Daily (severely under-tested; only 14 of 112 configurations evaluated). M4-Quarterly is a statistical tie between baselines and novel architectures.
 
-#### 5.1.1 Main OWA Comparison
+**Table 3: Best Configuration per Dataset-Period**
 
-Table 2 presents the primary results: mean OWA across healthy seeds for each configuration, grouped by category. Only configurations with at least 3 healthy seeds out of 5 are included in the main comparison; wavelet-only and unstable mixed configurations are analyzed separately in Section 5.1.3.
+| Dataset | Winner | SMAPE | OWA | Params | Architecture |
+|---------|--------|:-----:|:---:|-------:|:-------------|
+| M4-Yearly | TW\_10s\_td3\_bdeq\_coif2 | 13.499 | 0.801 | 2.1M | Unified TrendWavelet (RB) |
+| M4-Quarterly | NBEATS-IG\_10s\_ag0 | 10.126 | 0.888 | 19.6M | Paper baseline (15-way tie) |
+| M4-Monthly | TW\_30s\_td3\_bd2eq\_coif2 | 13.279 | 0.915 | 7.1M | Unified TrendWavelet (RB) |
+| M4-Weekly | T+Db3V3\_30s\_bdeq | 6.671 | 0.735 | 15.8M | Alternating Trend+Wavelet (RB) |
+| M4-Daily$^\dagger$ | NBEATS-G\_30s\_ag0 | 2.603 | 0.861 | 26.0M | Paper baseline |
+| M4-Hourly | NBEATS-IG\_30s\_agf | 8.587 | 0.409 | 43.6M | Paper baseline |
+| Tourism-Y | TW\_10s\_td3\_bdeq\_db3 | 21.773 | --- | 2.0M | Unified TrendWavelet (RB) |
+| Weather-96 | TAE+DB3V3AE\_30s\_ld8\_ag0 | --- | --- | 7.1M | Alternating TrendAE+WaveletAE |
+| Milk | TALG+DB3V3ALG\_10s\_ag0 | 1.512 | --- | 1.0M | Alternating TrendAELG+WaveletAELG |
 
-**Table 2: Mean OWA by Configuration and Period (healthy runs only)**
+$^\dagger$Preliminary: only 14 of 112 configurations tested. Weather-96 primary metric: MSE = 0.138.
 
-| Config | Category | Params | Yearly OWA | Quarterly OWA | Monthly OWA | W / D / H |
-|--------|----------|--------|:----------:|:-------------:|:-----------:|:---------:|
-| NBEATS-G | Baseline | 24.7M | 0.820 (3/3) | 0.902 (3/3) | 0.913 (3/3) | [pending] |
-| NBEATS-I | Baseline | 12.9M | 0.816 (3/3) | 0.892 (3/3) | 0.923 (3/3) | [pending] |
-| NBEATS-I+G | Baseline | 36.0M | 0.808 (3/3) | 0.896 (3/3) | 0.949 (3/3) | [pending] |
-| BottleneckGeneric | Novel | 24.2M | 0.827 (3/3) | 0.912 (3/3) | 0.940 (3/3) | [pending] |
-| AutoEncoder | Novel | 24.9M | 0.804 (3/3) | 0.892 (2/3) | 0.923 (3/3) | [pending] |
-| GenericAE | Novel-AE | 4.8M | 0.808 (3/3) | 0.897 (3/3) | 0.956 (3/3) | [pending] |
-| BottleneckGenericAE | Novel-AE | 4.3M | 0.806 (3/3) | 0.905 (3/3) | 0.930 (3/3) | [pending] |
-| GenericAEBackcast | Novel | 24.8M | 0.808 (3/3) | 0.906 (3/3) | 0.953 (3/3) | [pending] |
-| NBEATS-I-AE | Novel-Interp | 2.2M | 0.805 (3/3) | 0.937 (3/3) | 0.973 (3/3) | [pending] |
-| Trend+DB3Wavelet | Mixed | 16.2M | 0.809 (3/3) | 0.896 (3/3) | [partial] | [pending] |
+**Table 4: Novel vs. Paper Baseline Head-to-Head**
 
-Parenthetical notation indicates convergence rate (healthy seeds / total seeds). Bold entries mark the best OWA per period. The Yearly column is sorted by OWA to facilitate comparison; rankings shift across periods (see Section 5.4.4 for cross-period rank consistency analysis).
+| Dataset | Best Novel | Novel SMAPE | Best Baseline | Baseline SMAPE | $\Delta$SMAPE | Param Savings |
+|---------|-----------|:-----------:|---------------|:--------------:|:-----:|:-----:|
+| M4-Yearly | TW\_10s coif2 | 13.499 | NBEATS-IG\_10s | 13.561 | −0.5% | 9$\times$ fewer |
+| M4-Monthly | TW\_30s coif2 | 13.279 | NBEATS-IG\_10s | 13.309 | −0.2% | 3$\times$ fewer |
+| M4-Weekly | T+Db3V3\_30s | 6.671 | NBEATS-IG\_30s | 6.822 | −2.2% ($p = 0.014$) | 1.3$\times$ fewer |
+| Tourism-Y | TW\_10s db3 | 21.773 | NBEATS-IG\_10s | 22.265 | −2.2% | 10$\times$ fewer |
+| Weather-96 | TAE+DB3V3AE\_30s | 0.138 MSE | NBEATS-IG\_10s | 0.183 MSE | −25.0% | 3.6$\times$ fewer |
+| Milk | TALG+DB3V3ALG\_10s | 1.512 | NBEATS-IG\_10s | 1.785 | −15.3% | 20$\times$ fewer |
 
-Key observations from Table 2:
+The improvements are largest on non-M4 datasets (Weather: −25%, Milk: −15.3%) where the competition-tuned baselines are least suited to the data regime. On the M4 benchmark where baselines were originally optimized, improvements are smaller but still consistent (−0.2% to −2.2%), always accompanied by substantial parameter savings.
 
-1. **AutoEncoder achieves the best Yearly OWA** (0.804), outperforming all three paper baselines. However, one of its three Quarterly seeds diverged (OWA = 3.29), reducing its Quarterly convergence rate to 2/3.
+### 5.2 Parameter Efficiency
 
-2. **NBEATS-I-AE is the most parameter-efficient competitive configuration**, achieving OWA 0.805 on Yearly with only 2.2M parameters--91% fewer than NBEATS-G (24.7M). However, its advantage diminishes on longer-horizon periods: Quarterly OWA degrades to 0.937 and Monthly to 0.973.
+The most practically significant finding is the extreme parameter efficiency of autoencoder-compressed wavelet architectures. Table 5 shows that sub-1M parameter models achieve within 0.5% of dataset winners on most benchmarks.
 
-3. **BottleneckGenericAE** offers the best balance of parameter efficiency and cross-period stability among AE-backbone variants, with 4.3M parameters and OWA ranging from 0.806 (Yearly) to 0.930 (Monthly).
+**Table 5: Sub-1M Parameter Models vs. Dataset Winners**
 
-4. **Trend+DB3Wavelet** is the only wavelet-containing configuration to achieve full convergence on both Yearly and Quarterly, with competitive OWA (0.809 and 0.896 respectively). Monthly data is partial due to wavelet-related instability in the DB3 component.
+| Dataset | Best Sub-1M Config | Params | SMAPE | vs. Winner | Param Ratio |
+|---------|-------------------|-------:|:-----:|:----------:|:-----------:|
+| M4-Yearly | TWAELG\_10s\_ld16\_coif2\_agf | 436K | 13.524 | +0.2% | 5$\times$ fewer |
+| M4-Quarterly | TWAELG\_10s\_ld8\_db3\_agf | 433K | 10.167 | +0.4% | 45$\times$ fewer |
+| M4-Monthly | TWAE\_10s\_ld32\_ag0 | 584K | 13.325 | +0.4% | 12$\times$ fewer |
+| M4-Weekly | TWAELG\_10s\_ld16\_sym10\_ag0 | 498K | 6.693 | +0.3% | 32$\times$ fewer |
+| Tourism-Y | TWAELG\_10s\_ld16\_coif2\_agf | 418K | 21.908 | +0.6% | 5$\times$ fewer |
+| Milk | TWAE\_10s\_ld8\_agf | 415K | 1.633 | +8.0% | 37$\times$ fewer |
 
-5. **The OWA spread among healthy, fully-converging configurations is narrow**: approximately 0.023 on Yearly (0.804 to 0.827), 0.020 on Quarterly (0.892 to 0.912), and 0.043 on Monthly (0.913 to 0.956). This narrow spread motivates the statistical significance analysis in Section 5.4.
+The TrendWavelet family with AELG backbone (TWAELG) at ~436K parameters is the most parameter-efficient competitive architecture in our sweep. These models use the AERootBlockLG backbone ($w = 256$, $d = 16$) with TrendWavelet basis expansion ($p = 3$ polynomial degree, wavelet `basis_dim` equal to the forecast length), stacked 10 deep.
 
-#### 5.1.2 Detailed Metrics per Period
+[**Figure 4**: Parameter efficiency scatter plot. Each panel shows one dataset; x-axis is parameter count (log scale), y-axis is mean SMAPE (lower is better). Points colored by architecture category. Pareto frontier connects the configurations that are not dominated (no other config has both fewer parameters and better SMAPE). Paper baselines cluster in the top-right (high params, good SMAPE). Novel TWAELG/TWAE configurations populate the bottom-left (low params, comparable SMAPE), forming the efficient frontier. *To be produced from comprehensive sweep CSVs.*]
 
-Tables 3a-3c present sMAPE, MASE, and OWA with standard deviations for each completed period, ranked by mean OWA. Only configurations with at least 2 healthy seeds are shown.
+**Table 6: Pareto-Optimal Configurations Across Regimes**
 
-**Table 3a: Yearly Period — Detailed Metrics (ranked by OWA)**
+| Regime | Configuration | Params | Strengths | Weaknesses |
+|--------|--------------|-------:|-----------|------------|
+| Minimum params | TWAE\_10s\_ld8\_agf | 415K | Good on M4/Tourism/Milk | Avoid Weather (agf) |
+| Balanced | TWAELG\_10s\_ld16\_coif2\_ag0 | 436K | Good everywhere (ag0 safe) | Not top-1 anywhere |
+| Best generalist | TALG+DB3V3ALG\_10s\_ag0 | 2,390K | Best cross-dataset mean rank | Weak on Tourism |
+| Max quality (M4-Y) | TW\_10s\_td3\_bdeq\_coif2 | 2,076K | M4-Yearly winner | Poor on Milk/Weather |
+| Max quality (Weather) | TAE+DB3V3AE\_30s\_ld8\_ag0 | 7,100K | Weather MSE winner | 30-stack depth |
 
-| Config | Mean sMAPE | Mean MASE | Mean OWA | Std OWA | Conv. Rate |
-|--------|:----------:|:---------:|:--------:|:-------:|:----------:|
-| AutoEncoder | 13.535 | 3.095 | 0.804 | 0.014 | 3/3 |
-| NBEATS-I-AE | 13.572 | 3.101 | 0.805 | 0.001 | 3/3 |
-| BottleneckGenericAE | 13.539 | 3.112 | 0.806 | 0.015 | 3/3 |
-| GenericAE | 13.598 | 3.116 | 0.808 | 0.009 | 3/3 |
-| NBEATS-I+G | 13.551 | 3.129 | 0.808 | 0.008 | 3/3 |
-| GenericAEBackcast | 13.560 | 3.127 | 0.808 | 0.010 | 3/3 |
-| Trend+DB3Wavelet | 13.572 | 3.127 | 0.809 | 0.015 | 3/3 |
-| NBEATS-I | 13.692 | 3.156 | 0.816 | 0.008 | 3/3 |
-| NBEATS-G | 13.718 | 3.179 | 0.820 | 0.009 | 3/3 |
-| BottleneckGeneric | 13.770 | 3.226 | 0.827 | 0.016 | 3/3 |
+### 5.3 Overparameterization and Convergence
 
-**Table 3b: Quarterly Period — Detailed Metrics (ranked by OWA)**
+The comprehensive sweep reveals that the original N-BEATS architecture suffers from severe overparameterization on all but the largest datasets. This manifests as training instability: a significant fraction of runs fail to converge, with failure rates strongly correlated with the ratio of model parameters to training data.
 
-| Config | Mean sMAPE | Mean MASE | Mean OWA | Std OWA | Conv. Rate |
-|--------|:----------:|:---------:|:--------:|:-------:|:----------:|
-| Trend+DB3Wavelet | 10.254 | 1.180 | 0.896 | 0.012 | 3/3 |
-| NBEATS-I | 10.202 | 1.175 | 0.892 | 0.002 | 3/3 |
-| AutoEncoder | 10.163 | 1.181 | 0.892 | 0.011 | 2/3 |
-| GenericAE | 10.219 | 1.187 | 0.897 | 0.011 | 3/3 |
-| NBEATS-I+G | 10.285 | 1.177 | 0.896 | 0.006 | 3/3 |
-| NBEATS-G | 10.273 | 1.193 | 0.902 | 0.012 | 3/3 |
-| BottleneckGenericAE | 10.246 | 1.206 | 0.905 | 0.005 | 3/3 |
-| GenericAEBackcast | 10.321 | 1.199 | 0.906 | 0.010 | 3/3 |
-| BottleneckGeneric | 10.370 | 1.210 | 0.912 | 0.014 | 3/3 |
-| NBEATS-I-AE | 10.588 | 1.252 | 0.937 | 0.018 | 3/3 |
+**Table 7: Divergence Rates by Architecture Category and Dataset**
 
-**Table 3c: Monthly Period — Detailed Metrics (ranked by OWA)**
+| Category | M4 | Tourism | Weather | Milk |
+|----------|:--:|:-------:|:-------:|:----:|
+| Paper baselines (30-stack, RB) | 0.05% | 0.6% | 0% | 17.1% |
+| Alternating Trend+WaveletV3 (RB) | < 0.1% | < 1% | 0% | 30--50% |
+| Unified TrendWavelet (RB) | < 0.1% | 0% | 0% | 10% |
+| AE/AELG backbone variants | < 0.1% | 0% | 0% | 1.7% |
+| BottleneckGeneric (all) | < 0.1% | 10%+ | 0% | 40%+ |
 
-| Config | Mean sMAPE | Mean MASE | Mean OWA | Std OWA | Conv. Rate |
-|--------|:----------:|:---------:|:--------:|:-------:|:----------:|
-| NBEATS-G | 13.379 | 0.955 | 0.913 | 0.017 | 3/3 |
-| AutoEncoder | 13.512 | 0.967 | 0.923 | 0.026 | 3/3 |
-| NBEATS-I | 13.563 | 0.964 | 0.923 | 0.008 | 3/3 |
-| BottleneckGenericAE | 13.564 | 0.977 | 0.930 | 0.007 | 3/3 |
-| BottleneckGeneric | 13.927 | 0.973 | 0.940 | 0.019 | 3/3 |
-| NBEATS-I+G | 14.069 | 0.981 | 0.949 | 0.006 | 3/3 |
-| GenericAEBackcast | 14.054 | 0.991 | 0.953 | 0.040 | 3/3 |
-| GenericAE | 14.211 | 0.986 | 0.956 | 0.015 | 3/3 |
-| NBEATS-I-AE | 13.981 | 1.039 | 0.973 | 0.034 | 3/3 |
+The pattern is clear: RootBlock-based configurations (which retain the full $w$-width backbone) diverge at high rates on small datasets (Milk: up to 50%), while AE-backbone variants with 10$\times$ fewer parameters converge reliably (Milk: 1.7%). The TrendWavelet block family occupies an intermediate position --- its structured basis (polynomial + wavelet) provides implicit regularization that makes it more stable than Generic blocks even without the AE backbone.
 
-Notable cross-period patterns: (a) NBEATS-G improves from 10th on Yearly to 1st on Monthly, suggesting its fully learnable basis functions benefit from larger training sets; (b) NBEATS-I-AE degrades from 2nd on Yearly to last on both Quarterly and Monthly, suggesting the extreme compression of the AE backbone (latent_dim=4) becomes a bottleneck for higher-frequency patterns; (c) BottleneckGenericAE maintains consistently mid-range performance across all three periods, never ranking below 5th.
+The most striking case is NBEATS-G (30-stack Generic) on Milk: with 26M parameters for a single univariate series of 156 observations, this configuration exhibits 40% divergence without `active_g`, and even with `active_g = \text{'forecast'}`, its SMAPE degrades from 19.35 to 2.42 --- far from the 1.51 achieved by TALG+DB3V3ALG at 1.0M parameters.
 
-#### 5.1.3 Wavelet Block Failure Analysis
+[**Figure 5**: Training curves demonstrating convergence behavior, three panels.
 
-Pure wavelet configurations exhibited severe training instability, with most failing to produce any healthy runs. Table 4 summarizes failure modes across all periods.
+**Panel A: Most configurations converge similarly.** Validation loss curves for 8 representative configurations on M4-Yearly, spanning paper baselines, unified TrendWavelet, and alternating TrendAELG+WaveletAELG. All converge to similar loss levels within 40--60 epochs with patience-20 early stopping, illustrating that the doubly-residual framework's convergence properties are robust across architecturally diverse block types.
 
-**Table 4: Wavelet Configuration Failure Modes**
+**Panel B: Generic bimodal convergence.** Ten seeds of NBEATS-G\_30s\_ag0 on Tourism-Yearly. The validation loss curves split into two modes: approximately 90% of seeds converge normally after an initial descent, while approximately 10% hang at a high validation loss plateau (2--5$\times$ above the converged group) for dozens of epochs. Some eventually drop to join the converged mode after extended training; others never converge. This bimodal pattern is the signature of overparameterized Generic blocks, where many initializations land in degenerate regions of parameter space.
 
-| Config | Yearly | Quarterly | Monthly | Primary Failure Mode |
-|--------|:------:|:---------:|:-------:|----------------------|
-| HaarWavelet | NaN 3/3 | NaN 3/3 | NaN 3/3 | Immediate failure (epoch 1) |
-| DB3AltWavelet | NaN 3/3 | NaN 3/3 | NaN 3/3 | Immediate failure (epoch 1) |
-| DB3Wavelet | Div 2/3, 1 partial | Div 3/3 | Div 2/3, NaN 1/3 | MASE explosion (10¹⁰ - 10³¹) |
-| Symlet3Wavelet | Div 3/3 | Div 3/3 | Div 2/3, NaN 1/3 | MASE explosion (identical to DB3) |
-| Coif2Wavelet | 1/3 healthy | 1/3 healthy | 1/3 healthy | 67% divergence rate |
-| Trend+HaarWavelet | 1/3 healthy | 1/3 healthy | 1/3 healthy | 67% divergence rate |
-| Generic+DB3Wavelet | 1/3 healthy | 0/3 healthy | 0/3 healthy | Progressive instability |
+**Panel C: active\_g eliminates bimodal failure.** The same Generic architecture with `active_g = \text{'forecast'}`. All 10 seeds converge to a tight band --- the bimodal split is completely eliminated. However, the converged loss is slightly higher than the best seeds from Panel B, illustrating the convergence-vs-optimality trade-off. The ReLU constraint on forecasts prevents the catastrophic cancellation that causes bimodal failure, but also prevents the model from reaching the deepest minima accessible to unconstrained blocks.
 
-Two distinct failure modes are observed:
+*To be produced from `val_loss_curve` column in comprehensive sweep CSVs.*]
 
-1. **Immediate NaN failure** (HaarWavelet, DB3AltWavelet): Training produces NaN loss at epoch 1 across all seeds and periods. This suggests the wavelet basis matrix itself causes numerical overflow in the forward pass, likely because the basis values exceed the range representable after multiplication with randomly initialized weights.
+**Bimodal convergence is a Generic-block problem.** The bimodal pattern is most severe for Generic and BottleneckGeneric blocks, which lack structural constraints on their basis expansions. NBEATS-G\_30s\_ag0 shows catastrophic bimodal failure on M4-Quarterly (std = 7.4), M4-Weekly (std = 7.2), Tourism (10% divergence rate), and Milk (40% divergence). In contrast, TrendWavelet blocks are immune to bimodal convergence regardless of backbone type or depth --- their polynomial + wavelet basis provides sufficient structural constraint to regularize the optimization landscape.
 
-2. **Gradual MASE explosion** (DB3Wavelet, Symlet3Wavelet, Coif2Wavelet): Training runs for 11+ epochs but produces forecasts with astronomically large MASE values (up to 10³¹). The sMAPE saturates at 200 (its theoretical maximum). Interestingly, DB3Wavelet and Symlet3Wavelet produce *identical* divergent MASE values on matching seeds, suggesting these wavelet families share numerical properties that trigger the same instability pathway.
+**The AE bottleneck as implicit regularizer.** The AE backbone eliminates most divergence not through any explicit regularization term, but through parameter compression. By forcing the hidden representation through a low-dimensional bottleneck ($d = 8$--32), it removes the capacity for the degenerate solutions that overparameterized RootBlock networks can explore. On Milk, this reduces divergence from 40.6% (RootBlock) to 6.8% (AELG) to 1.7% (AE).
 
-When wavelet blocks do converge, they can be competitive: Coif2Wavelet seed 44 on Yearly achieved OWA = 0.823, comparable to NBEATS-G. The Trend+DB3Wavelet mixed configuration, where Trend stacks provide stable gradient flow that stabilizes the wavelet stacks, achieved full convergence on Yearly and Quarterly with competitive OWA (0.809 and 0.896). This suggests the wavelet basis expansion concept is sound but requires numerical stabilization--potential remedies include gradient clipping, basis normalization, or spectral regularization of the wavelet basis matrix.
+### 5.4 Stack Architecture Selection
 
-#### 5.1.4 Figures (Block Benchmark)
+The choice between unified and alternating stack architectures is horizon-dependent.
 
-**Figure 1: N-BEATS Architecture Diagram.** Block diagram showing the doubly residual topology: a sequence of stacks, each containing blocks with the four-FC-layer backbone (RootBlock) or hourglass AE backbone (AERootBlock). Insets compare the three basis expansion families: (a) Generic/BottleneckGeneric linear projection, (b) Trend polynomial / Seasonality Fourier constrained basis, (c) Wavelet multi-resolution basis with learned downsampling. Backward residual connections (subtraction) and forward residual connections (summation) are highlighted with directional arrows. *[To be produced as vector graphic.]*
+**Table 8: Unified vs. Alternating Preference by Dataset**
 
-**Figure 2: OWA Comparison Bar Chart (Yearly Period).** Grouped bar chart with configurations on the x-axis (sorted by mean OWA, best to worst) and OWA on the y-axis (range 0.78-0.85). Bars colored by category: blue = Baseline (NBEATS-G, NBEATS-I, NBEATS-I+G), green = Novel (BottleneckGeneric, AutoEncoder, GenericAEBackcast), orange = AE-backbone (GenericAE, BottleneckGenericAE, NBEATS-I-AE), purple = Mixed (Trend+DB3Wavelet). Error bars show ±1 standard deviation across 5 seeds. Horizontal dashed line at OWA = 1.0 (Naive2 baseline). *[To be produced from block_benchmark_results.csv.]*
+| Dataset | $H$ | Unified Better? | Evidence |
+|---------|:---:|:----------:|----------|
+| M4-Yearly | 6 | Yes | TW\_10s wins |
+| M4-Quarterly | 8 | Tie | Top-5 is mixed |
+| M4-Monthly | 18 | Yes | TW\_30s wins |
+| M4-Weekly | 13 | No | Alternating T+WavV3 wins |
+| Tourism-Y | 4 | Yes | Unified beats alternating by 0.5--0.9 SMAPE |
+| Weather-96 | 96 | No | Alternating $\gg$ unified ($p < 0.0001$) |
+| Milk | 6 | No | Alternating wins (but high divergence for non-AE) |
 
-**Figure 3: Parameter Efficiency Scatter Plot.** Parameters (millions, log scale x-axis) versus mean OWA (y-axis) for the Yearly period. Points labeled by configuration name, colored by category. Pareto frontier connects NBEATS-I-AE (2.2M, 0.805), BottleneckGenericAE (4.3M, 0.806), and AutoEncoder (24.9M, 0.804). Key finding: AE-backbone blocks achieve 5-10x parameter reduction with comparable OWA. Configurations above the Pareto frontier are dominated (more parameters for equal or worse accuracy). *[To be produced from block_benchmark_results.csv.]*
+**Pattern.** Short horizons ($H = 4$--8) favor unified TrendWavelet blocks, where the combined polynomial+wavelet decomposition within a single block is sufficient to capture the limited structure in short forecasts. Longer horizons and more complex data (multivariate Weather, M4-Weekly) favor alternating stacks, where the separation of Trend and Wavelet blocks across stacks allows each block type to specialize through the residual decomposition.
 
-**Figure 4: OWA Heatmap across Configurations and Periods.** Rows = configurations (sorted by Yearly OWA), columns = Yearly / Quarterly / Monthly. Cell color encodes OWA intensity (green = low/good, red = high/poor). Gray cells indicate diverged or NaN runs. Reveals cross-period generalization: some configs (BottleneckGenericAE) maintain consistent relative ranking while others (NBEATS-G, NBEATS-I-AE) shift dramatically. *[To be produced from block_benchmark_results.csv.]*
+This pattern has an intuitive explanation. For short horizons, the forecast output has few dimensions ($H = 4$--8), and a single block can efficiently decompose it using a combined basis. For longer horizons ($H \geq 13$), the forecast has enough structure to benefit from separate specialized blocks operating in sequence. The alternating pattern is particularly powerful on Weather-96 ($H = 96$), where the 96-dimensional forecast benefits from iterative refinement by complementary block types.
 
-**Figure 5: Training Stability (OWA Standard Deviation).** Bar chart of OWA standard deviation across 5 seeds for each configuration on the Yearly period. NBEATS-I-AE stands out with remarkably low variance (std ≈ 0.001), while BottleneckGeneric shows the highest variance among healthy configs (std ≈ 0.016). Stable training is practically valuable because it reduces the number of seeds needed for reliable performance estimation. *[To be produced from block_benchmark_results.csv.]*
+### 5.5 Backbone Hierarchy and Its Reversal
 
-### 5.2 Ensemble Results
+A surprising finding is that the optimal backbone type reverses across datasets.
 
-The ensemble experiment follows the original paper's multi-horizon strategy: for each of three paper architectures, 30 models are trained (6 backcast multipliers × 5 seeds) and aggregated via element-wise median. Results are currently available for the Yearly period only.
+**M4 and Tourism**: RootBlock $>$ AELG $>$ AE. On these competition-format datasets with many series, the unconstrained capacity of the RootBlock backbone produces the best results. The AE bottleneck, while parameter-efficient, slightly constrains expressiveness. The AELG gate partially compensates, placing AELG between RootBlock and AE.
 
-#### 5.2.1 Ensemble Summary
+**Weather and Milk**: AE $>$ AELG $>$ RootBlock. On multivariate Weather (21 sensors, normalized data) and univariate Milk (single series, strong seasonality), the pattern reverses completely. The AE backbone's compression acts as beneficial regularization, and the learned gate in AELG adds noise rather than helping.
 
-**Table 5: Ensemble Results (Yearly Period)**
+[**Figure 6**: Backbone comparison boxplots. Four panels (M4-Yearly, Tourism-Yearly, Weather-96, Milk), each showing SMAPE distributions for the three backbone types across all configurations that use that backbone. On M4-Yearly and Tourism, the RootBlock (leftmost) boxplot has the lowest median; on Weather and Milk, the AE backbone (rightmost) has the lowest median. Whiskers extend to the data range; individual runs shown as jittered dots. *To be produced from comprehensive sweep CSVs.*]
 
-| Config | # Models | Ensemble sMAPE | Ensemble MASE | Ensemble OWA | Best Single-Model OWA | Improvement |
-|--------|:--------:|:--------------:|:-------------:|:------------:|:---------------------:|:-----------:|
-| NBEATS-G | 18 | 13.318 | 3.066 | 0.793 | 0.820 | -3.3% |
-| NBEATS-I | 18 | 13.265 | 3.033 | 0.788 | 0.816 | -3.4% |
-| NBEATS-I+G | 18 | 13.208 | 3.017 | 0.784 | 0.808 | -3.0% |
-| All configs | Q/M/W/D/H | [pending] | [pending] | [pending] | [pending] | [pending] |
+**Hypothesis.** The backbone hierarchy reversal likely reflects the interaction between model capacity and data complexity. M4/Tourism contain thousands of diverse series whose heterogeneity rewards unconstrained capacity. Weather/Milk have simpler or more structured signal patterns where compression eliminates noise dimensions that would otherwise add variance. On Milk specifically, the AE backbone achieves 1.7% divergence (vs. 40.6% for RootBlock), and its lower variance compensates for any expressiveness loss.
 
-Ensemble values are taken directly from `ensemble_summary_results.csv`. "Best Single-Model OWA" refers to the mean OWA from the block benchmark (5H multiplier, 5 seeds). The improvement column shows the relative reduction: $(OWA_{ensemble} - OWA_{single}) / OWA_{single}$.
+### 5.6 Hyperparameter Analysis
 
-The ensemble consistently provides approximately 3% OWA improvement over the best single-model configuration, with the relative gain remarkably stable across the three architectures (3.0-3.4%). NBEATS-I+G achieves the best ensemble OWA (0.784), reflecting both its strong single-model performance and the diversity introduced by combining Trend, Seasonality, and Generic stacks at different backcast lengths.
+**Table 9: Hyperparameter Sensitivity Matrix**
 
-#### 5.2.2 Comparison with Original Paper
+| Setting | M4-Yearly | M4-Quarterly | M4-Monthly | M4-Weekly | M4-Hourly | Tourism | Weather | Milk |
+|---------|:---------:|:------------:|:----------:|:---------:|:---------:|:-------:|:-------:|:----:|
+| **active\_g** | Slight help | Neutral | Slight hurt | Neutral | Helps | Essential ($p = 0.0002$) | Catastrophic unified; OK alt. | Critical for Generic |
+| **Best depth** | 10 | 10 | 30 | Mixed | 30 | 10 ($p < 0.001$) | 30 alt. / 10 unified | 10 ($p = 0.007$) |
+| **Best wavelet** | coif2 | Any | Haar/coif2 | Any | Haar | db3 | db3 | Haar |
+| **Best ld** | 16 | 8 | 16 | --- | 16 | 8/16/32 equiv. | 8 $>$ 16 $>$ 32 | 8 sufficient |
+| **Skip connections** | Hurts | --- | --- | Marginal | --- | Harmful | Marginal | N/A |
+| **Backbone** | RB $>$ AELG $>$ AE | --- | --- | --- | --- | RB $>$ AELG $>$ AE | AE $>$ AELG $>$ RB | AE $>$ AELG |
+| **Basis dim** | eq\_fcast | --- | 2$\times$eq | eq\_fcast | 2$\times$eq | eq\_fcast | 2$\times$eq | eq\_fcast |
 
-Direct comparison with the original N-BEATS paper (Oreshkin et al., 2019) is limited because the paper reports aggregate OWA across all six M4 periods, while our ensemble results currently cover only Yearly. The paper's 180-model ensemble (3 loss functions × 6 multipliers × 10 seeds) achieved OWA = 0.795 on the full M4 dataset. Our 30-model ensembles (1 loss function × 6 multipliers × 5 seeds) achieve OWA = 0.784-0.793 on Yearly alone. Since Yearly is typically one of the easier M4 periods, these Yearly-only results should not be directly compared to the paper's aggregate metric. A complete comparison requires results from all six periods.
+#### 5.6.1 active\_g
 
-#### 5.2.3 Figure (Ensemble)
+The `active_g` mechanism exhibits the most complex dataset dependence of any hyperparameter:
 
-**Figure 6: Ensemble OWA vs Backcast Multiplier.** Line plot with backcast multiplier (2H through 7H) on the x-axis and mean OWA (across 5 seeds) on the y-axis. Three lines, one per architecture (NBEATS-G, NBEATS-I, NBEATS-I+G). Horizontal dashed lines show ensemble OWA for each architecture. Individual seed OWA values are plotted as semi-transparent points. The plot reveals which backcast lengths contribute most to ensemble diversity: shorter multipliers (2H-3H) tend to produce lower individual OWA (better), while longer multipliers (6H-7H) show higher variance. The ensemble consistently outperforms all individual models. *[To be produced from ensemble_individual_results.csv.]*
+- **Tourism**: Essential. `active_g = \text{'forecast'}` eliminates all bimodal convergence failures (Wilcoxon $p = 0.0002$) and is broadly beneficial across all architecture families.
+- **Milk**: Critical for Generic blocks specifically. Reduces NBEATS-G SMAPE from 19.35 to 2.42 (an 87% improvement), but is marginal for wavelet-based architectures that are already convergence-stable.
+- **Weather**: Catastrophic for unified/homogeneous stacks (SMAPE $\approx 100$ vs. $\approx 42$ without), but benign or slightly beneficial for alternating stacks. This asymmetry appears to arise because ReLU on forecast outputs interacts differently with the residual chain when all blocks are identical (unified) versus when they alternate between block types.
+- **M4**: Mixed. Slight improvement on Yearly and Hourly; slight degradation on Monthly; neutral elsewhere.
 
-### 5.3 Ablation Studies
+**Safe default**: `active_g = \text{False}` is safe everywhere. `active_g = \text{'forecast'}` should be used with caution, particularly on Weather-like multivariate datasets with unified stacks.
 
-Ablation experiments (Part 2) have not yet been run. This section presents the experimental design; results will be populated upon completion.
+#### 5.6.2 Stack Depth
 
-#### 5.3.1 Ablation Design
+Optimal stack depth is primarily a function of forecast horizon:
 
-The ablation study evaluates two training extensions (`active_g`, `sum_losses`) and four alternative activation functions using the 30-stack Generic configuration as the control. The Generic_baseline row is identical to NBEATS-G from the block benchmark, serving as the shared reference point.
+- **Short horizons ($H = 4$--8)**: 10 stacks is optimal. Tourism shows highly significant preference for 10 stacks ($p < 0.001$, winning 25/28 paired comparisons). Milk similarly prefers 10 stacks ($p = 0.007$).
+- **Long horizons ($H \geq 14$)**: 30 stacks is optimal. M4-Monthly ($H = 18$), M4-Hourly ($H = 48$), and alternating stacks on Weather ($H = 96$) all benefit from greater depth.
+- **Medium horizons ($H = 8$--13)**: Mixed. M4-Quarterly slightly prefers 10; M4-Weekly shows no clear preference.
 
-**Table 6: Ablation Results (all pending)**
+The horizon-depth interaction makes sense: short forecasts have limited structure that can be decomposed in 10 blocks, while longer forecasts benefit from the finer-grained iterative decomposition that 30 blocks provide.
 
-| Config | Modification | Yearly OWA | Quarterly OWA | Monthly OWA | W / D / H |
-|--------|-------------|:----------:|:-------------:|:-----------:|:---------:|
-| Generic_baseline | None (control) | [pending] | [pending] | [pending] | [pending] |
-| Generic_activeG | active_g=True | [pending] | [pending] | [pending] | [pending] |
-| Generic_sumLosses | sum_losses=True | [pending] | [pending] | [pending] | [pending] |
-| Generic_activeG+sumL | Both extensions | [pending] | [pending] | [pending] | [pending] |
-| Generic_GELU | GELU activation | [pending] | [pending] | [pending] | [pending] |
-| Generic_ELU | ELU activation | [pending] | [pending] | [pending] | [pending] |
-| Generic_LeakyReLU | LeakyReLU activation | [pending] | [pending] | [pending] | [pending] |
-| Generic_SELU | SELU activation | [pending] | [pending] | [pending] | [pending] |
+#### 5.6.3 Wavelet Family
 
-#### 5.3.2 Figure (Ablation)
+Wavelet family choice is statistically significant on 3 of 4 datasets (Kruskal-Wallis $p < 0.05$) but the optimal family is dataset-dependent:
 
-**Figure 7: Ablation Grouped Bar Chart.** For each period (grouped), bars show mean OWA for each ablation configuration. Error bars show ±1 std across seeds. The baseline (ReLU, no extensions) is highlighted with a vertical dashed reference line. *[To be produced upon completion of ablation runs.]*
+- **db3** is the safest cross-dataset default, ranking 1st or 2nd on Weather, Tourism (non-AE), and M4-Weekly.
+- **coif2** is best on M4-Yearly.
+- **Haar** is best on Milk and M4-Hourly.
+- **Sym10** shows strength on Weather (AELG category) and M4-Yearly (alternating stacks).
 
-### 5.4 Statistical Significance Analysis
+On M4-Yearly specifically, wavelet family is *not* significant (KW $p = 0.79$), suggesting that the orthonormal DWT basis quality matters more than the specific wavelet shape for short-horizon forecasting.
 
-A central question motivating this work is whether the choice of block type--the basis expansion function within the N-BEATS doubly residual framework--meaningfully affects forecasting accuracy on the M4 benchmark. Preliminary inspection of the results in Section 5.1 reveals that the OWA spread among healthy, fully-converging configurations is remarkably narrow (0.023 on Yearly, 0.020 on Quarterly, 0.043 on Monthly), raising the possibility that observed differences are attributable to random seed variation rather than genuine architectural effects.
+#### 5.6.4 Latent Dimension
 
-#### 5.4.1 Hypothesis and Analysis Design
+For AE-backbone variants, `latent_dim = 16` is broadly safe, but Weather reverses the hierarchy:
 
-**Null hypothesis (H₀):** Block type has no statistically significant effect on OWA forecasting performance. The observed differences in OWA across block configurations are attributable to random seed variation rather than architectural differences.
+- **M4/Tourism**: ld = 16 generally best or tied with ld = 8.
+- **Weather**: ld = 8 $>$ ld = 16 $>$ ld = 32 (KW $p = 0.010$). The smaller bottleneck provides stronger regularization on this multivariate dataset.
+- **Milk**: ld = 8 is sufficient for the simple univariate signal.
 
-**Alternative hypothesis (H₁):** At least one block type produces OWA that is significantly different from the others.
+#### 5.6.5 Basis Dimension
 
-**Data preparation** (applied independently per period before all tests):
+The `basis_dim` parameter controls how many wavelet basis vectors are used:
 
-1. Exclude NaN values and divergent runs (OWA > 2.0 or MASE > 10⁶)
-2. Exclude configurations with fewer than 2 healthy seeds (insufficient for variance estimation)
-3. Group remaining OWA values by `config_name`
+- **eq\_fcast** ($k = H$): Uses exactly as many basis vectors as forecast steps. Optimal for short horizons (M4-Yearly, Tourism, Milk).
+- **2$\times$eq** ($k = 2H$): Over-complete basis with twice as many vectors as forecast steps. Optimal for longer horizons (M4-Monthly, M4-Hourly, Weather) where the extra basis vectors capture finer frequency resolution.
 
-After filtering, Yearly retains 10 configurations (all with 5/5 healthy seeds), Quarterly retains 10 configurations (AutoEncoder with 3/5, all others 5/5), and Monthly retains 9 configurations (all with 5/5 healthy seeds). Wavelet-only configurations are excluded from all statistical tests due to their near-universal failure to converge.
+#### 5.6.6 Skip Connections
 
-#### 5.4.2 Statistical Tests
+ResNet-style skip connections (`skip_distance`, `skip_alpha`) that periodically re-inject the original input into the residual stream are **not recommended**. They hurt performance on M4-Yearly and Tourism, provide only marginal benefit on Weather and M4-Weekly, and add hyperparameter complexity. The structured basis blocks (TrendWavelet, WaveletV3) do not exhibit the gradient decay that skip connections were designed to address.
 
-We employ a three-tier testing strategy: an omnibus test to determine whether block type matters at all, pairwise comparisons if the omnibus test is significant, and effect size estimation regardless of significance.
+**Cross-Dataset Safe Defaults:**
+> `active_g = False`, 10 stacks, db3 wavelet, `latent_dim = 16`, eq\_fcast basis dim, no skip connections. This combination is best or tied-for-best on 6 of 9 dataset-periods.
 
-**Tier 1: Omnibus tests — Does block type matter at all?**
+### 5.7 Cross-Dataset Generalist Analysis
 
-We apply three complementary omnibus tests per period:
+While dataset-specific tuning always outperforms a single generalist, practitioners often need a configuration that works reasonably well across diverse forecasting tasks. Table 10 reports the top 10 configurations ranked by mean rank across five core datasets (M4-Yearly, M4-Quarterly, Tourism, Weather, Milk).
 
-- **Kruskal-Wallis H-test** (non-parametric one-way ANOVA): preferred because (a) n = 5 per group is too small to reliably verify normality, (b) OWA distributions may be skewed, and (c) Kruskal-Wallis is robust to non-normality.
-- **One-way ANOVA (F-test)**: parametric complement assuming approximate normality; included for comparison but less trustworthy given the small sample sizes.
-- **Friedman test** (non-parametric repeated measures): treats seeds (42, 43, 44, 45, 46) as a blocking factor, potentially increasing power by accounting for seed-specific effects that affect all configurations similarly.
+**Table 10: Top 10 Generalist Configurations by Mean Rank**
 
-**Table 7: Omnibus Statistical Test Results**
+| Rank | Configuration | Mean Rank | M4-Y | M4-Q | Tourism | Weather | Milk | Params |
+|:----:|--------------|:---------:|:----:|:----:|:-------:|:-------:|:----:|-------:|
+| 1 | TALG+DB3V3ALG\_10s\_ag0 | 14.6 | 33 | 7 | 30 | 1 | 2 | 2,390K |
+| 2 | NBEATS-IG\_10s\_ag0 | 21.6 | 22 | 1 | 49 | 22 | 14 | 19,644K |
+| 3 | TWGAELG\_10s\_ld16\_agf | 22.2 | 9 | 44 | 23 | 13 | 22 | 1,285K |
+| 4 | T+Db3V3\_30s\_bd2eq | 23.2 | 5 | 9 | 70 | 16 | 16 | 15,287K |
+| 5 | TW\_10s\_td3\_bdeq\_coif2 | 24.6 | 1 | 5 | 9 | 53 | 55 | 2,076K |
+| 6 | TALG+HaarV3ALG\_30s\_ag0 | 26.0 | 26 | 3 | 84 | 12 | 5 | 3,284K |
+| 7 | T+Sym10V3\_30s\_bdeq | 26.2 | 16 | 18 | 89 | 7 | 1 | 15,241K |
+| 8 | TALG+Sym10V3ALG\_30s\_agf | 26.6 | 2 | 22 | 79 | 15 | 15 | 3,134K |
+| 9 | TWAELG\_10s\_ld16\_coif2\_agf | 30.8 | 4 | 39 | 6 | 98 | 7 | 436K |
+| 10 | TWAELG\_10s\_ld16\_coif2\_ag0 | 30.8 | 49 | 21 | 27 | 44 | 13 | 436K |
 
-| Period | Test | Statistic | p-value | η² | Interpretation |
-|--------|------|:---------:|:-------:|:--:|----------------|
-| Yearly | Kruskal-Wallis | H = 9.85 | 0.363 | 0.043 | Fail to reject H₀ |
-| Yearly | One-way ANOVA | F = 1.28 | 0.307 | — | Fail to reject H₀ |
-| Yearly | Friedman | χ² = 10.20 | 0.335 | — | Fail to reject H₀ |
-| Quarterly | Kruskal-Wallis | H = 14.99 | 0.091 | 0.315 | Fail to reject H₀ (marginal) |
-| Quarterly | One-way ANOVA | F = 4.33 | 0.003 | — | Reject H₀ (α = 0.05) |
-| Quarterly | Friedman | χ² = 11.91 | 0.155 | — | Fail to reject H₀ |
-| Monthly | Kruskal-Wallis | H = 13.31 | 0.102 | 0.295 | Fail to reject H₀ |
-| Monthly | One-way ANOVA | F = 2.30 | 0.068 | — | Fail to reject H₀ (marginal) |
-| Monthly | Friedman | χ² = 11.20 | 0.191 | — | Fail to reject H₀ |
+The best generalist --- TALG+DB3V3ALG\_10s\_ag0 (alternating TrendAELG + DB3WaveletV3AELG, 10 stacks, `active_g = \text{False}`) --- achieves a mean rank of 14.6 out of 112 with only 2.4M parameters. It ranks top-10 on Weather (1st) and Milk (2nd), competitive on M4-Quarterly (7th), and never worse than rank 33.
 
-Eta-squared (η²) is computed from the Kruskal-Wallis statistic as η² = (H − k + 1) / (N − k), where k is the number of groups and N is the total number of observations.
-
-**Interpretation:** The non-parametric tests (Kruskal-Wallis, Friedman) consistently fail to reject H₀ across all three periods at α = 0.05. The parametric one-way ANOVA rejects H₀ for Quarterly (p = 0.003) but not for Yearly or Monthly. This discrepancy likely reflects the ANOVA's sensitivity to the specific pattern of means combined with its assumption of normality, which is questionable at n = 5. Given the robustness advantages of the non-parametric tests and the inconsistency of the ANOVA result across periods, the overall evidence suggests that **block type does not produce statistically significant differences in OWA** among healthy, converging configurations.
-
-**Tier 2: Pairwise comparisons**
-
-Because the non-parametric omnibus tests fail to reject H₀, we do not conduct formal pairwise comparisons (Mann-Whitney U tests with Bonferroni correction). With k ≈ 10 configurations, there would be C(10, 2) = 45 pairwise tests requiring α_adjusted ≈ 0.001--far too conservative for the observed effect sizes and sample sizes. The ANOVA rejection for Quarterly, if taken at face value, would warrant pairwise t-tests; however, with n = 5 per group and 45 comparisons, the corrected significance threshold would yield no detectable pairs.
-
-**Tier 3: Effect sizes**
-
-Effect sizes provide a scale-independent measure of the magnitude of group differences, and are arguably more informative than p-values given the small sample sizes.
-
-- **Yearly η² = 0.043** (small effect): Block type explains approximately 4% of the variance in OWA. By conventional thresholds (Cohen, 1988), this is a small effect approaching negligibility.
-- **Quarterly η² = 0.315** (large effect): Block type explains approximately 32% of the variance. However, this large effect size is driven partly by the NBEATS-I-AE outlier (OWA = 0.937, substantially worse than other configs at 0.892-0.912). Excluding NBEATS-I-AE would substantially reduce the effect.
-- **Monthly η² = 0.295** (large effect): Similar pattern to Quarterly, with NBEATS-I-AE again contributing disproportionately to the between-group variance.
-
-The effect size pattern suggests that while most block types perform similarly, **NBEATS-I-AE degrades on higher-frequency periods**, creating apparent statistical significance that is driven by a single configuration rather than a general block-type effect. This is better understood as a specific limitation of extreme AE-backbone compression than as evidence that block type generally matters.
-
-#### 5.4.3 Power Analysis and Limitations
-
-With n = 5 seeds per configuration, the statistical power of these tests remains limited, though improved over the initial 3-seed design. This is an important caveat for interpreting the null results.
-
-**Post-hoc power estimate:** For the Yearly period, the observed effect size (η² = 0.043) with k = 10 groups and n = 5 per group yields estimated power of approximately **25-35%** for the Kruskal-Wallis test. This means that even if a small real effect exists, we would detect it only 25-35% of the time.
-
-**Practical implication:** Failure to reject H₀ should be interpreted as *insufficient evidence to conclude that block type affects OWA* rather than *confirmation that block type is irrelevant*. The distinction matters: the data are consistent with H₀, but they are also consistent with small real effects (e.g., η² ≈ 0.05) that we lack the power to detect.
-
-**Recommendation for future work:** Increasing to n = 10 seeds per configuration would provide approximately 80% power to detect medium effects (η² = 0.06), the conventional threshold for adequate statistical testing. This would require 10 × 17 configs × 6 periods = 1,020 training runs (versus the current 17 × 5 × 3 = 255), a roughly 4x increase in computational cost.
-
-#### 5.4.4 Complementary Analyses
-
-**Cross-period rank consistency (Spearman correlation)**
-
-If block type reliably determines forecasting quality, configurations that rank well on one period should rank similarly on others. We compute the Spearman rank correlation of mean OWA rankings between each pair of completed periods.
-
-**Table 8: Cross-Period Rank Consistency**
-
-| Period Pair | Spearman ρ | p-value | n configs | Interpretation |
-|-------------|:----------:|:-------:|:---------:|----------------|
-| Yearly vs Quarterly | −0.021 | 0.948 | 11 | No correlation |
-| Yearly vs Monthly | −0.436 | 0.180 | 11 | No correlation (negative trend) |
-| Quarterly vs Monthly | 0.455 | 0.160 | 11 | No correlation (positive trend) |
-
-The rank correlations are weak and non-significant for all period pairs. The Yearly-vs-Monthly correlation is *negative* (ρ = −0.436), meaning configurations that rank well on Yearly tend to rank *poorly* on Monthly and vice versa. This is consistent with the observation that NBEATS-G (data-hungry, high-capacity) improves on Monthly (48,000 series) while NBEATS-I-AE (parameter-efficient, compressed) excels on Yearly (23,000 shorter series).
-
-**Practical implication:** Configuration rankings are period-dependent. A practitioner cannot select the "best" block type on one forecasting horizon and expect it to generalize to others. This further supports the hypothesis that block type choice, among healthy configurations, is secondary to other factors (dataset size, series length, horizon) in determining aggregate forecasting accuracy.
-
-**Bootstrap confidence intervals**
-
-For each configuration and period, we compute 95% bootstrap confidence intervals for mean OWA using 10,000 resamples with replacement from the n = 5 (or fewer, for configurations with divergent seeds) healthy seed OWA values.
-
-On Yearly, the bootstrap CIs of all 10 healthy configurations overlap substantially. For example, AutoEncoder (best: 0.789-0.817) overlaps with NBEATS-G (0.810-0.826) and BottleneckGeneric (worst healthy: 0.810-0.840). The universal overlap confirms that the differences in point estimates are within the range of sampling variability.
-
-On Quarterly and Monthly, the CIs are wider for some configurations (notably GenericAEBackcast on Monthly: 0.908-0.977) and narrower for others (NBEATS-I on Quarterly: 0.889-0.894), but overall the pattern of substantial overlap persists.
-
-#### 5.4.5 Figures (Statistical Analysis)
-
-**Figure 8: Bootstrap Confidence Interval Forest Plot.** Three panels (Yearly, Quarterly, Monthly), each showing configurations as rows with horizontal error bars representing 95% bootstrap CIs for mean OWA. Point estimates marked with filled circles. Configurations sorted by point estimate within each panel. Extensive CI overlap provides visual evidence consistent with the null hypothesis. *[To be produced via analysis script using scipy.stats and matplotlib.]*
-
-**Figure 9: OWA Distribution Box Plots.** Box plots of OWA per configuration (x-axis), faceted by period. Individual seed values overlaid as jittered dots. Whiskers extend to data range (with n = 5, statistical outlier detection has limited power). The compressed y-axis range within each panel (e.g., 0.79-0.84 for Yearly) highlights how tight the performance band is across architecturally diverse configurations. *[To be produced via analysis script.]*
-
-#### 5.4.6 Implementation Note
-
-All statistical tests in this section were computed from `experiments/results/block_benchmark_results.csv` using SciPy's `scipy.stats` module (Kruskal-Wallis: `kruskal`, Mann-Whitney: `mannwhitneyu`, Friedman: `friedmanchisquare`, Spearman: `spearmanr`) and NumPy for bootstrap resampling. The analysis script filters healthy runs (OWA < 2.0, non-NaN MASE < 10⁶), groups by configuration, and runs all tests per period. No modifications to the training code were required. The script and its output are available in the supplementary materials.
-
-### 5.5 Discussion
-
-The results across three M4 periods, ensemble evaluation, and statistical analysis yield several findings relevant to both the theoretical understanding of the N-BEATS architecture and its practical application.
-
-**1. Novel blocks match or beat paper baselines.** On Yearly, AutoEncoder (0.804) and NBEATS-I-AE (0.805) outperform all three paper baselines (NBEATS-G: 0.820, NBEATS-I: 0.816, NBEATS-I+G: 0.808). The AE-backbone variants (GenericAE, BottleneckGenericAE) also match NBEATS-I+G. This demonstrates that the N-BEATS doubly residual framework is robust to the specific choice of basis expansion within each block--a finding consistent with the statistical analysis showing no significant block-type effect.
-
-**2. Parameter efficiency.** The most practically significant finding is the dramatic parameter reduction achievable with AE-backbone blocks. NBEATS-I-AE requires only 2.2M parameters (91% fewer than NBEATS-G's 24.7M) while achieving better Yearly OWA. BottleneckGenericAE achieves comparable performance with 4.3M parameters (82% fewer). For deployment scenarios where model size, memory footprint, or inference latency are constrained, these AE-backbone variants offer substantial advantages without sacrificing accuracy--at least on the periods tested so far.
-
-**3. Cross-period generalization varies by block type.** The absence of consistent rank ordering across periods (Spearman ρ ranging from −0.44 to +0.46, all non-significant) reveals an important nuance: some architectures are better suited to specific forecasting contexts. NBEATS-G's fully learnable basis benefits from the larger Monthly dataset (48,000 series), while the constrained AE-backbone blocks perform best on the smaller Yearly dataset (23,000 series) where their implicit regularization prevents overfitting. This period-dependence means that the "best" block type is a function of the forecasting problem, not an inherent property of the architecture.
-
-**4. Wavelet instability.** Pure wavelet blocks fail in 67-100% of training runs, with failure modes ranging from immediate NaN (Haar, DB3Alt) to gradual MASE explosion (DB3, Symlet3). The fact that Trend+DB3Wavelet achieves full convergence and competitive OWA when paired with stable Trend stacks suggests that the wavelet basis expansion concept is viable but requires stabilization from complementary stacks or explicit numerical safeguards. Future work should investigate gradient clipping, basis matrix normalization, or learned scaling factors as potential remedies.
-
-**5. Ensembling provides consistent improvement.** Median aggregation across 30 models (6 backcast multipliers × 5 seeds) improves OWA by approximately 3% on Yearly, consistent across all three paper architectures (3.0-3.4% improvement). This improvement is remarkably uniform, suggesting that the ensemble benefit comes primarily from diversity in backcast length rather than seed-specific initialization effects.
-
-**6. Training stability varies significantly.** NBEATS-I-AE exhibits remarkably low OWA variance across seeds (std ≈ 0.001 on Yearly), while BottleneckGeneric shows the highest variance among healthy configs (std ≈ 0.016). From a practical standpoint, low variance is valuable because it reduces the number of training runs needed to achieve reliable performance estimates. The AE-backbone's hourglass compression may act as a regularizer that smooths the loss landscape, leading to more deterministic convergence.
-
-**7. Statistical significance and the block-type irrelevance hypothesis.** The Kruskal-Wallis test fails to reject H₀ (block type has no effect on OWA) for all three periods. The Friedman test, which accounts for seed-level blocking, similarly fails to reject H₀. While these null results are tempered by the low statistical power (≈15-20% for small effects), the complementary evidence is consistent: narrow OWA spread (0.02-0.04), overlapping bootstrap confidence intervals, and inconsistent cross-period rankings all point toward the same conclusion. Among healthy, converging configurations, the specific choice of basis expansion function has a negligible effect on aggregate OWA forecasting accuracy.
-
-However, block type **does** significantly affect three practically important dimensions: (a) **parameter count** (5-10x variation between AE-backbone and standard backbone), (b) **training stability** (0-100% convergence rate for wavelets vs 100% for all non-wavelet blocks), and (c) **convergence speed** (epochs to convergence range from 12 to 39). The practical recommendation is therefore: choose blocks based on deployment constraints (model size, stability requirements, interpretability needs) rather than chasing marginal OWA differences that are likely within noise.
-
-### 5.6 Convergence Study (Part 6)
-
-To disentangle initialization sensitivity from data distribution effects, we conduct a series of convergence studies at increasing scale: (1) a 10-stack study with 50 runs across M4-Yearly and Weather-96, (2) a 30-stack study with 200 runs across M4-Yearly and Tourism-Yearly, and (3) a focused study on the monthly milk production dataset at 6-stack and 10-stack scales with 100 runs each. Together, these studies reveal a fundamental convergence-vs-optimality trade-off inherent to the `active_g` mechanism.
-
-#### 5.6.1 V1 Results: 10-Stack, M4-Yearly and Weather-96
-
-The initial convergence study uses a 10-stack Generic architecture with a 2×2 factorial design over `active_g` and `sum_losses`, yielding 4 configurations × 50 runs × 2 datasets = 400 total training runs.
-
-**Table 9: Convergence Study V1 — M4-Yearly (10-stack, 50 runs per configuration)**
-
-| Configuration | sMAPE (mean±std) | MASE (mean±std) | sMAPE CV% | MASE CV% | Epochs (mean±std) |
-|---|---|---|---|---|---|
-| Baseline | 14.17 ± 4.44 | 3.23 ± 0.81 | 31.37 | 24.94 | 17.8 ± 3.5 |
-| active_g | 13.67 ± 0.12 | 3.18 ± 0.06 | 0.88 | 1.95 | 18.0 ± 2.7 |
-| sum_losses | 13.56 ± 0.13 | 3.13 ± 0.05 | 0.93 | 1.74 | 17.8 ± 3.9 |
-| active_g + sum_losses | 13.65 ± 0.16 | 3.17 ± 0.08 | 1.20 | 2.42 | 18.4 ± 4.0 |
-
-**Table 10: Convergence Study V1 — Weather-96 (10-stack, 50 runs per configuration)**
-
-| Configuration | sMAPE (mean±std) | MASE (mean±std) | sMAPE CV% | MASE CV% | Epochs (mean±std) |
-|---|---|---|---|---|---|
-| Baseline | 65.37 ± 0.88 | 1.14 ± 0.12 | 1.35 | 10.32 | 12.6 ± 1.7 |
-| active_g | 63.93 ± 1.81 | 1.14 ± 0.11 | 2.83 | 9.95 | 11.8 ± 1.6 |
-| sum_losses | 66.92 ± 0.66 | 50.67 ± 348.15 | 0.99 | 687.10 | 14.8 ± 6.1 |
-| active_g + sum_losses | 63.50 ± 2.10 | 1.20 ± 0.17 | 3.31 | 14.61 | 24.7 ± 8.4 |
-
-The V1 results established that `active_g` is a powerful stabilizer on M4-Yearly, reducing sMAPE CV from 31.37% to 0.88% (a 36× improvement). The `sum_losses` extension achieves similar stabilization (CV = 0.93%) while also producing the best mean sMAPE (13.56). On Weather-96, the baseline is already stable (CV = 1.35%), and `sum_losses` exhibits a pathological MASE explosion (CV = 687%) that `active_g + sum_losses` rescues but at the cost of delayed convergence (24.7 vs 12.6 epochs).
-
-#### 5.6.2 V2 Results: 30-Stack, M4-Yearly and Tourism-Yearly
-
-To test whether the V1 findings hold at production scale and across additional datasets, we scale the study to 30-stack Generic with 200 runs per configuration on M4-Yearly and Tourism-Yearly. This higher replication allows separation of "healthy" runs (sMAPE < 30, filtering catastrophic but non-diverged initializations) from the full population, revealing a pattern invisible in V1's aggregate statistics.
-
-**Table 11: Convergence Study V2 — 30-Stack Generic, 200 runs per configuration**
-
-| Dataset | Config | All runs sMAPE (mean±std) | Healthy runs sMAPE (mean±std) | Healthy min sMAPE | Conv. rate (healthy/total) |
-|---|---|---|---|---|---|
-| M4-Yearly | Baseline | 14.98 ± 5.89 | 13.54 ± 0.19 | 13.14 | 186/200 (93%) |
-| M4-Yearly | active_g | 13.69 ± 0.18 | 13.69 ± 0.18 | 13.24 | 200/200 (100%) |
-| Tourism-Yearly | Baseline | 21.87 ± 3.76 | 21.17 ± 0.53 | 19.87 | 189/200 (94.5%) |
-| Tourism-Yearly | active_g | 21.37 ± 0.51 | 21.37 ± 0.51 | 20.18 | 200/200 (100%) |
-
-The V2 results reveal the **convergence-vs-optimality trade-off**:
-
-- **Across all runs**, `active_g` always produces better mean performance: 13.69 vs 14.98 sMAPE on M4-Yearly, 21.37 vs 21.87 on Tourism-Yearly. This is because `active_g` eliminates catastrophic initialization failures that inflate the baseline's mean.
-- **Among healthy runs only**, the baseline matches or outperforms `active_g` on every dataset: 13.54 vs 13.69 sMAPE on M4-Yearly (1.1% better), 21.17 vs 21.37 on Tourism-Yearly (0.9% better). The baseline also achieves better minimum sMAPE (13.14 vs 13.24 on M4-Yearly).
-- The baseline's convergence rate (93-94.5%) means that approximately 1 in 15 runs fails catastrophically, but the 93% that succeed produce slightly better models.
-
-#### 5.6.3 Milk Dataset Results
-
-To test the trade-off on a small univariate series where the signal-to-noise ratio of architectural choices is highest, we study the monthly milk production dataset (168 observations, single series) at 6-stack and 10-stack scales with 100 runs per configuration. The milk dataset's strong seasonal pattern and small size make it a sensitive probe for expressiveness constraints.
-
-**Table 12: Convergence Study — Milk Dataset (100 runs per configuration)**
-
-| Scale | Config | Conv. rate | Healthy best_val_loss (mean±std) | CV% | Min best_val_loss |
-|---|---|---|---|---|---|
-| 6-stack | Baseline | 70/100 (70%) | 1.49 ± 0.21 | 13.98% | 1.03 |
-| 6-stack | active_g | 100/100 (100%) | 2.62 ± 0.28 | 10.54% | 1.87 |
-| 6-stack | active_g='forecast' | 100/100 (100%) | 2.28 ± 0.36 | 15.80% | 1.32 |
-| 6-stack | active_g='backcast' | 63/100 (63%) | 2.12 ± 0.42 | 19.88% | 1.23 |
-| 10-stack | Baseline | 100/100 (100%) | 1.58 ± 1.02 | — | 0.42 |
-| 10-stack | active_g | 100/100 (100%) | 2.43 ± 1.19 | — | 0.81 |
-
-The milk dataset provides the clearest evidence of the convergence-vs-optimality trade-off, and the 6-stack split-mode results (Section 5.6.6) reveal which output path drives each side of the trade-off:
-
-- **Baseline** (`active_g=False`): Best healthy-run loss (1.49) but only 70% convergence rate, with 1% divergence. When it converges, it produces the most accurate models.
-- **Balanced activation** (`active_g=True`): 100% convergence with the lowest variance (CV% = 10.54%), but the worst mean loss among all configurations (2.62). The non-negativity constraint on both paths smooths the loss landscape at the cost of expressiveness.
-- **Forecast-only activation** (`active_g='forecast'`): 100% convergence (matching balanced), better mean loss than balanced (2.28 vs 2.62, a 13% improvement), and faster training (82.0 vs 81.1 epochs, 7.5s vs 9.5s). This configuration recovers significant expressiveness by leaving the backcast path unconstrained while retaining the convergence benefit of forecast-path activation.
-- **Backcast-only activation** (`active_g='backcast'`): The worst convergence rate of all configurations (63%, worse than even the baseline's 70%), with 3% divergence and the highest variance (CV% = 19.88%). Constraining only the backcast path—the path most critical for bidirectional residual correction—destabilizes training without providing the loss-landscape smoothing that forecast-path activation delivers.
-
-#### 5.6.4 Convergence vs. Optimality: Cross-Dataset Synthesis
-
-**Table 13: Convergence-vs-Optimality Pattern Across All Datasets**
-
-| Dataset | Scale | Config | Conv. rate | Healthy metric (mean±std) | Gap vs baseline |
-|---|---|---|---|---|---|
-| M4-Yearly | 10-stack (V1) | Baseline | ~70% | 14.17 ± 4.44 sMAPE | — |
-| M4-Yearly | 10-stack (V1) | active_g | ~100% | 13.67 ± 0.12 sMAPE | +3.5% (worse healthy) |
-| M4-Yearly | 30-stack (V2) | Baseline | 93% | 13.54 ± 0.19 sMAPE | — |
-| M4-Yearly | 30-stack (V2) | active_g | 100% | 13.69 ± 0.18 sMAPE | +1.1% |
-| Tourism-Yearly | 30-stack (V2) | Baseline | 94.5% | 21.17 ± 0.53 sMAPE | — |
-| Tourism-Yearly | 30-stack (V2) | active_g | 100% | 21.37 ± 0.51 sMAPE | +0.9% |
-| Weather-96 | 10-stack (V1) | Baseline | ~100% | 65.37 ± 0.88 sMAPE | — |
-| Weather-96 | 10-stack (V1) | active_g | ~100% | 63.93 ± 1.81 sMAPE | −2.2% (better) |
-| Milk | 6-stack | Baseline | 70% | 1.49 ± 0.21 val_loss | — |
-| Milk | 6-stack | active_g | 100% | 2.62 ± 0.28 val_loss | +75.8% |
-| Milk | 6-stack | active_g='forecast' | 100% | 2.28 ± 0.36 val_loss | +53.0% |
-| Milk | 6-stack | active_g='backcast' | 63% | 2.12 ± 0.42 val_loss | +42.3% |
-| Milk | 10-stack | Baseline | 100% | 1.58 ± 1.02 val_loss | — |
-| Milk | 10-stack | active_g | 100% | 2.43 ± 1.19 val_loss | +53.4% |
-
-The pattern is consistent across all datasets: `active_g` eliminates catastrophic failures but produces slightly (or substantially) worse models among runs that do converge. The magnitude of the expressiveness gap correlates with dataset characteristics:
-
-- **Small gap (0.9-2.2%)** on large multi-series benchmarks (M4, Tourism, Weather) where the averaging over thousands of series smooths individual block-level constraints.
-- **Large gap (42-76%)** on the small univariate milk dataset where every block's output directly affects the single series forecast and the cyclic pattern requires bidirectional correction.
-- **Split modes reveal asymmetric contributions**: On the milk dataset, forecast-only activation achieves 100% convergence (matching balanced) while backcast-only activation achieves only 63% (worse than the 70% baseline). Among healthy runs, backcast-only produces the best loss of the activated modes (2.12) but at the cost of severe instability. Forecast-only offers the best trade-off: full convergence reliability with a smaller expressiveness penalty than balanced activation (53.0% vs 75.8% gap relative to baseline).
-
-#### 5.6.5 Mechanistic Hypothesis
-
-The convergence-vs-optimality trade-off arises from the interaction between ReLU clipping and the doubly residual topology:
-
-1. **ReLU clips negatives to zero.** When `active_g=True`, the block's post-basis-expansion activation constrains both backcast and forecast outputs to $\hat{x}_\ell \geq 0$ and $\hat{y}_\ell \geq 0$.
-
-2. **Residual decomposition requires negative values.** Block $\ell$ receives residual $x_\ell = x_{\ell-1} - \hat{x}_{\ell-1}$. When an earlier block over-extracts (subtracts too much), later residuals become negative. With ReLU-activated backcasts, these blocks cannot produce the negative corrective backcasts needed to compensate for over-extraction. The residual decomposition becomes one-directional: blocks can only remove signal, never add it back.
-
-3. **This smooths the loss landscape but restricts expressiveness.** The non-negativity constraint eliminates many sharp, narrow minima (improving convergence reliability) but also prevents the model from reaching the deepest minima that require bidirectional correction across blocks.
-
-4. **Prediction confirmed by data.** The gap is largest on datasets with strong cyclic patterns requiring bidirectional correction (milk: 75.8%) and smallest on large multi-series benchmarks where averaging masks per-series constraints (M4/Tourism: ~1%).
-
-5. **Split-mode experiments validate the causal mechanism.** The hypothesis predicts that the *backcast* path is the primary source of the expressiveness constraint (because it drives residual decomposition), while the *forecast* path is the primary source of the convergence benefit (because it smooths the loss landscape). The split-mode results (Section 5.6.6) confirm both predictions: `active_g='forecast'` achieves 100% convergence (matching balanced activation) while recovering 13% of the expressiveness gap, whereas `active_g='backcast'` produces the worst convergence of all configurations (63%, below even the unconstrained baseline's 70%). This asymmetry is precisely what the hypothesis predicts: constraining the backcast path removes bidirectional correction capability without smoothing the loss landscape, while constraining the forecast path smooths the landscape without impeding residual decomposition.
-
-#### 5.6.6 Split-Mode Validation: Unbalanced `active_g` on Milk Dataset
-
-The mechanistic hypothesis (Section 5.6.5) predicts that the backcast path and forecast path contribute asymmetrically to the convergence-vs-optimality trade-off. The backcast path drives residual decomposition (where negative corrections are critical), while the forecast path drives the final prediction (where non-negativity contributes to loss landscape smoothing). To test this, we implement two split modes in the `lightningnbeats` package and evaluate them on the milk dataset at 6-stack scale with 100 runs per configuration:
-
-| Mode | Backcast activation | Forecast activation | Prediction |
-|---|---|---|---|
-| `active_g=True` | Yes (ReLU) | Yes (ReLU) | Existing behavior; smooths both paths |
-| `active_g='backcast'` | Yes (ReLU) | No | Constrains critical path; predicted to destabilize |
-| `active_g='forecast'` | No | Yes (ReLU) | Smooths loss landscape; preserves backcast expressiveness |
-| `active_g=False` | No | No | Paper-faithful; maximum expressiveness |
-
-**Table 14: Split-Mode Results — Milk Dataset, 6-Stack Generic (100 runs per configuration)**
-
-| Config | Conv. rate | Div. rate | Healthy val_loss (mean±std) | CV% | Epochs (mean±std) | Time(s) |
-|---|---|---|---|---|---|---|
-| Baseline | 70/100 (70%) | 1% | 1.49 ± 0.21 | 13.98% | 119.8 ± 36.1 | 13.1 |
-| active_g=True | 100/100 (100%) | 0% | 2.62 ± 0.28 | 10.54% | 81.1 ± 21.9 | 9.5 |
-| active_g='forecast' | 100/100 (100%) | 0% | 2.28 ± 0.36 | 15.80% | 82.0 ± 25.1 | 7.5 |
-| active_g='backcast' | 63/100 (63%) | 3% | 2.12 ± 0.42 | 19.88% | 119.6 ± 40.5 | 11.5 |
-
-The results confirm both predictions from the mechanistic hypothesis:
-
-**Prediction 1 confirmed: `active_g='forecast'` retains convergence benefits while recovering expressiveness.** Forecast-only activation achieves 100% convergence (matching balanced `active_g=True`) with 0% divergence, while producing 13% better mean validation loss (2.28 vs 2.62). It also trains faster (7.5s vs 9.5s mean wall-clock time) and converges in similar epochs (82.0 vs 81.1). The convergence benefit of `active_g` is primarily driven by forecast-path activation, which smooths the loss landscape by constraining the partial forecasts $\hat{y}_\ell$ that are summed into the final prediction. Leaving the backcast path unconstrained allows blocks to produce the negative corrective backcasts needed for bidirectional residual decomposition.
-
-**Prediction 2 confirmed: `active_g='backcast'` destabilizes training.** Backcast-only activation produces the worst convergence rate of all four configurations (63%), worse than even the unconstrained baseline (70%). It also exhibits the highest divergence rate (3%) and the highest variance among healthy runs (CV% = 19.88%). Constraining only the backcast path—the path most critical for bidirectional residual correction—removes the model's ability to produce negative corrective backcasts without providing the loss-landscape smoothing that forecast-path activation delivers. The result is the worst of both worlds: reduced expressiveness *and* reduced stability.
-
-**Asymmetric contribution to the trade-off.** The four configurations form a clear ordering along both the convergence and optimality axes:
-
-- *Convergence reliability*: forecast-only = balanced (100%) > baseline (70%) > backcast-only (63%)
-- *Healthy-run accuracy*: baseline (1.49) > backcast-only (2.12) > forecast-only (2.28) > balanced (2.62)
-- *Training efficiency*: forecast-only (7.5s) > balanced (9.5s) > backcast-only (11.5s) > baseline (13.1s)
-
-The forecast-only mode occupies a favorable position in this trade-off space: it matches the convergence reliability of balanced activation, achieves better accuracy, and trains fastest. It represents the recommended default for practitioners who want convergence guarantees without the full expressiveness penalty of balanced `active_g=True`.
-
-#### 5.6.7 Statistical Significance of the active_g Effect
-
-The preceding sections establish a qualitative convergence-vs-optimality trade-off. We now quantify this trade-off with formal hypothesis tests. For each dataset, we apply Welch's unequal-variance t-test to the metric distributions of healthy runs under baseline (`active_g=False`) vs `active_g=True`, reporting Cohen's d effect sizes and 95% confidence intervals on the mean difference.
-
-**Table 15: Welch's t-tests — Baseline vs active_g on Healthy Runs**
-
-| Dataset / Metric | n (baseline) | n (active_g) | Mean diff | t | p | Cohen's d | 95% CI |
-|---|---|---|---|---|---|---|---|
-| M4-Yearly V1 (OWA, 10-stack) | 49 | 50 | +0.0115 | −4.87 | 4.4 × 10⁻⁶ | 0.98 | [0.0068, 0.0162] |
-| M4-Yearly V2 (OWA, 30-stack) | 197 | 200 | +0.0083 | −5.24 | 2.7 × 10⁻⁷ | 0.53 | [0.0052, 0.0114] |
-| Milk (val_loss, 6-stack) | 70 | 100 | +1.13 | −30.33 | 8.0 × 10⁻⁷⁰ | 4.61 | [1.05, 1.20] |
-| Milk forecast-only (val_loss) | 70 | 100 | +0.79 | −17.97 | 1.7 × 10⁻⁴⁰ | 2.68 | [0.70, 0.87] |
-
-*Positive mean diff indicates active_g produces worse (higher) metric values among healthy runs. Cohen's d conventions: 0.2 = small, 0.5 = medium, 0.8 = large (Cohen, 1988).*
-
-All four comparisons are significant at p < 10⁻⁵, confirming that the expressiveness penalty of `active_g` is not attributable to sampling noise. The effect sizes reveal a clear scaling pattern:
-
-- **M4-Yearly V2** (30-stack, 200 runs): d = 0.53 (medium). The OWA gap of 0.0083 represents a 1.0% relative degradation — smaller than the ~3% improvement from median ensembling (Section 5.2), making `active_g` a net positive when combined with multi-seed aggregation.
-- **M4-Yearly V1** (10-stack, 50 runs): d = 0.98 (large). The smaller 10-stack architecture shows a proportionally larger effect (1.4% relative OWA gap), consistent with the hypothesis that shallower stacks have less residual capacity to compensate for ReLU-constrained basis functions.
-- **Milk, active_g=True** (6-stack, single series): d = 4.61 (very large). The 76% relative val_loss degradation confirms that ReLU constraints are catastrophic for small univariate series requiring bidirectional residual correction.
-- **Milk, active_g='forecast'** (6-stack, single series): d = 2.68 (very large). The forecast-only mode reduces the effect size from 4.61 to 2.68 — a 42% reduction in the standardized gap — while maintaining 100% convergence. The residual d = 2.68 remains very large, confirming that even the most favorable split mode cannot eliminate the expressiveness penalty on small datasets.
-
-**Practical significance assessment.** On large multi-series benchmarks, the 0.8–1.4% OWA gap is smaller than the ~3% ensemble improvement achievable via median aggregation across seeds (Section 5.2). The convergence benefit (eliminating 2–30% failure rates) therefore dominates the accuracy cost, making `active_g` a net positive in production pipelines. On small univariate datasets, the 53–76% val_loss gap is prohibitive and no `active_g` mode compensates adequately — practitioners should prefer baseline with multiple seeds and best-run selection.
-
-#### 5.6.8 Milk sum_losses Factorial Study
-
-To isolate the interaction between `active_g` and `sum_losses` on a small dataset, we ran a 2×2 factorial experiment on the milk dataset (6-stack Generic, 100 runs per configuration). The `sum_losses` extension adds a weighted backcast reconstruction loss (0.25 × loss vs zeros) to the forecast loss, encouraging blocks to fully reconstruct their input signal.
-
-**Table 16: 2×2 Factorial Results — Milk Dataset (6-stack Generic, 100 runs per config)**
-
-| Config | active_g | sum_losses | Healthy rate | Diverged | Healthy val_loss (mean ± std) |
-|---|---|---|---|---|---|
-| Baseline | False | False | 64/100 (64%) | 2/100 (2%) | 1.567 ± 0.286 |
-| active_g only | True | False | 99/100 (99%) | 1/100 (1%) | 2.605 ± 0.295 |
-| sum_losses only | False | True | **0/100 (0%)** | 0/100 | — |
-| active_g + sum_losses | True | True | **0/100 (0%)** | 0/100 | — |
-
-The results reveal a catastrophic interaction between `sum_losses` and small dataset scale:
-
-1. **`sum_losses` causes complete training failure on the milk dataset.** Both `sum_losses` configurations achieve 0% healthy runs across all 100 seeds, regardless of whether `active_g` is enabled. The runs do not diverge (numerical explosion) but converge to degenerate solutions (mean val_loss = 65.3 without `active_g`, 52.6 with `active_g`) — approximately 33–42× worse than the baseline healthy mean of 1.57. The backcast reconstruction objective overwhelms the forecast objective, trapping the model in a regime where it minimizes backcast error at the expense of forecast accuracy.
-
-2. **`active_g` cannot rescue `sum_losses` failure.** While `active_g` reduces the degenerate val_loss from 65.3 to 52.6, the resulting models remain 33× worse than the active_g-only healthy mean (2.61). The loss-landscape smoothing provided by forecast-path activation is insufficient to counteract the gradient distortion introduced by the backcast reconstruction term.
-
-3. **Severity scaling follows inverse dataset size.** The `sum_losses` failure pattern forms a clear gradient across datasets:
-   - *M4-Yearly* (23,000 training series): `sum_losses` is beneficial — CV 0.93% (V1), lowest variance of any configuration
-   - *Weather-96* (35,000 training windows from 21 sensors): pathological MASE explosion (CV = 687%), but some runs converge
-   - *Milk* (156 training windows from 1 series): complete failure — 0% healthy across 200 runs (both `sum_losses` configurations combined)
-
-   This pattern is consistent with the backcast reconstruction term acting as a regularizer whose strength is proportional to the ratio of backcast reconstruction loss to forecast loss. On large datasets with many diverse series, this ratio remains small and the regularization is beneficial. On small univariate datasets, the ratio dominates and the model optimizes the wrong objective.
-
-**Recommendation:** `sum_losses` should be restricted to large multi-series benchmarks where its variance-reduction benefits have been empirically validated. It should not be applied to small or univariate datasets without monitoring for degenerate convergence.
-
-#### 5.6.9 Cross-Dataset Conclusions
-
-The convergence studies across V1, V2, and milk datasets yield the following updated conclusions:
-
-1. **`active_g` implements a convergence-vs-optimality trade-off**, not a pure improvement. It eliminates catastrophic initialization failures (improving mean performance across all runs) but constrains expressiveness (reducing peak performance among healthy runs). The practical value depends on the operational context: if one can afford multiple runs and select the best, the baseline may be preferred; if reliability from a single run is required, `active_g` is the safer choice.
-
-2. **The trade-off magnitude is dataset-dependent.** On large multi-series benchmarks (M4, Tourism), the expressiveness gap among healthy runs is small (~1%). On small univariate series with strong cyclical patterns (milk), the gap is large (54-76%). This confirms the mechanistic hypothesis: ReLU-constrained blocks lose the ability to produce negative corrective backcasts, which matters most when residual decomposition requires bidirectional correction.
-
-3. **`sum_losses` exhibits inverse-dataset-size scaling from beneficial to catastrophic.** On M4-Yearly (23,000 series), `sum_losses` is the most powerful stabilizer tested (CV 0.93%). On Weather-96 (35,000 windows, 21 sensors), it causes pathological MASE explosion (CV = 687%). On the milk dataset (156 windows, single series), it causes complete training failure: 0% healthy runs across 200 seeds in both `sum_losses` configurations (Table 16), with models converging to degenerate solutions 33–42× worse than healthy baselines. This gradient is consistent with the backcast reconstruction term acting as a regularizer whose effective strength is inversely proportional to dataset size. `sum_losses` should be restricted to large multi-series benchmarks and should not be combined with small or univariate datasets.
-
-4. **The practical recommendation is now refined by split-mode validation and supported by formal statistical tests.** Welch's t-tests confirm the expressiveness penalty at p < 10⁻⁵ across all datasets (Table 15), with Cohen's d ranging from 0.53 (medium, M4 30-stack) to 4.61 (very large, milk). For production deployments requiring single-run reliability, `active_g='forecast'` is the recommended default: it achieves the same 100% convergence rate as balanced `active_g=True` while recovering 13% of the expressiveness gap (2.28 vs 2.62 on milk, d = 2.68 vs 4.61) and training fastest (7.5s vs 9.5s). For research or hyperparameter search where multiple seeds are evaluated, the baseline (`active_g=False`) remains preferred for peak accuracy. The `active_g='backcast'` mode should be avoided: it destabilizes training (63% convergence, worse than the 70% baseline) without providing convergence benefits. `sum_losses` should not be combined with `active_g` on small datasets — the milk factorial study (Table 16) shows that `sum_losses` fails completely regardless of `active_g` status.
-
-5. **The accuracy cost of `active_g` is asymmetric across operational contexts.** On large benchmarks, the 0.8–1.4% OWA gap (Table 15) is smaller than the ~3% improvement from median ensembling across seeds (Section 5.2), making `active_g='forecast'` a net positive when combined with multi-seed aggregation. On small univariate datasets, the 53–76% val_loss gap is prohibitive, and no `active_g` mode compensates adequately (d = 2.68 even for the best split mode). For such datasets, practitioners should prefer the baseline with multiple seeds and best-run selection rather than any `active_g` variant.
-
-#### 5.6.10 Discussion on Regularization Effect of Active_g
-
-Part 1: Does ReLU on the backcast "remove" the backcast from the residual?
-Not exactly remove — it's more precise to say it makes the residual chain monotonically decreasing (element-wise), which is a severe constraint that your data already proves is catastrophic.
-
-Here's what happens step by step. Consider a single time step $t$ through the residual chain:
-
-$$x_\ell^{(t)} = x_{\ell-1}^{(t)} - \text{ReLU}(\hat{x}_{\ell-1}^{(t)})$$
-
-Since $\text{ReLU}(\cdot) \geq 0$, we get $x_\ell^{(t)} \leq x_{\ell-1}^{(t)}$ always. The residual can only decrease or stay flat at each block. Now consider what happens when a block overshoots — say block 5 subtracts too much, making $x_6^{(t)}$ negative. Block 6 sees a negative input. It produces some $\hat{x}_6^{(t)}$, which gets ReLU'd to $\geq 0$, so:
-
-$$x_7^{(t)} = x_6^{(t)} - \text{ReLU}(\hat{x}_6^{(t)}) \leq x_6^{(t)} < 0$$
-
-The residual is already negative and can only go more negative. No subsequent block can ever bring it back up. In a 30-block chain, a single over-extraction at any point permanently corrupts that time step's residual for all remaining blocks.
-
-The net effect isn't that the backcast "disappears" — it's that the backcast can only do subtractive decomposition. Real signal decomposition needs to be additive too (blocks saying "the previous block took too much, let me put some back"). Your Table 14 data proves this is the mechanism: active_g='backcast' produces 63% convergence — worse than the unconstrained 70% baseline. It imposes a constraint that actively harms both stability and expressiveness simultaneously.
-
-Part 2: Could BatchNorm on the Forecast Path Replace ReLU?
-This is a genuinely interesting theoretical direction. The core question is: what property of forecast-path ReLU actually provides the convergence benefit? If we can identify that, we can ask whether BatchNorm provides the same property.
-
-What ReLU on forecasts actually does
-The forecast accumulation is:
-
-$$\hat{y} = \sum_{\ell=1}^{30} \hat{y}_\ell$$
-
-With ReLU, each $\hat{y}_\ell \geq 0$. This prevents catastrophic cancellation — the scenario where some blocks produce large positive forecasts and others produce large negative forecasts that nearly cancel, leaving the optimization on a knife's edge. Without ReLU, the loss surface has deep, narrow valleys where slight perturbations to any block's forecast can swing the sum wildly. ReLU removes these valleys by making the sum monotonically increasing with each block's contribution.
-
-The key properties that make this work:
-
-No cancellation — partial forecasts can't subtract from each other
-Bounded gradient — ReLU's gradient is 0 or 1, no amplification
-Sparsity — some blocks' forecasts get zeroed out entirely, reducing effective model complexity
-What BatchNorm would do differently
-BatchNorm on the forecast output would normalize each $\hat{y}_\ell$ to have zero mean and unit variance across the batch:
-
-$$\hat{y}\ell^{BN} = \gamma \cdot \frac{\hat{y}\ell - \mu_B}{\sqrt{\sigma_B^2 + \epsilon}} + \beta$$
-
-This is theoretically interesting because:
-
-Potential benefits:
-
-Scale stabilization — prevents any single block's forecast from dominating the sum with outsized magnitudes, which is a plausible cause of divergence
-Sign preservation — outputs can be positive or negative, so forecast cancellation remains possible (preserving expressiveness)
-Smooth gradients — no dead zones, no gradient clipping
-But there are fundamental problems:
-
-1. It normalizes the wrong thing. The forecast $\hat{y}_\ell$ represents a partial time-series prediction. Forcing it to have mean 0 across the batch means every block's partial forecast sums to zero on average — the block literally cannot contribute a consistent bias/level to the forecast. This is destructive because time series often have non-zero levels (milk production is ~100-200, not centered at zero).
-
-The learned $\beta$ shift parameter partially compensates, but it's a scalar — the same shift for all time steps and all samples. That's a severe constraint for a time-series output.
-
-1. Train/test distribution shift. BatchNorm uses running statistics at inference time. If the test batch has a different distribution of forecast magnitudes (which it will — different time periods, different series), the normalization is wrong. This is a well-known problem with BatchNorm in time series (much of the recent literature has moved to LayerNorm or instance normalization for this reason).
-
-2. It couples samples within a batch. Each sample's forecast now depends on what other samples are in the batch. This introduces noise that doesn't exist in the deterministic residual chain. For a 30-block deep architecture, this stochasticity compounds.
-
-What might actually work
-The core insight from your active_g='forecast' result is that the forecast path needs magnitude control, not necessarily non-negativity or distributional normalization. Some alternatives worth considering theoretically:
-
-LayerNorm — normalizes across the forecast time steps for each sample independently (no batch coupling). This would prevent any single block from producing a forecast with outsized magnitudes while preserving sign and sample independence. It's what your WaveletV2 blocks already use on the hidden representation:
-
-blocks.py
-src/lightningnbeats/blocks
-But applied after the projection to forecast space rather than in hidden space.
-
-Spectral normalization on the forecast weight matrix — constraining the spectral norm of theta_f_fc.weight to be ≤ 1 bounds the maximum output magnitude as a function of input magnitude, preventing runaway growth without any clipping or saturation. This is a hard constraint on the operator norm rather than the output distribution.
-
-Gradient clipping (which you already use implicitly through Lightning's training) — prevents explosions during optimization without modifying the forward pass at all. This regularizes the training dynamics rather than the architecture.
-
-Weight decay on forecast projection weights — shrinks the forecast projection matrix toward zero, bounding output magnitudes on average. Softer than spectral norm, no forward pass modification.
-
-The key theoretical distinction is: ReLU regularizes the output space (constraining the set of representable functions), while these alternatives regularize the weight space or optimization dynamics (constraining how the model gets there without limiting what it can ultimately represent). The latter category could theoretically provide convergence stability without the expressiveness ceiling — but that's a hypothesis that would need empirical validation in the same framework as your existing convergence studies.
-
-### 5.7 Suggested Additional Metrics
-
-We identify several metrics that could strengthen the analysis in future iterations of this work, organized by whether they are derivable from existing experimental data or require additional code changes.
-
-**Derivable from existing data (no code changes required):**
-
-| Metric | Purpose | Computation | Recommended Location |
-|--------|---------|-------------|---------------------|
-| OWA std across seeds | Training robustness | `std(OWA)` per (config, period) | Already included in Tables 3a-3c |
-| Convergence rate | Practical usability | Healthy seeds / total seeds | Already included in Tables 2, 4 |
-| Parameter efficiency ratio | Best accuracy-per-param | `(1.0 − OWA) / (n_params / 1M)` | Figure 3 (scatter plot) |
-| Mean epochs to convergence | Training cost comparison | `mean(epochs_trained)` per config | Training efficiency table |
-| Mean wall-clock time | Resource cost | `mean(training_time_seconds)` per config | Training efficiency table |
-| Cross-period rank correlation | Ranking stability | Spearman ρ on OWA rankings | Table 8 (already computed) |
-
-**Requiring code changes (future work):**
-
-| Metric | Purpose | Implementation |
-|--------|---------|----------------|
-| Per-series sMAPE/MASE distributions | Reveal whether gains are uniform or outlier-driven | Post-process `.npz` prediction files; compute per-series metrics and report percentiles |
-| FLOPs / inference latency | Deployment cost (params alone miss sequential depth) | Use `fvcore.nn.FlopCountAnalysis` or `torch.profiler` |
-| Backcast reconstruction quality | Assess doubly residual decomposition | Expose stack residuals from forward pass; compute ‖residual‖₁ / ‖input‖₁ |
-| Gradient norm statistics | Explain wavelet failures | Add Lightning callback logging `grad_norm` per step |
+Notably, the M4-Yearly winner (TW\_10s\_td3\_bdeq\_coif2, rank 1 on M4-Y) drops to rank 53 on Weather and 55 on Milk, illustrating the fundamental tension between per-dataset specialization and cross-dataset robustness. Conversely, the most parameter-efficient options (TWAELG at 436K, ranks 9--10 as generalists) provide an exceptional accuracy-per-parameter ratio across most datasets but struggle on Weather (rank 98), where their small capacity is insufficient for the 21-variable, 96-step forecasting task.
 
 ---
 
-## 6. Conclusions
+## 6. Discussion
 
-This work presents a systematic exploration of alternative block types within the N-BEATS doubly residual framework, implemented as the `lightningnbeats` PyTorch Lightning package. Preliminary results across three of six M4 periods support several provisional conclusions that will be revisited upon completion of all experiments.
+### 6.1 Why Wavelet Bases Work: Inductive Bias Alignment
 
-**Strongest findings (supported by available data):**
+The success of wavelet basis blocks across six of nine dataset-periods reflects a fundamental alignment between the wavelet transform's multi-resolution time-frequency localization and the structure of real-world time series. Each of the three original N-BEATS basis types captures a specific structural dimension:
 
-1. The N-BEATS doubly residual framework is remarkably robust to the choice of basis expansion function. Among healthy, converging configurations, block type does not produce statistically significant differences in OWA (Kruskal-Wallis p > 0.09 across all periods), and configuration rankings are inconsistent across periods (Spearman ρ ≈ 0, all non-significant). This suggests that the framework's iterative residual decomposition mechanism, rather than the specific basis within each block, is the primary driver of forecasting accuracy.
+- **Polynomial (Trend)**: Smooth, slowly varying functions. Excellent for level and slope, but blind to abrupt changes or oscillations.
+- **Fourier (Seasonality)**: Globally periodic functions. Excellent for regular cycles, but assumes stationarity and distributes energy uniformly across time.
+- **Fully learned (Generic)**: No structural constraint. Maximum flexibility, but requires learning the basis from scratch, leading to overparameterization and convergence fragility.
 
-2. AE-backbone variants achieve 5-10x parameter reduction with comparable or better OWA, making them attractive for resource-constrained deployment. NBEATS-I-AE (2.2M parameters) matches the 24.7M-parameter NBEATS-G on Yearly while exhibiting the lowest training variance of any configuration tested.
+Wavelets occupy a unique position: they provide **localized** multi-scale analysis, capturing transient phenomena (regime changes, localized oscillations, abrupt level shifts) that polynomials miss while preserving the parameter efficiency that fully-learned bases sacrifice. The DWT decomposition separates approximation (low-frequency trend) from detail (high-frequency transients) at multiple scales, mirroring the intuition that time series contain structure at multiple temporal resolutions.
 
-3. Wavelet basis blocks suffer from severe numerical instability (67-100% failure rate) but produce competitive results when they converge and when stabilized by complementary Trend stacks. Numerical remediation is a promising direction for future work.
+The TrendWavelet block makes this complementarity explicit by combining polynomial and wavelet bases in a single block. The polynomial component ($p = 3$ coefficients) captures the macro-trend that the wavelet basis would otherwise need many coefficients to approximate. The wavelet component captures the residual transient structure. This within-block decomposition is more parameter-efficient than the between-stack decomposition of the original Interpretable architecture (where Trend and Seasonality occupy separate stacks), because it avoids the overhead of separate backbone computations for each decomposition component.
 
-4. The convergence studies (Part 6, V1/V2/milk) reveal that `active_g` implements a convergence-vs-optimality trade-off rather than a pure improvement, confirmed by Welch's t-tests at p < 10⁻⁵ across all datasets with Cohen's d ranging from 0.53 (medium) to 4.61 (very large) (Table 15). It eliminates catastrophic initialization failures (reducing sMAPE CV from 31.37% to 0.88% on M4-Yearly) but produces statistically significantly worse models among runs that do converge (OWA gap 0.008–0.012 on M4, val_loss gap 0.79–1.13 on milk). The expressiveness gap is small (~1%) on large multi-series benchmarks but large (54-76%) on small univariate series with strong cyclical patterns (milk dataset). Split-mode experiments validate the mechanistic hypothesis: `active_g='forecast'` retains 100% convergence while recovering 13% of the expressiveness gap (d = 2.68 vs 4.61), confirming that the convergence benefit originates from forecast-path activation. The recommended default for single-run reliability is `active_g='forecast'`. The `sum_losses` extension exhibits inverse-dataset-size scaling: beneficial on M4-Yearly (CV 0.93%), pathological on Weather-96 (CV = 687%), and catastrophic on the milk dataset (0% healthy across 200 runs in both `sum_losses` configurations, Table 16). It should be restricted to large multi-series benchmarks.
+### 6.2 Why V1/V2 Failed and V3 Succeeds: Basis Conditioning as Prerequisite
 
-**Contingent findings (require remaining experiments for confirmation):**
+The failure of our initial wavelet block implementations (V1/V2) and the success of V3 provides a broadly applicable lesson: **basis matrix conditioning is a prerequisite for integration into gradient-trained architectures.**
 
-- Cross-period generalization patterns observed on Yearly/Quarterly/Monthly may shift when Weekly, Daily, and Hourly results are incorporated, particularly for high-frequency periods where wavelet multi-resolution properties could become advantageous.
-- The ablation study (Part 2) will determine whether training extensions (`active_g`, `sum_losses`) and alternative activations interact differently with novel block types than with the standard Generic configuration.
-- Ensemble results beyond the Yearly period will reveal whether the approximately 3% median-aggregation improvement holds across all frequencies, and whether novel block types benefit more or less from ensembling than paper baselines.
+The V1/V2 basis construction produced matrices with condition number $\kappa \approx 604{,}000$ for DB3. During backpropagation, gradients are multiplied by the basis matrix transpose, amplifying components in the direction of the smallest singular value by up to $604{,}000\times$. This gradient amplification manifests as two failure modes: (1) immediate NaN at epoch 1 when the amplified gradients overflow float32 precision, and (2) gradual MASE explosion over 10--20 epochs as the weight matrices drift into a degenerate regime.
 
-**Future directions** include: (a) numerical stabilization of wavelet blocks via gradient clipping, basis normalization, or spectral regularization; (b) scaling seed count to n = 10 for adequate statistical power; (c) extending the ensemble experiment to novel block types and AE-backbone configurations; (d) per-series analysis to determine whether aggregate OWA masks heterogeneous per-series behavior; (e) investigating whether the block-type irrelevance finding extends to other benchmarks (M3, Tourism, ETT) or is specific to the M4 dataset's characteristics; and (f) comparing the integrated wavelet basis approach explored here with the wavelet-as-preprocessing pipeline (Pramanick et al., 2024), in which DWT decomposes the input and separate N-BEATS models forecast each subband, to determine whether wavelet information is more effectively leveraged inside or outside the doubly residual framework.
+The V3 construction via impulse-response synthesis followed by SVD orthogonalization produces bases with $\kappa = 1.0$. All singular values are equal, so gradient flow through the basis matrix is uniform across all directions. This eliminates the gradient amplification that caused V1/V2 failures, converting the 67--100% failure rate to near-zero.
+
+This finding has implications beyond N-BEATS: any architecture that uses frozen analytical basis matrices within a gradient-trained pipeline should verify that the basis is well-conditioned. Ill-conditioned bases act as implicit gradient amplifiers that can destabilize training even when the basis itself is mathematically valid.
+
+### 6.3 The Overparameterization Problem
+
+Our results provide compelling evidence that the original N-BEATS architecture is massively overparameterized for most practical forecasting tasks. The evidence is threefold:
+
+1. **Equivalent accuracy at 10--50$\times$ fewer parameters.** TWAELG models at 436K parameters achieve within 0.5% of the 26M-parameter NBEATS-G on M4-Yearly/Quarterly/Monthly/Weekly. If 98% of the parameters can be removed without meaningful accuracy loss, those parameters were not contributing to the model's predictive capacity.
+
+2. **Divergence correlates with overparameterization.** On the Milk dataset (1 series, 156 observations), NBEATS-G\_30s has a 167,000$\times$ parameter-to-observation ratio and a 40% divergence rate. Reducing to 1M parameters (TALG+DB3V3ALG\_10s, 6,400$\times$ ratio) eliminates divergence entirely. The divergence is not a training bug --- it is the natural consequence of an optimization landscape with exponentially many degenerate minima created by redundant parameters.
+
+3. **Backbone compression provides implicit regularization.** The AE backbone reduces backbone parameters by 10$\times$ (Section 3.2.1) and reduces Milk divergence from 40.6% to 1.7%. This compression achieves through architecture what dropout, weight decay, or early stopping attempt through training dynamics --- and does so more reliably, because it removes the degenerate solutions from the parameter space entirely rather than penalizing them softly.
+
+The practical implication is that the N-BEATS community should reconsider the default 30-stack, 512-unit configuration as a starting point. For datasets smaller than M4 --- which includes most practical forecasting applications --- a 10-stack TrendWavelet configuration with AE backbone provides better accuracy, lower variance, and faster training at a fraction of the computational cost.
+
+### 6.4 Practical Recommendations
+
+Based on the comprehensive sweep results, we provide the following architecture selection guidelines:
+
+**Table 11: Practitioner Decision Tree**
+
+| Dataset Regime | Recommended Architecture | Key Settings | Params |
+|---------------|-------------------------|-------------|-------:|
+| Large multi-series ($n > 10{,}000$) | TrendWavelet (RB) or Alt. Trend+WavV3 (RB) | coif2/db3, td3, 10--30 stacks | 2--16M |
+| Medium multi-series ($n = 100$--$10{,}000$) | TrendWavelet (AELG) or NBEATS-IG | db3, ld=16, 10 stacks, agf | 436K--2M |
+| Small / univariate ($n < 100$) | Alt. TrendAELG+WavV3AELG or TWAE | db3/Haar, ld=8, 10 stacks, ag0 | 415K--1M |
+| Multivariate long-horizon | Alt. TrendAE+WavV3AE | db3, ld=8, ag0, 30 stacks | 3--7M |
+| Unknown (generalist) | TALG+DB3V3ALG\_10s\_ag0 | db3, ld=16, ag0, 10 stacks | 2.4M |
+
+For all regimes, we recommend starting with `active_g = \text{False}` (safe globally) and 10 stacks, increasing to 30 only for horizons $H \geq 14$. Skip connections should not be used. The db3 wavelet is the safest default; practitioners can fine-tune the wavelet family on their validation set.
+
+---
+
+## 7. Conclusion
+
+This work presents a systematic exploration of alternative basis expansion functions and backbone architectures within the N-BEATS doubly residual framework. Through a comprehensive benchmark of 112 configurations across 10 random seeds on four datasets spanning nine forecasting tasks, we arrive at three principal findings.
+
+**First, wavelet basis expansions provide genuine inductive bias benefits.** Orthonormal DWT bases, properly conditioned via SVD orthogonalization (V3), beat paper baselines on six of nine dataset-periods. The TrendWavelet block --- which combines polynomial trend and wavelet detail bases in a single block --- is the most parameter-efficient competitive design, requiring only 418--436K parameters (with AE backbone) to match or beat 26M-parameter baselines. The natural complementarity of polynomial trend and wavelet detail decomposition makes TrendWavelet a robust default for practitioners.
+
+**Second, the original N-BEATS architecture is massively overparameterized.** The 30-stack, 512-unit Generic configuration (26M parameters) diverges in 40--50% of training runs on small datasets, while autoencoder-compressed variants with 10--50$\times$ fewer parameters converge reliably and achieve equivalent or better accuracy. This is not a training pathology but a fundamental consequence of the parameter-to-data ratio. The AE backbone acts as implicit regularization through architectural compression, providing more reliable convergence than explicit regularization techniques.
+
+**Third, architecture selection is inherently dataset-dependent.** Backbone hierarchy, stack architecture preference, optimal depth, and wavelet family all reverse across datasets. No single configuration dominates everywhere. However, the alternating TrendAELG + DB3WaveletV3AELG configuration at 10 stacks (2.4M parameters) provides the best cross-dataset generalist performance, ranking first on Weather, second on Milk, and competitive across all M4 periods.
+
+The power of the N-BEATS framework lies in its doubly residual stacking topology --- the iterative decomposition and hierarchical forecast aggregation --- rather than in any specific basis expansion. But the choice of basis determines parameter efficiency, convergence reliability, and the alignment of inductive biases with data structure. Wavelets and autoencoder compression provide tools to exploit this design freedom, delivering forecasting accuracy that matches the original N-BEATS with orders of magnitude fewer parameters.
+
+**Open questions** for future work include: (a) mechanistic understanding of why `active_g` catastrophically fails on Weather unified stacks but succeeds on alternating stacks; (b) why the backbone hierarchy reverses on multivariate/simple-univariate data versus competition-format data; (c) systematic evaluation of novel blocks within N-HiTS (Appendix D); and (d) extension to additional benchmarks (ETTh, ETTm, Exchange Rate) to test generalization of the architecture selection guidelines developed here.
 
 ---
 
 ## References
 
-Aminghafari, M., Cheze, N., & Poggi, J.-M. (2006). Multivariate denoising using wavelets and principal component analysis. *Computational Statistics & Data Analysis*, 50(9), 2381-2398. <https://doi.org/10.1016/j.csda.2004.12.010>
+Aminghafari, M., Cheze, N., & Poggi, J.-M. (2006). Multivariate denoising using wavelets and principal component analysis. *Computational Statistics & Data Analysis*, 50(9), 2381-2398. https://doi.org/10.1016/j.csda.2004.12.010
 
-Assimakopoulos, V., & Nikolopoulos, K. (2000). The Theta model: A decomposition approach to forecasting. *International Journal of Forecasting*, 16(4), 521-530. <https://doi.org/10.1016/S0169-2070(00)00066-2>
+Assimakopoulos, V., & Nikolopoulos, K. (2000). The Theta model: A decomposition approach to forecasting. *International Journal of Forecasting*, 16(4), 521-530. https://doi.org/10.1016/S0169-2070(00)00066-2
 
 Box, G. E. P., & Jenkins, G. M. (1976). *Time Series Analysis: Forecasting and Control*. Holden-Day.
 
-Challu, C., Olivares, K. G., Oreshkin, B. N., Garza, F., Mergenthaler-Canseco, M., & Dubrawski, A. (2023). N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting. *Proceedings of the AAAI Conference on Artificial Intelligence*, 37(6), 6989-6997. <https://doi.org/10.1609/aaai.v37i6.25854>
+Challu, C., Olivares, K. G., Oreshkin, B. N., Garza, F., Mergenthaler-Canseco, M., & Dubrawski, A. (2023). N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting. *Proceedings of the AAAI Conference on Artificial Intelligence*, 37(6), 6989-6997. https://doi.org/10.1609/aaai.v37i6.25854
 
 Cleveland, R. B., Cleveland, W. S., McRae, J. E., & Terpenning, I. (1990). STL: A Seasonal-Trend Decomposition Procedure Based on Loess. *Journal of Official Statistics*, 6(1), 3-73.
 
-Daubechies, I. (1992). *Ten Lectures on Wavelets*. SIAM. <https://doi.org/10.1137/1.9781611970104>
+Daubechies, I. (1992). *Ten Lectures on Wavelets*. SIAM. https://doi.org/10.1137/1.9781611970104
 
-Hinton, G. E., & Salakhutdinov, R. R. (2006). Reducing the Dimensionality of Data with Neural Networks. *Science*, 313(5786), 504-507. <https://doi.org/10.1126/science.1127647>
+Frankle, J., & Carlin, M. (2019). The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks. *International Conference on Learning Representations (ICLR 2019)*. https://openreview.net/forum?id=rJl-b3RcF7
 
-He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep Residual Learning for Image Recognition. *Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)*, 770-778. <https://doi.org/10.1109/CVPR.2016.90>
+Han, S., Mao, H., & Dally, W. J. (2015). Deep Compression: Compressing Deep Neural Networks with Pruning, Trained Quantization and Huffman Coding. *arXiv preprint arXiv:1510.00149*.
+
+He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep Residual Learning for Image Recognition. *Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)*, 770-778. https://doi.org/10.1109/CVPR.2016.90
+
+Hinton, G. E., & Salakhutdinov, R. R. (2006). Reducing the Dimensionality of Data with Neural Networks. *Science*, 313(5786), 504-507. https://doi.org/10.1126/science.1127647
+
+Hinton, G., Vinyals, O., & Dean, J. (2015). Distilling the Knowledge in a Neural Network. *arXiv preprint arXiv:1503.02531*.
 
 Holt, C. C. (1957). Forecasting Seasonals and Trends by Exponentially Weighted Moving Averages. *ONR Memorandum No. 52*. Carnegie Institute of Technology.
 
-Hyndman, R. J., & Khandakar, Y. (2008). Automatic Time Series Forecasting: The forecast Package for R. *Journal of Statistical Software*, 27(3), 1-22. <https://doi.org/10.18637/jss.v027.i03>
+Hyndman, R. J., & Khandakar, Y. (2008). Automatic Time Series Forecasting: The forecast Package for R. *Journal of Statistical Software*, 27(3), 1-22. https://doi.org/10.18637/jss.v027.i03
 
-Hyndman, R. J., Koehler, A. B., Snyder, R. D., & Grose, S. (2002). A state space framework for automatic forecasting using exponential smoothing methods. *International Journal of Forecasting*, 18(3), 439-454. <https://doi.org/10.1016/S0169-2070(01)00110-8>
+Hyndman, R. J., Koehler, A. B., Snyder, R. D., & Grose, S. (2002). A state space framework for automatic forecasting using exponential smoothing methods. *International Journal of Forecasting*, 18(3), 439-454. https://doi.org/10.1016/S0169-2070(01)00110-8
 
-Lim, B., Arik, S. O., Loeff, N., & Pfister, T. (2021). Temporal Fusion Transformers for interpretable multi-horizon time series forecasting. *International Journal of Forecasting*, 37(4), 1748-1764. <https://doi.org/10.1016/j.ijforecast.2021.03.012>
+Lim, B., Arik, S. O., Loeff, N., & Pfister, T. (2021). Temporal Fusion Transformers for interpretable multi-horizon time series forecasting. *International Journal of Forecasting*, 37(4), 1748-1764. https://doi.org/10.1016/j.ijforecast.2021.03.012
 
-Makridakis, S., & Hibon, M. (2000). The M3-Competition: Results, conclusions and implications. *International Journal of Forecasting*, 16(4), 451-476. <https://doi.org/10.1016/S0169-2070(00)00057-1>
+Makridakis, S., & Hibon, M. (2000). The M3-Competition: Results, conclusions and implications. *International Journal of Forecasting*, 16(4), 451-476. https://doi.org/10.1016/S0169-2070(00)00057-1
 
-Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2018). Statistical and Machine Learning forecasting methods: Concerns and ways forward. *PLOS ONE*, 13(3), e0194889. <https://doi.org/10.1371/journal.pone.0194889>
+Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2018). Statistical and Machine Learning forecasting methods: Concerns and ways forward. *PLOS ONE*, 13(3), e0194889. https://doi.org/10.1371/journal.pone.0194889
 
-Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2020). The M4 Competition: 100,000 time series and 61 forecasting methods. *International Journal of Forecasting*, 36(1), 54-74. <https://doi.org/10.1016/j.ijforecast.2019.04.014>
+Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2020). The M4 Competition: 100,000 time series and 61 forecasting methods. *International Journal of Forecasting*, 36(1), 54-74. https://doi.org/10.1016/j.ijforecast.2019.04.014
 
 Malhotra, P., Ramakrishnan, A., Anand, G., Vig, L., Agarwal, P., & Shroff, G. (2016). LSTM-based Encoder-Decoder for Multi-sensor Anomaly Detection. *arXiv preprint arXiv:1607.00148*.
 
-Mallat, S. G. (1989). A Theory for Multiresolution Signal Decomposition: The Wavelet Representation. *IEEE Transactions on Pattern Analysis and Machine Intelligence*, 11(7), 674-693. <https://doi.org/10.1109/34.192463>
+Mallat, S. G. (1989). A Theory for Multiresolution Signal Decomposition: The Wavelet Representation. *IEEE Transactions on Pattern Analysis and Machine Intelligence*, 11(7), 674-693. https://doi.org/10.1109/34.192463
 
-Montero-Manso, P., Athanasopoulos, G., Hyndman, R. J., & Talagala, T. S. (2020). FFORMA: Feature-based forecast model averaging. *International Journal of Forecasting*, 36(1), 86-92. <https://doi.org/10.1016/j.ijforecast.2019.02.011>
+Montero-Manso, P., Athanasopoulos, G., Hyndman, R. J., & Talagala, T. S. (2020). FFORMA: Feature-based forecast model averaging. *International Journal of Forecasting*, 36(1), 86-92. https://doi.org/10.1016/j.ijforecast.2019.02.011
 
 Nie, Y., Nguyen, N. H., Sinthong, P., & Kalagnanam, J. (2023). A Time Series is Worth 64 Words: Long-term Forecasting with Transformers. *International Conference on Learning Representations (ICLR 2023)*.
 
-Oreshkin, B. N., Carpov, D., Chapados, N., & Bengio, Y. (2019). N-BEATS: Neural basis expansion analysis for interpretable time series forecasting. *International Conference on Learning Representations (ICLR 2020)*. <https://openreview.net/forum?id=r1ecqn4YwB>
+Oreshkin, B. N., Carpov, D., Chapados, N., & Bengio, Y. (2019). N-BEATS: Neural basis expansion analysis for interpretable time series forecasting. *International Conference on Learning Representations (ICLR 2020)*. https://openreview.net/forum?id=r1ecqn4YwB
 
-Pramanick, N., Singhal, V., et al. (2024). Fusion of Wavelet Decomposition and N-BEATS for Improved Stock Market Forecasting. *SN Computer Science*, 5, 822. <https://doi.org/10.1007/s42979-024-03222-4>
+Pramanick, N., Singhal, V., et al. (2024). Fusion of Wavelet Decomposition and N-BEATS for Improved Stock Market Forecasting. *SN Computer Science*, 5, 822. https://doi.org/10.1007/s42979-024-03222-4
 
-Salinas, D., Flunkert, V., Gasthaus, J., & Januschowski, T. (2020). DeepAR: Probabilistic forecasting with autoregressive recurrent networks. *International Journal of Forecasting*, 36(3), 1181-1191. <https://doi.org/10.1016/j.ijforecast.2019.07.001>
+Salinas, D., Flunkert, V., Gasthaus, J., & Januschowski, T. (2020). DeepAR: Probabilistic forecasting with autoregressive recurrent networks. *International Journal of Forecasting*, 36(3), 1181-1191. https://doi.org/10.1016/j.ijforecast.2019.07.001
 
-Smyl, S. (2020). A hybrid method of exponential smoothing and recurrent neural networks for time series forecasting. *International Journal of Forecasting*, 36(1), 75-85. <https://doi.org/10.1016/j.ijforecast.2019.03.017>
+Smyl, S. (2020). A hybrid method of exponential smoothing and recurrent neural networks for time series forecasting. *International Journal of Forecasting*, 36(1), 75-85. https://doi.org/10.1016/j.ijforecast.2019.03.017
 
 van den Oord, A., Dieleman, S., Zen, H., Simonyan, K., Vinyals, O., Graves, A., ... & Kavukcuoglu, K. (2016). WaveNet: A Generative Model for Raw Audio. *arXiv preprint arXiv:1609.03499*.
 
-Vincent, P., Larochelle, H., Bengio, Y., & Manzagol, P.-A. (2008). Extracting and composing robust features with denoising autoencoders. *Proceedings of the 25th International Conference on Machine Learning (ICML)*, 1096-1103. <https://doi.org/10.1145/1390156.1390294>
+Vincent, P., Larochelle, H., Bengio, Y., & Manzagol, P.-A. (2008). Extracting and composing robust features with denoising autoencoders. *Proceedings of the 25th International Conference on Machine Learning (ICML)*, 1096-1103. https://doi.org/10.1145/1390156.1390294
 
-Winters, P. R. (1960). Forecasting Sales by Exponentially Weighted Moving Averages. *Management Science*, 6(3), 324-342. <https://doi.org/10.1287/mnsc.6.3.324>
+Winters, P. R. (1960). Forecasting Sales by Exponentially Weighted Moving Averages. *Management Science*, 6(3), 324-342. https://doi.org/10.1287/mnsc.6.3.324
 
-Zeng, A., Chen, M., Zhang, L., & Xu, Q. (2023). Are Transformers Effective for Time Series Forecasting? *Proceedings of the AAAI Conference on Artificial Intelligence*, 37(9), 11121-11128. <https://doi.org/10.1609/aaai.v37i9.26317>
+Zeng, A., Chen, M., Zhang, L., & Xu, Q. (2023). Are Transformers Effective for Time Series Forecasting? *Proceedings of the AAAI Conference on Artificial Intelligence*, 37(9), 11121-11128. https://doi.org/10.1609/aaai.v37i9.26317
+
+---
+
+## Appendix A: Complete Results Tables
+
+**Table A1: Architecture Category Rankings by Dataset**
+
+| Category | M4-Y Rank | M4-Q Rank | M4-M Rank | M4-W Rank | M4-H Rank | Tourism Rank | Weather Rank | Milk Rank |
+|----------|:---------:|:---------:|:---------:|:---------:|:---------:|:------------:|:------------:|:---------:|
+| alt\_trend\_wavelet\_rb | 5 | 2 | 2 | 1 | --- | 7 | 2 | 4 |
+| alt\_aelg | 3 | 3 | 4 | 2 | 4 | 6 | 3 | 5 |
+| alt\_ae | 4 | 5 | 2 | 5 | 3 | 8 | 1 | 3 |
+| trendwavelet\_rb | 1 | 4 | 1 | 8 | --- | 4 | --- | 6 |
+| trendwaveletaelg | 2 | 6 | 6 | 3 | 7 | 3 | --- | 2 |
+| trendwaveletae | 6 | 7 | 4 | 6 | 9 | 1 | --- | 1 |
+| paper\_baseline | 7 | 1 | 3 | 13 | 1 | 5 | 14 | 10 |
+
+Ranks are within-category best configuration rank on each dataset. Dashes indicate the category was not tested on that dataset.
+
+**Table A2** (full 112-config rankings per dataset-period) and **Table A3** (statistical test results for all pairwise comparisons) are available in the supplementary analysis notebooks at `experiments/analysis/notebooks/comprehensive_sweep_cross_dataset.ipynb`.
+
+---
+
+## Appendix B: Block Implementation Details
+
+### B.1 Parameter Count Formulas
+
+For a single block with backbone width $w$, lookback length $L$, forecast horizon $H$, and basis dimension $k$:
+
+**RootBlock + WaveletV3:**
+$$P = \underbrace{Lw + 3w^2}_{\text{backbone}} + \underbrace{w \cdot k_b + w \cdot k_f}_{\text{projection heads}} + \underbrace{4w + k_b + k_f}_{\text{biases}}$$
+
+where $k_b$, $k_f$ are backcast and forecast basis dimensions. Wavelet bases are frozen (0 trainable parameters).
+
+**AERootBlock + TrendWavelet:**
+$$P = \underbrace{L \cdot w/2 + dw + w^2/2}_{\text{AE backbone}} + \underbrace{w(p + k_b) + w(p + k_f)}_{\text{projection heads}} + \text{biases}$$
+
+where $d$ is latent dimension and $p$ is polynomial degree.
+
+**Full model** with $S$ stacks of 1 shared-weight block each: $P_{\text{total}} = S \cdot P_{\text{block}}$.
+
+### B.2 WaveletV3 Basis Construction Pseudocode
+
+```
+function BUILD_V3_BASIS(target_length, wavelet_type, basis_dim, basis_offset):
+    coeffs = pywt.wavedec(zeros(target_length), wavelet_type, level=min(max_level, 5))
+    basis_rows = []
+    for each (band_index, band_length) in coeffs:
+        for j in 0..band_length-1:
+            impulse = zero_coefficients_like(coeffs)
+            impulse[band_index][j] = 1.0
+            row = pywt.waverec(impulse, wavelet_type)[:target_length]
+            basis_rows.append(row)
+    raw_basis = stack(basis_rows)         # shape: (m, target_length)
+    U, S, Vt = SVD(raw_basis)             # Vt rows are orthonormal
+    rank = count(S > tolerance)
+    offset = min(basis_offset, rank - 1)
+    effective_dim = min(basis_dim, rank - offset)
+    return Vt[offset : offset + effective_dim, :]   # shape: (effective_dim, target_length)
+```
+
+### B.3 TrendWavelet Forward Pass Pseudocode
+
+```
+function TRENDWAVELET_FORWARD(x):
+    h = backbone(x)                              # (batch, units)
+    bc_coeffs = backcast_linear(h)               # (batch, trend_dim + wavelet_dim)
+    fc_coeffs = forecast_linear(h)               # (batch, trend_dim + wavelet_dim)
+    
+    bc_trend = bc_coeffs[:, :trend_dim]          # polynomial coefficients
+    bc_wave  = bc_coeffs[:, trend_dim:]           # wavelet coefficients
+    fc_trend = fc_coeffs[:, :trend_dim]
+    fc_wave  = fc_coeffs[:, trend_dim:]
+    
+    backcast = vandermonde_basis_b @ bc_trend + wavelet_basis_b @ bc_wave
+    forecast = vandermonde_basis_f @ fc_trend + wavelet_basis_f @ fc_wave
+    
+    if active_g:
+        apply activation to backcast/forecast per mode
+    
+    return backcast, forecast
+```
+
+---
+
+## Appendix C: M4-Daily Preliminary Results
+
+M4-Daily results are preliminary: only 14 of 112 configurations have been evaluated (paper baselines and TrendWavelet RootBlock variants). No AE, AELG, alternating, or GenericAE configurations have been tested.
+
+**Table C1: M4-Daily Preliminary Results (14 configs, 10 seeds)**
+
+| Config | SMAPE | OWA | Params |
+|--------|:-----:|:---:|-------:|
+| NBEATS-G\_30s\_ag0 | 2.603 | 0.861 | 26.0M |
+| NBEATS-IG\_30s\_agf | 2.658 | 0.876 | 20.3M |
+| TW\_30s\_td3\_bdeq\_coif2 | 2.894 | 0.952 | 7.7M |
+
+The 11% gap between NBEATS-G and TrendWavelet RB is the largest baseline-vs-novel gap in the entire sweep, but this likely reflects the absence of AE/AELG variants and alternating stacks rather than a genuine limitation of wavelet architectures on daily data. On every other M4 period where the full 112-config grid was evaluated, novel architectures matched or beat baselines. Completing the M4-Daily sweep is the highest-priority next experiment.
+
+---
+
+## Appendix D: NHiTS Transferability and Future Work
+
+### D.1 Architectural Compatibility
+
+All novel block types introduced in this work are fully compatible with N-HiTS (Challu et al., 2023) by construction. The N-HiTS architecture extends N-BEATS with two stack-level operations:
+
+1. **Multi-rate input pooling.** Each stack applies MaxPool1d with a configurable kernel size to its input, reducing the effective lookback length. For example, with kernel size 2, a block in this stack sees a 240-step input as 120 steps.
+
+2. **Hierarchical forecast interpolation.** Each stack produces a forecast at a reduced resolution (configurable downsampling factor per stack) that is interpolated back to the full forecast horizon.
+
+Both operations are external to the block interface: pooling happens before the block's forward pass, and interpolation happens after. Since all our blocks accept a 1D vector and return (backcast, forecast) tuples, they integrate into N-HiTS without any modification. The `NHiTSNet` class in `lightningnbeats` supports the full block registry.
+
+### D.2 Research Directions
+
+Several questions about novel blocks in N-HiTS warrant systematic investigation:
+
+1. **Do wavelet blocks benefit more from hierarchical interpolation than polynomial blocks?** N-HiTS's multi-rate design was motivated by capturing patterns at different temporal scales. Wavelet bases already provide multi-resolution analysis. These two multi-resolution mechanisms may be complementary (capturing different aspects of scale) or redundant.
+
+2. **Does pooling interact with basis conditioning?** MaxPool1d reduces the effective input length, which changes the wavelet decomposition level and available basis vectors. The V3 basis construction adapts automatically (via `pywt.dwt_max_level`), but the interaction between pooled input lengths and basis properties has not been studied.
+
+3. **Are AE backbones more or less beneficial in N-HiTS?** N-HiTS already provides a form of compression (through reduced input resolution). The combination of input-level compression (pooling) and backbone-level compression (AE) may be redundant, or they may target different aspects of the representation.
+
+4. **Cross-architecture transfer of hyperparameter guidelines.** Do the hyperparameter recommendations from Section 5.6 (db3 wavelet, ld=16, 10 stacks, no skip) transfer to N-HiTS, or does the multi-rate structure shift the optima?
+
+These questions represent natural extensions of the present work and would further validate the transferability of novel block designs across the N-BEATS architecture family.
