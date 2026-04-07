@@ -1,0 +1,117 @@
+# ============================================================
+# NHiTS Novel AE Block Types — Weather Exploration
+#
+# Focused study of novel AE-backbone block types in the NHiTS
+# 3-stack hierarchical architecture on Weather. Tests alternating
+# TrendAE+WaveletAE patterns alongside homogeneous TrendWaveletAE
+# stacks, with the best prior NHiTS performers as references.
+#
+# Metrics:
+#   mse/mae        — on z-score-normalized data (paper-comparable)
+#   denorm_mse/mae — on original-scale data (interpretable)
+#   smape          — scale-independent sanity check
+#
+# Usage:
+#   python experiments/run_nhits_benchmark.py \
+#       --yaml experiments/configs/nhits_novel_ae_weather.yaml --dry-run
+#   python experiments/run_nhits_benchmark.py \
+#       --yaml experiments/configs/nhits_novel_ae_weather.yaml
+# ============================================================
+
+experiment_name: NHiTS-NovelAE-Weather
+description: >
+  Exploration of novel AE block types in NHiTS 3-stack architecture
+  on Weather dataset. Tests alternating TrendAE+WaveletAE patterns
+  (db3, coif2, haar) and homogeneous TrendWaveletAE/AELG stacks,
+  with best prior NHiTS performers and a new BottleneckGenericAELG
+  config as references.
+
+dataset: weather
+horizons: [96, 192, 336, 720]
+
+# NHiTS evaluation protocol
+protocol:
+  normalize: true
+  train_ratio: 0.7
+  val_ratio: 0.1
+  include_target: true     # 21 columns (with OT)
+  loss: MSELoss
+  forecast_multiplier: 5   # L = 5*H
+  batch_size: 256
+
+# NHiTS published baselines (Table 1)
+baselines:
+  NHiTS:
+    Weather-96:  {mse: 0.158, mae: 0.209}
+    Weather-192: {mse: 0.211, mae: 0.253}
+    Weather-336: {mse: 0.272, mae: 0.296}
+    Weather-720: {mse: 0.348, mae: 0.349}
+
+configs:
+  # --- Reference baselines (best from prior NHiTS benchmark) ---
+  - name: NHiTS-GenericAELG
+    model: NHiTSNet
+    stack_types: ['GenericAELG', 'GenericAELG', 'GenericAELG']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  - name: NHiTS-GenericAE
+    model: NHiTSNet
+    stack_types: ['GenericAE', 'GenericAE', 'GenericAE']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  # --- New: Alternating TrendAE + WaveletAE (3 wavelet families) ---
+  - name: NHiTS-TrendAE+DB3V3AE
+    model: NHiTSNet
+    stack_types: ['TrendAE', 'DB3WaveletV3AE', 'TrendAE']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  - name: NHiTS-TrendAE+Coif2V3AE
+    model: NHiTSNet
+    stack_types: ['TrendAE', 'Coif2WaveletV3AE', 'TrendAE']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  - name: NHiTS-TrendAE+HaarV3AE
+    model: NHiTSNet
+    stack_types: ['TrendAE', 'HaarWaveletV3AE', 'TrendAE']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  # --- New: BottleneckGenericAELG in NHiTS (recommended but untested) ---
+  - name: NHiTS-BottleneckGenericAELG
+    model: NHiTSNet
+    stack_types: ['BottleneckGenericAELG', 'BottleneckGenericAELG', 'BottleneckGenericAELG']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  # --- Re-included: Homogeneous TrendWavelet AE stacks ---
+  - name: NHiTS-TrendWaveletAE
+    model: NHiTSNet
+    stack_types: ['TrendWaveletAE', 'TrendWaveletAE', 'TrendWaveletAE']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  - name: NHiTS-TrendWaveletAELG
+    model: NHiTSNet
+    stack_types: ['TrendWaveletAELG', 'TrendWaveletAELG', 'TrendWaveletAELG']
+    n_pools_kernel_size: [8, 4, 1]
+    n_freq_downsample: [24, 12, 1]
+
+runs:
+  n_runs: 5
+  base_seed: 1
+
+training:
+  max_epochs: 100
+  patience: 25
+  activation: ReLU
+  active_g: false
+  sum_losses: false
+
+block_params:
+  thetas_dim: 5
+  latent_dim: 16           # Research-confirmed optimal
+  basis_dim: eq_fcast      # Dynamic: set to forecast_length per horizon

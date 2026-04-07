@@ -135,7 +135,7 @@ CSV_COLUMNS = [
     "model_type", "config_name", "dataset", "horizon",
     "backcast_length", "n_stacks", "n_blocks_per_stack",
     "run", "seed",
-    "mse", "mae", "norm_mse", "norm_mae", "smape",
+    "mse", "mae", "denorm_mse", "denorm_mae", "smape",
     "n_params", "training_time_seconds", "epochs_trained",
     "stopping_reason", "best_val_loss",
     "loss_function", "active_g", "normalize", "train_ratio", "val_ratio",
@@ -462,34 +462,36 @@ def compute_mse(y_pred, y_true):
     return float(np.mean((y_true - y_pred) ** 2))
 
 
-def compute_normalized_mae_mse(preds, targets, train_data_df):
-    """Compute Z-score normalized MAE and MSE using training data statistics."""
-    eps = 1e-8
-    cols = train_data_df.columns
-    n_series = preds.shape[0]
+def compute_denormalized_mse_mae(preds, targets, col_indices, col_means, col_stds):
+    """Compute MSE and MAE after reversing z-score normalization.
 
-    norm_abs_errors = []
-    norm_sq_errors = []
+    When col_means/col_stds are None (no normalization was applied),
+    returns standard MSE/MAE on the raw predictions.
 
-    for i in range(n_series):
-        col = cols[i] if i < len(cols) else cols[-1]
-        series_vals = train_data_df[col].dropna().values
-        if len(series_vals) == 0:
-            continue
+    Args:
+        preds: array of shape (n_samples, forecast_length)
+        targets: array of shape (n_samples, forecast_length)
+        col_indices: list of (col_name, start_idx) from ColumnarTimeSeriesDataset
+        col_means: dict mapping column names to training means (or None)
+        col_stds: dict mapping column names to training stds (or None)
 
-        mu = float(np.mean(series_vals))
-        sigma = float(np.std(series_vals))
-        if sigma < eps:
-            sigma = 1.0
+    Returns:
+        (denorm_mae, denorm_mse) on original-scale data
+    """
+    if col_means is None or col_stds is None:
+        return float(np.mean(np.abs(targets - preds))), float(np.mean((targets - preds) ** 2))
 
-        norm_pred = (preds[i] - mu) / sigma
-        norm_true = (targets[i] - mu) / sigma
-        norm_abs_errors.append(np.mean(np.abs(norm_pred - norm_true)))
-        norm_sq_errors.append(np.mean((norm_pred - norm_true) ** 2))
+    preds_denorm = np.empty_like(preds)
+    targets_denorm = np.empty_like(targets)
+    for i, (col, _start) in enumerate(col_indices):
+        mu = col_means[col]
+        sigma = col_stds[col]
+        preds_denorm[i] = preds[i] * sigma + mu
+        targets_denorm[i] = targets[i] * sigma + mu
 
-    norm_mae = float(np.mean(norm_abs_errors)) if norm_abs_errors else float("nan")
-    norm_mse = float(np.mean(norm_sq_errors)) if norm_sq_errors else float("nan")
-    return norm_mae, norm_mse
+    denorm_mae = float(np.mean(np.abs(targets_denorm - preds_denorm)))
+    denorm_mse = float(np.mean((targets_denorm - preds_denorm) ** 2))
+    return denorm_mae, denorm_mse
 
 
 def resolve_accelerator():
@@ -951,13 +953,14 @@ def _run_experiment_body(
     mse_norm = compute_mse(preds, targets)
     mae_norm = compute_mae(preds, targets)
 
-    # Also compute sMAPE and unnormalized metrics for our reference
-    # Unnormalized metrics via compute_normalized_mae_mse on raw data
-    norm_mae, norm_mse = compute_normalized_mae_mse(preds, targets, train_data)
+    # Denormalized metrics (original scale) and sMAPE
+    col_indices = test_dm.test_dataset.col_indices
+    denorm_mae, denorm_mse = compute_denormalized_mse_mae(
+        preds, targets, col_indices, dm.col_means, dm.col_stds)
     smape = compute_smape(preds, targets)
 
     print(f"         MSE={mse_norm:.4f}  MAE={mae_norm:.4f}  "
-          f"nMSE={norm_mse:.4f}  nMAE={norm_mae:.4f}  sMAPE={smape:.2f}  "
+          f"dMSE={denorm_mse:.4f}  dMAE={denorm_mae:.4f}  sMAPE={smape:.2f}  "
           f"time={training_time:.1f}s  epochs={epochs_trained}  [{stopping_reason}]")
 
     # Save result
@@ -973,8 +976,8 @@ def _run_experiment_body(
         "seed": seed,
         "mse": f"{mse_norm:.6f}",
         "mae": f"{mae_norm:.6f}",
-        "norm_mse": f"{norm_mse:.6f}" if math.isfinite(norm_mse) else "nan",
-        "norm_mae": f"{norm_mae:.6f}" if math.isfinite(norm_mae) else "nan",
+        "denorm_mse": f"{denorm_mse:.6f}" if math.isfinite(denorm_mse) else "nan",
+        "denorm_mae": f"{denorm_mae:.6f}" if math.isfinite(denorm_mae) else "nan",
         "smape": f"{smape:.6f}" if math.isfinite(smape) else "nan",
         "n_params": n_params,
         "training_time_seconds": f"{training_time:.2f}",

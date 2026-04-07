@@ -24,13 +24,16 @@ We present a systematic exploration of these alternative block types and backbon
 
 1. **Wavelet dominance.** Wavelet-augmented architectures beat the original N-BEATS baselines on six of nine dataset-periods tested, including M4-Yearly, M4-Monthly, M4-Weekly, Tourism-Yearly, Weather-96, and Milk.
 
-2. **Extreme parameter efficiency.** Sub-1M parameter TrendWavelet models with autoencoder-compressed backbones achieve within 0.5% of the best configurations on most datasets, representing a 10--50$\times$ parameter reduction compared to the 26M-parameter original N-BEATS-G.
+2. **Extreme parameter efficiency.** Sub-1M parameter TrendWavelet models with autoencoder-compressed backbones achieve 99.5% of the best configurations on most datasets, representing a 10--50$\times$ parameter reduction compared to the 26M-50M parameter models in the original N-BEATS-G architecture.
 
-3. **Overparameterization exposed.** The original 30-stack Generic architecture diverges in 40--50% of training runs on small datasets (Milk, Tourism), while autoencoder-compressed variants with orders of magnitude fewer parameters converge reliably. This reveals that the original architecture is massively overparameterized for most forecasting tasks.
+3. **Instability exposed.** The original Generic architecture diverges in 40--50% of training runs on small datasets (Milk, Tourism), while autoencoder-compressed variants with orders of magnitude fewer parameters converge reliably.
 
-4. **Dataset-dependent architecture selection.** No single configuration is universally optimal. Backbone hierarchy, stack architecture (unified vs. alternating), optimal depth, and wavelet family preferences all reverse across datasets, necessitating dataset-aware architecture selection.
+4. **N-BEATS Over-Parameterized**
+This reveals that the original architecture is massively overparameterized for most forecasting tasks.
 
-5. **Convergence regularization trade-offs.** The `active_g` post-basis activation mechanism eliminates catastrophic divergence but imposes a small expressiveness penalty, with the magnitude varying from negligible on large benchmarks (~1%) to prohibitive on small univariate series (54--76%).
+5. **Dataset-dependent architecture selection.** No single configuration is universally optimal. Backbone hierarchy, stack architecture (unified vs. alternating), optimal depth, and wavelet family preferences all reverse across datasets, necessitating dataset-aware architecture selection.
+
+6. **Convergence regularization trade-offs.** The `active_g` post-basis activation mechanism eliminates catastrophic divergence but imposes a small expressiveness penalty, with the magnitude varying from negligible on large benchmarks (~1%) to prohibitive on small univariate series (54--76%).
 
 Our contributions include: (a) novel block types --- orthonormal wavelet basis blocks (WaveletV3), hybrid TrendWavelet blocks, three-way TrendWaveletGeneric blocks, and autoencoder/learned-gate/variational backbone variants of all original and novel block types; (b) a rigorous benchmark framework evaluating 112 configurations across 10 seeds on four diverse datasets; (c) diagnosis and characterization of overparameterization in the original N-BEATS architecture; and (d) practical architecture selection guidelines for practitioners.
 
@@ -626,65 +629,65 @@ The power of the N-BEATS framework lies in its doubly residual stacking topology
 
 ## References
 
-Aminghafari, M., Cheze, N., & Poggi, J.-M. (2006). Multivariate denoising using wavelets and principal component analysis. *Computational Statistics & Data Analysis*, 50(9), 2381-2398. https://doi.org/10.1016/j.csda.2004.12.010
+Aminghafari, M., Cheze, N., & Poggi, J.-M. (2006). Multivariate denoising using wavelets and principal component analysis. *Computational Statistics & Data Analysis*, 50(9), 2381-2398. <https://doi.org/10.1016/j.csda.2004.12.010>
 
-Assimakopoulos, V., & Nikolopoulos, K. (2000). The Theta model: A decomposition approach to forecasting. *International Journal of Forecasting*, 16(4), 521-530. https://doi.org/10.1016/S0169-2070(00)00066-2
+Assimakopoulos, V., & Nikolopoulos, K. (2000). The Theta model: A decomposition approach to forecasting. *International Journal of Forecasting*, 16(4), 521-530. <https://doi.org/10.1016/S0169-2070(00)00066-2>
 
 Box, G. E. P., & Jenkins, G. M. (1976). *Time Series Analysis: Forecasting and Control*. Holden-Day.
 
-Challu, C., Olivares, K. G., Oreshkin, B. N., Garza, F., Mergenthaler-Canseco, M., & Dubrawski, A. (2023). N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting. *Proceedings of the AAAI Conference on Artificial Intelligence*, 37(6), 6989-6997. https://doi.org/10.1609/aaai.v37i6.25854
+Challu, C., Olivares, K. G., Oreshkin, B. N., Garza, F., Mergenthaler-Canseco, M., & Dubrawski, A. (2023). N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting. *Proceedings of the AAAI Conference on Artificial Intelligence*, 37(6), 6989-6997. <https://doi.org/10.1609/aaai.v37i6.25854>
 
 Cleveland, R. B., Cleveland, W. S., McRae, J. E., & Terpenning, I. (1990). STL: A Seasonal-Trend Decomposition Procedure Based on Loess. *Journal of Official Statistics*, 6(1), 3-73.
 
-Daubechies, I. (1992). *Ten Lectures on Wavelets*. SIAM. https://doi.org/10.1137/1.9781611970104
+Daubechies, I. (1992). *Ten Lectures on Wavelets*. SIAM. <https://doi.org/10.1137/1.9781611970104>
 
-Frankle, J., & Carlin, M. (2019). The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks. *International Conference on Learning Representations (ICLR 2019)*. https://openreview.net/forum?id=rJl-b3RcF7
+Frankle, J., & Carlin, M. (2019). The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks. *International Conference on Learning Representations (ICLR 2019)*. <https://openreview.net/forum?id=rJl-b3RcF7>
 
 Han, S., Mao, H., & Dally, W. J. (2015). Deep Compression: Compressing Deep Neural Networks with Pruning, Trained Quantization and Huffman Coding. *arXiv preprint arXiv:1510.00149*.
 
-He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep Residual Learning for Image Recognition. *Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)*, 770-778. https://doi.org/10.1109/CVPR.2016.90
+He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep Residual Learning for Image Recognition. *Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)*, 770-778. <https://doi.org/10.1109/CVPR.2016.90>
 
-Hinton, G. E., & Salakhutdinov, R. R. (2006). Reducing the Dimensionality of Data with Neural Networks. *Science*, 313(5786), 504-507. https://doi.org/10.1126/science.1127647
+Hinton, G. E., & Salakhutdinov, R. R. (2006). Reducing the Dimensionality of Data with Neural Networks. *Science*, 313(5786), 504-507. <https://doi.org/10.1126/science.1127647>
 
 Hinton, G., Vinyals, O., & Dean, J. (2015). Distilling the Knowledge in a Neural Network. *arXiv preprint arXiv:1503.02531*.
 
 Holt, C. C. (1957). Forecasting Seasonals and Trends by Exponentially Weighted Moving Averages. *ONR Memorandum No. 52*. Carnegie Institute of Technology.
 
-Hyndman, R. J., & Khandakar, Y. (2008). Automatic Time Series Forecasting: The forecast Package for R. *Journal of Statistical Software*, 27(3), 1-22. https://doi.org/10.18637/jss.v027.i03
+Hyndman, R. J., & Khandakar, Y. (2008). Automatic Time Series Forecasting: The forecast Package for R. *Journal of Statistical Software*, 27(3), 1-22. <https://doi.org/10.18637/jss.v027.i03>
 
-Hyndman, R. J., Koehler, A. B., Snyder, R. D., & Grose, S. (2002). A state space framework for automatic forecasting using exponential smoothing methods. *International Journal of Forecasting*, 18(3), 439-454. https://doi.org/10.1016/S0169-2070(01)00110-8
+Hyndman, R. J., Koehler, A. B., Snyder, R. D., & Grose, S. (2002). A state space framework for automatic forecasting using exponential smoothing methods. *International Journal of Forecasting*, 18(3), 439-454. <https://doi.org/10.1016/S0169-2070(01)00110-8>
 
-Lim, B., Arik, S. O., Loeff, N., & Pfister, T. (2021). Temporal Fusion Transformers for interpretable multi-horizon time series forecasting. *International Journal of Forecasting*, 37(4), 1748-1764. https://doi.org/10.1016/j.ijforecast.2021.03.012
+Lim, B., Arik, S. O., Loeff, N., & Pfister, T. (2021). Temporal Fusion Transformers for interpretable multi-horizon time series forecasting. *International Journal of Forecasting*, 37(4), 1748-1764. <https://doi.org/10.1016/j.ijforecast.2021.03.012>
 
-Makridakis, S., & Hibon, M. (2000). The M3-Competition: Results, conclusions and implications. *International Journal of Forecasting*, 16(4), 451-476. https://doi.org/10.1016/S0169-2070(00)00057-1
+Makridakis, S., & Hibon, M. (2000). The M3-Competition: Results, conclusions and implications. *International Journal of Forecasting*, 16(4), 451-476. <https://doi.org/10.1016/S0169-2070(00)00057-1>
 
-Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2018). Statistical and Machine Learning forecasting methods: Concerns and ways forward. *PLOS ONE*, 13(3), e0194889. https://doi.org/10.1371/journal.pone.0194889
+Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2018). Statistical and Machine Learning forecasting methods: Concerns and ways forward. *PLOS ONE*, 13(3), e0194889. <https://doi.org/10.1371/journal.pone.0194889>
 
-Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2020). The M4 Competition: 100,000 time series and 61 forecasting methods. *International Journal of Forecasting*, 36(1), 54-74. https://doi.org/10.1016/j.ijforecast.2019.04.014
+Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2020). The M4 Competition: 100,000 time series and 61 forecasting methods. *International Journal of Forecasting*, 36(1), 54-74. <https://doi.org/10.1016/j.ijforecast.2019.04.014>
 
 Malhotra, P., Ramakrishnan, A., Anand, G., Vig, L., Agarwal, P., & Shroff, G. (2016). LSTM-based Encoder-Decoder for Multi-sensor Anomaly Detection. *arXiv preprint arXiv:1607.00148*.
 
-Mallat, S. G. (1989). A Theory for Multiresolution Signal Decomposition: The Wavelet Representation. *IEEE Transactions on Pattern Analysis and Machine Intelligence*, 11(7), 674-693. https://doi.org/10.1109/34.192463
+Mallat, S. G. (1989). A Theory for Multiresolution Signal Decomposition: The Wavelet Representation. *IEEE Transactions on Pattern Analysis and Machine Intelligence*, 11(7), 674-693. <https://doi.org/10.1109/34.192463>
 
-Montero-Manso, P., Athanasopoulos, G., Hyndman, R. J., & Talagala, T. S. (2020). FFORMA: Feature-based forecast model averaging. *International Journal of Forecasting*, 36(1), 86-92. https://doi.org/10.1016/j.ijforecast.2019.02.011
+Montero-Manso, P., Athanasopoulos, G., Hyndman, R. J., & Talagala, T. S. (2020). FFORMA: Feature-based forecast model averaging. *International Journal of Forecasting*, 36(1), 86-92. <https://doi.org/10.1016/j.ijforecast.2019.02.011>
 
 Nie, Y., Nguyen, N. H., Sinthong, P., & Kalagnanam, J. (2023). A Time Series is Worth 64 Words: Long-term Forecasting with Transformers. *International Conference on Learning Representations (ICLR 2023)*.
 
-Oreshkin, B. N., Carpov, D., Chapados, N., & Bengio, Y. (2019). N-BEATS: Neural basis expansion analysis for interpretable time series forecasting. *International Conference on Learning Representations (ICLR 2020)*. https://openreview.net/forum?id=r1ecqn4YwB
+Oreshkin, B. N., Carpov, D., Chapados, N., & Bengio, Y. (2019). N-BEATS: Neural basis expansion analysis for interpretable time series forecasting. *International Conference on Learning Representations (ICLR 2020)*. <https://openreview.net/forum?id=r1ecqn4YwB>
 
-Pramanick, N., Singhal, V., et al. (2024). Fusion of Wavelet Decomposition and N-BEATS for Improved Stock Market Forecasting. *SN Computer Science*, 5, 822. https://doi.org/10.1007/s42979-024-03222-4
+Pramanick, N., Singhal, V., et al. (2024). Fusion of Wavelet Decomposition and N-BEATS for Improved Stock Market Forecasting. *SN Computer Science*, 5, 822. <https://doi.org/10.1007/s42979-024-03222-4>
 
-Salinas, D., Flunkert, V., Gasthaus, J., & Januschowski, T. (2020). DeepAR: Probabilistic forecasting with autoregressive recurrent networks. *International Journal of Forecasting*, 36(3), 1181-1191. https://doi.org/10.1016/j.ijforecast.2019.07.001
+Salinas, D., Flunkert, V., Gasthaus, J., & Januschowski, T. (2020). DeepAR: Probabilistic forecasting with autoregressive recurrent networks. *International Journal of Forecasting*, 36(3), 1181-1191. <https://doi.org/10.1016/j.ijforecast.2019.07.001>
 
-Smyl, S. (2020). A hybrid method of exponential smoothing and recurrent neural networks for time series forecasting. *International Journal of Forecasting*, 36(1), 75-85. https://doi.org/10.1016/j.ijforecast.2019.03.017
+Smyl, S. (2020). A hybrid method of exponential smoothing and recurrent neural networks for time series forecasting. *International Journal of Forecasting*, 36(1), 75-85. <https://doi.org/10.1016/j.ijforecast.2019.03.017>
 
 van den Oord, A., Dieleman, S., Zen, H., Simonyan, K., Vinyals, O., Graves, A., ... & Kavukcuoglu, K. (2016). WaveNet: A Generative Model for Raw Audio. *arXiv preprint arXiv:1609.03499*.
 
-Vincent, P., Larochelle, H., Bengio, Y., & Manzagol, P.-A. (2008). Extracting and composing robust features with denoising autoencoders. *Proceedings of the 25th International Conference on Machine Learning (ICML)*, 1096-1103. https://doi.org/10.1145/1390156.1390294
+Vincent, P., Larochelle, H., Bengio, Y., & Manzagol, P.-A. (2008). Extracting and composing robust features with denoising autoencoders. *Proceedings of the 25th International Conference on Machine Learning (ICML)*, 1096-1103. <https://doi.org/10.1145/1390156.1390294>
 
-Winters, P. R. (1960). Forecasting Sales by Exponentially Weighted Moving Averages. *Management Science*, 6(3), 324-342. https://doi.org/10.1287/mnsc.6.3.324
+Winters, P. R. (1960). Forecasting Sales by Exponentially Weighted Moving Averages. *Management Science*, 6(3), 324-342. <https://doi.org/10.1287/mnsc.6.3.324>
 
-Zeng, A., Chen, M., Zhang, L., & Xu, Q. (2023). Are Transformers Effective for Time Series Forecasting? *Proceedings of the AAAI Conference on Artificial Intelligence*, 37(9), 11121-11128. https://doi.org/10.1609/aaai.v37i9.26317
+Zeng, A., Chen, M., Zhang, L., & Xu, Q. (2023). Are Transformers Effective for Time Series Forecasting? *Proceedings of the AAAI Conference on Artificial Intelligence*, 37(9), 11121-11128. <https://doi.org/10.1609/aaai.v37i9.26317>
 
 ---
 
