@@ -55,7 +55,7 @@ periods:
 
 hardware:
   pin_memory: true
-  num_workers: 4
+  num_workers: 5
 
 protocol:
   normalize: false

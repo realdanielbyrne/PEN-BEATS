@@ -2,11 +2,18 @@
 
 ## Core Guideline
 
-When building Trend+Wavelet stacks, the **backbone class hierarchy** matters more than individual block choice:
+When building Trend+Wavelet stacks, the **backbone class hierarchy is dataset-dependent** (comprehensive sweep, 2026-04-06):
 
-**RootBlock (non-AE) > AERootBlockLG (learned-gate AE) >> AERootBlock (plain AE)**
+| Dataset | Hierarchy | Evidence |
+|---------|-----------|---------|
+| M4 (all periods) | RootBlock > AELG > AE | Comprehensive sweep |
+| Tourism-Yearly | RootBlock > AELG > AE | Comprehensive sweep |
+| Weather-96 | **AE > AELG > RootBlock** (reversed!) | Comprehensive sweep + gate fn study |
+| Milk | **AE > AELG** (reversed!) | Comprehensive sweep |
 
-**Important exception (gate fn study, 2026-03-15):** On **Weather-96**, the hierarchy reverses for AE vs AELG: plain AE significantly outperforms AELG (MWU p=0.036). The top 2 Weather configs are AE controls (no learned gate). The learned gate may over-constrain the latent space for long-horizon forecasting. **For Weather-96 alternating stacks, prefer AE over AELG.**
+**Key insight:** The prior "RootBlock > AELG >> AE" hierarchy was based primarily on M4 data. The comprehensive sweep reveals this **reverses on Weather and Milk**, where the AE bottleneck provides beneficial regularization. On Weather, plain AE significantly outperforms AELG (gate fn study MWU p=0.036; sweep confirms AE category leads). On Milk, TrendWaveletAE (category SMAPE=1.815) beats TrendWaveletAELG (1.962).
+
+**Safe default:** For a new/unknown dataset, start with AELG (middle ground). Switch to plain AE for normalized multivariate data (Weather-like) or simple univariate series (Milk-like). Use RootBlock for competition-format data (M4-like).
 
 | Full Stack | Backbone | M4-Yearly SMAPE | OWA |
 |---|---|---|---|

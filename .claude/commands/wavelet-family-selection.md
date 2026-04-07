@@ -7,7 +7,21 @@ Choose wavelet families based on **two considerations**:
 1. **Target length compatibility** -- the wavelet filter must be short enough for the target length to permit real multilevel decomposition
 2. **Cross-dataset performance** -- some families generalize better than others, independent of filter-length constraints
 
-When both considerations are satisfied, **Symlet20 is the universal best choice** (avg rank 2.3/14 across M4-Yearly, Tourism-Yearly, Weather-96). When Symlet20's filter is too long for the target, fall back to the horizon-appropriate family.
+### Updated Recommendation (Comprehensive Sweep, 2026-04-06)
+
+The comprehensive sweep (112 configs x 10 runs, M4 all periods + Tourism + Weather + Milk) found that **db3 is the safest cross-dataset default** (ranks 1st or 2nd on 3/4 datasets). The earlier Symlet20 recommendation was based on a smaller V3AELG study with fewer configs. Key findings:
+
+| Dataset | Best Wavelet | KW p-value |
+|---------|-------------|-----------|
+| M4-Yearly | coif2 | 0.013 |
+| M4-Monthly/Hourly | Haar | <0.01 |
+| Tourism | db3 (non-AE), sym10 (AELG) | 0.049 |
+| Weather | db3 | 0.036 |
+| Milk | Haar | 0.458 (ns) |
+
+**Short horizons (H<=8):** Haar or db3. **Medium/long horizons:** db3 or coif2. **Cross-dataset default:** db3.
+
+When Symlet20's filter is compatible with the target length, it remains a strong choice for long-horizon datasets, but db3 is now the recommended first-choice for new experiments.
 
 ---
 
@@ -94,17 +108,17 @@ When in doubt, pick the family using the **shorter of the two target lengths**.
 ## Recommendation Summary
 
 ### If you must pick ONE family (any horizon):
-- **Symlet20** -- avg rank 2.3/14, never worse than 3rd across 3 datasets
+- **db3** -- safest cross-dataset default (comprehensive sweep, 2026-04-06). Ranks 1st or 2nd on Tourism, Weather, Milk.
 
 ### If you are optimizing for a specific horizon:
-- **Short (H <= 8):** DB4 > Symlet3 > DB3
-- **Long (H >= 48):** Symlet20 > DB20 > Symlet10
-- **Mixed/unknown:** Symlet20 (safest overall)
+- **Short (H <= 8):** Haar or db3 (Haar wins Milk; db3 wins Tourism)
+- **Medium (H = 13-18):** coif2 or db3 (coif2 wins M4-Yearly/Monthly)
+- **Long (H >= 48):** Haar or db3 (Haar wins M4-Hourly; Symlet20 viable if filter fits)
+- **Mixed/unknown:** db3 (safest overall per comprehensive sweep)
 
 ### Families to generally avoid:
-- **DB2, Haar** -- mid-to-low performers (rank 8-10 avg), outclassed by DB3/DB4/Symlet20
-- **Coif2, DB10** -- consistently underperform their respective complexity tiers
 - **Coif10** -- filter too long for most practical horizons
+- **sym10** -- inconsistent (good on Tourism AELG, poor elsewhere)
 
 ---
 

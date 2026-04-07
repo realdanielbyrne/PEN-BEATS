@@ -42,6 +42,21 @@ When configuring `latent_dim` for AE-family wavelet blocks (`AERootBlock`, `AERo
 
 On Weather-96 with alternating stacks (TrendAE + WaveletV3AE), plain AE significantly outperforms AELG (MWU p=0.036). The top 2 Weather configs are AE controls with no learned gate. The gate function choice (sigmoid vs wavy_sigmoid vs wavelet_sigmoid) is a non-factor on both M4 and Weather (KW p>0.20). This suggests `latent_dim=16` with plain AE (no gate) is worth testing on long-horizon datasets.
 
+### Updated: Latent Dim is Dataset-Dependent (Comprehensive Sweep, 2026-04-06)
+
+The comprehensive sweep (112 configs x 10 runs) found that **latent dim preferences reverse on Weather**:
+
+| Dataset | Best ld | KW p-value | Notes |
+|---------|---------|-----------|-------|
+| M4-Yearly | 16 | 0.001 | ld=16 best, consistent with prior |
+| M4-Quarterly | 8 | 0.0003 | Smaller bottleneck preferred |
+| M4-Hourly | 16 | 0.002 | ld=16 best |
+| Tourism | 8/16/32 equiv | ns | No meaningful difference |
+| Weather-96 | **8 > 16 > 32** | **0.010** | **Reversed!** Smaller = better |
+| Milk | 8 sufficient | -- | Simple series needs less |
+
+**Revised recommendation:** Use ld=16 as default for M4; use ld=8 for Weather and Milk. The prior "always use ld=16" advice does not generalize to normalized multivariate series (Weather) or simple univariate series (Milk), where stronger regularization from a smaller bottleneck helps.
+
 ### Untested but Recommended: ld=16 for Plain AE
 
 Given that:
