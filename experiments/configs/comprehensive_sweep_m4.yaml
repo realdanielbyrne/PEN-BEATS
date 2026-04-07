@@ -56,7 +56,7 @@ periods:
 
 hardware:
   pin_memory: true
-  num_workers: 4
+  num_workers: 10
 
 training:
   active_g: false
