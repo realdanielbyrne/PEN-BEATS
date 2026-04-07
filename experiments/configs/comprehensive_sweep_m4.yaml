@@ -52,7 +52,6 @@ description: >
 dataset: m4
 periods:
 
-  - Hourly
   - Daily
 
 hardware:
