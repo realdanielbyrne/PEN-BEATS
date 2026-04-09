@@ -47,52 +47,6 @@ protocol:
 # Configs: Generic-family + TrendWaveletGeneric-family, all with active_g=forecast
 # Baselines (active_g=false) already exist from nhits_benchmark_weather.yaml
 configs:
-  # --- NBeatsNet (10-stack): Generic-family ---
-  - name: Generic-10-agF
-    model: NBeatsNet
-    stack_types: "['Generic'] * 10"
-    active_g: forecast
-
-  - name: GenericAELG-10-agF
-    model: NBeatsNet
-    stack_types: "['GenericAELG'] * 10"
-    active_g: forecast
-
-  - name: GenericAE-10-agF
-    model: NBeatsNet
-    stack_types: "['GenericAE'] * 10"
-    active_g: forecast
-
-  - name: BottleneckGenericAELG-10-agF
-    model: NBeatsNet
-    stack_types: "['BottleneckGenericAELG'] * 10"
-    active_g: forecast
-
-  - name: BottleneckGenericAE-10-agF
-    model: NBeatsNet
-    stack_types: "['BottleneckGenericAE'] * 10"
-    active_g: forecast
-
-  # --- NBeatsNet (10-stack): TrendWaveletGeneric-family ---
-  - name: TrendWaveletGeneric-10-agF
-    model: NBeatsNet
-    stack_types: "['TrendWaveletGeneric'] * 10"
-    active_g: forecast
-
-  - name: TrendWaveletGenericAE-10-agF
-    model: NBeatsNet
-    stack_types: "['TrendWaveletGenericAE'] * 10"
-    active_g: forecast
-
-  - name: TrendWaveletGenericAELG-10-agF
-    model: NBeatsNet
-    stack_types: "['TrendWaveletGenericAELG'] * 10"
-    active_g: forecast
-
-  - name: TrendWaveletGenericVAE-10-agF
-    model: NBeatsNet
-    stack_types: "['TrendWaveletGenericVAE'] * 10"
-    active_g: forecast
 
   # --- NHiTSNet (3-stack with hierarchical pooling): Generic-family ---
   - name: NHiTS-Generic-agF
@@ -139,12 +93,12 @@ configs:
     active_g: forecast
 
 runs:
-  n_runs: 8
+  n_runs: 5
   base_seed: 1
 
 training:
   max_epochs: 100
-  patience: 10
+  patience: 25
   activation: ReLU
   active_g: forecast       # All configs in this file use active_g=forecast
   sum_losses: false

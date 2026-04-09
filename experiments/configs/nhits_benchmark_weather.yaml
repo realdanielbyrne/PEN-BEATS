@@ -45,57 +45,16 @@ baselines:
 
 # Benchmark configurations (9 configs)
 # Selection rationale:
-#   Reference baselines: Generic (N-BEATS-G), NHiTS-Generic (NHiTS-G)
-#   NBeatsNet: GenericAELG, BottleneckGenericAELG, TrendAELG+Sym20V3AELG, TrendWaveletAELG
+#   Reference baselines: NHiTS-Generic (NHiTS-G)
+
 #   NHiTSNet:  GenericAELG, TrendAELG+Coif2V3AELG+GenericAELG, TrendWaveletAELG
 configs:
   # --- Reference baselines (vanilla blocks, same pipeline) ---
-  - name: Generic-10
-    model: NBeatsNet
-    stack_types: "['Generic'] * 10"
-
   - name: NHiTS-Generic
     model: NHiTSNet
     stack_types: ['Generic', 'Generic', 'Generic']
     n_pools_kernel_size: [8, 4, 1]
     n_freq_downsample: [24, 12, 1]
-
-  # --- NBeatsNet novel (10-stack, 4 configs) ---
-  - name: GenericAELG-10
-    model: NBeatsNet
-    stack_types: "['GenericAELG'] * 10"
-
-  - name: GenericAE-10
-    model: NBeatsNet
-    stack_types: "['GenericAE'] * 10"
-
-  - name: BottleneckGenericAELG-10
-    model: NBeatsNet
-    stack_types: "['BottleneckGenericAELG'] * 10"
-
-  - name: BottleneckGenericAE-10
-    model: NBeatsNet
-    stack_types: "['BottleneckGenericAE'] * 10"
-
-  - name: TrendAELG+Sym20V3AELG
-    model: NBeatsNet
-    stack_types: "['TrendAELG', 'Symlet20WaveletV3AELG'] * 5"
-
-  - name: TrendAE+Sym20V3AE
-    model: NBeatsNet
-    stack_types: "['TrendAE', 'Symlet20WaveletV3AE'] * 5"
-
-  - name: TrendWaveletAELG-10
-    model: NBeatsNet
-    stack_types: "['TrendWaveletAELG'] * 10"
-
-  - name: TrendWaveletAE-10
-    model: NBeatsNet
-    stack_types: "['TrendWaveletAE'] * 10"
-
-  - name: TrendWavelet-10
-    model: NBeatsNet
-    stack_types: "['TrendWavelet'] * 10"
 
   # --- NHiTSNet (3-stack with hierarchical pooling, 3 configs) ---
   - name: NHiTS-GenericAELG
@@ -141,7 +100,7 @@ configs:
     n_freq_downsample: [24, 12, 1]
 
 runs:
-  n_runs: 8
+  n_runs: 5
   base_seed: 1
 
 training:

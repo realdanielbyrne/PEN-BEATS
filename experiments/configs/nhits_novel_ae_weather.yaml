@@ -14,8 +14,7 @@
 # Usage:
 #   python experiments/run_nhits_benchmark.py \
 #       --yaml experiments/configs/nhits_novel_ae_weather.yaml --dry-run
-#   python experiments/run_nhits_benchmark.py \
-#       --yaml experiments/configs/nhits_novel_ae_weather.yaml
+#   python experiments/run_nhits_benchmark.py --yaml experiments/configs/nhits_novel_ae_weather.yaml
 # ============================================================
 
 experiment_name: NHiTS-NovelAE-Weather
@@ -37,7 +36,8 @@ protocol:
   include_target: true     # 21 columns (with OT)
   loss: MSELoss
   forecast_multiplier: 5   # L = 5*H
-  batch_size: 256
+  batch_size: 1024
+  num_workers: 4
 
 # NHiTS published baselines (Table 1)
 baselines:
