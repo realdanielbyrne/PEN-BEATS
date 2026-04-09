@@ -52,6 +52,7 @@ if sys.platform == "win32":
         finally:
             file_obj.seek(0)
             msvcrt.locking(file_obj.fileno(), msvcrt.LK_UNLCK, 1)
+
 else:
     import fcntl
 
@@ -62,6 +63,7 @@ else:
             yield
         finally:
             fcntl.flock(file_obj, fcntl.LOCK_UN)
+
 
 import numpy as np
 import pandas as pd
@@ -96,8 +98,10 @@ def _signal_handler(signum, frame):
         print("\n[SIGNAL] Force exit.")
         os._exit(1)
     _shutdown_requested = True
-    print("\n[SIGNAL] Shutdown requested. Finishing current run... "
-          "(signal again to force)")
+    print(
+        "\n[SIGNAL] Shutdown requested. Finishing current run... "
+        "(signal again to force)"
+    )
 
 
 signal.signal(signal.SIGINT, _signal_handler)
@@ -113,14 +117,14 @@ VAL_RATIO = 0.1
 LOSS = "MSELoss"
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 256
-FORECAST_MULTIPLIER = 5   # L = 5*H
+FORECAST_MULTIPLIER = 5  # L = 5*H
 THETAS_DIM = 5
-LATENT_DIM = 16            # Research-confirmed optimal (significantly better than ld=4/8)
+LATENT_DIM = 16  # Research-confirmed optimal (significantly better than ld=4/8)
 # BASIS_DIM is set dynamically to forecast_length (eq_fcast) per horizon
 MAX_EPOCHS = 100
 PATIENCE = 10
 N_RUNS = 8
-BASE_SEED = 1              # Seeds 1-8 matching NHiTS
+BASE_SEED = 1  # Seeds 1-8 matching NHiTS
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 CSV_FILENAME = "nhits_benchmark_results.csv"
@@ -132,20 +136,39 @@ STALE_CLAIM_SECONDS = 7200  # 2 hours — assume crashed worker
 # ---------------------------------------------------------------------------
 
 CSV_COLUMNS = [
-    "model_type", "config_name", "dataset", "horizon",
-    "backcast_length", "n_stacks", "n_blocks_per_stack",
-    "run", "seed",
-    "mse", "mae", "denorm_mse", "denorm_mae", "smape",
-    "n_params", "training_time_seconds", "epochs_trained",
-    "stopping_reason", "best_val_loss",
-    "loss_function", "active_g", "normalize", "train_ratio", "val_ratio",
-    "include_target", "stack_types",
+    "model_type",
+    "config_name",
+    "dataset",
+    "horizon",
+    "backcast_length",
+    "n_stacks",
+    "n_blocks_per_stack",
+    "run",
+    "seed",
+    "mse",
+    "mae",
+    "denorm_mse",
+    "denorm_mae",
+    "smape",
+    "n_params",
+    "training_time_seconds",
+    "epochs_trained",
+    "stopping_reason",
+    "best_val_loss",
+    "loss_function",
+    "active_g",
+    "normalize",
+    "train_ratio",
+    "val_ratio",
+    "include_target",
+    "stack_types",
 ]
 
 
 # ---------------------------------------------------------------------------
 # Benchmark Configs
 # ---------------------------------------------------------------------------
+
 
 def get_benchmark_configs():
     """Return the 9 benchmark configurations.
@@ -169,138 +192,172 @@ def get_benchmark_configs():
     configs = []
 
     # --- Reference baselines (vanilla blocks, same pipeline) ---
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "Generic-10",
-        "stack_types": ["Generic"] * 10,
-        "n_blocks_per_stack": 1,
-    })
-    configs.append({
-        "model_type": "NHiTSNet",
-        "config_name": "NHiTS-Generic",
-        "stack_types": ["Generic"] * 3,
-        "n_blocks_per_stack": 1,
-        "n_pools_kernel_size": [8, 4, 1],
-        "n_freq_downsample": [24, 12, 1],
-    })
+    configs.append(
+        {
+            "model_type": "NBeatsNet",
+            "config_name": "Generic-10",
+            "stack_types": ["Generic"] * 10,
+            "n_blocks_per_stack": 1,
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NHiTSNet",
+            "config_name": "NHiTS-Generic",
+            "stack_types": ["Generic"] * 3,
+            "n_blocks_per_stack": 1,
+            "n_pools_kernel_size": [8, 4, 1],
+            "n_freq_downsample": [24, 12, 1],
+        }
+    )
 
     # --- NBeatsNet novel configs (4) ---
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "GenericAELG-10",
-        "stack_types": ["GenericAELG"] * 10,
-        "n_blocks_per_stack": 1,
-    })
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "BottleneckGenericAELG-10",
-        "stack_types": ["BottleneckGenericAELG"] * 10,
-        "n_blocks_per_stack": 1,
-    })
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "TrendAELG+Sym20V3AELG",
-        "stack_types": ["TrendAELG", "Symlet20WaveletV3AELG"] * 5,
-        "n_blocks_per_stack": 1,
-    })
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "TrendWaveletAELG-10",
-        "stack_types": ["TrendWaveletAELG"] * 10,
-        "n_blocks_per_stack": 1,
-    })
+    configs.append(
+        {
+            "model_type": "NBeatsNet",
+            "config_name": "GenericAELG-10",
+            "stack_types": ["GenericAELG"] * 10,
+            "n_blocks_per_stack": 1,
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NBeatsNet",
+            "config_name": "BottleneckGenericAELG-10",
+            "stack_types": ["BottleneckGenericAELG"] * 10,
+            "n_blocks_per_stack": 1,
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NBeatsNet",
+            "config_name": "TrendAELG+Sym20V3AELG",
+            "stack_types": ["TrendAELG", "Symlet20WaveletV3AELG"] * 5,
+            "n_blocks_per_stack": 1,
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NBeatsNet",
+            "config_name": "TrendWaveletAELG-10",
+            "stack_types": ["TrendWaveletAELG"] * 10,
+            "n_blocks_per_stack": 1,
+        }
+    )
 
     # --- NHiTSNet configs (3) ---
-    configs.append({
-        "model_type": "NHiTSNet",
-        "config_name": "NHiTS-GenericAELG",
-        "stack_types": ["GenericAELG"] * 3,
-        "n_blocks_per_stack": 1,
-        "n_pools_kernel_size": [8, 4, 1],
-        "n_freq_downsample": [24, 12, 1],
-    })
-    configs.append({
-        "model_type": "NHiTSNet",
-        "config_name": "NHiTS-TrendAELG+Coif2V3AELG",
-        "stack_types": ["TrendAELG", "Coif2WaveletV3AELG", "GenericAELG"],
-        "n_blocks_per_stack": 1,
-        "n_pools_kernel_size": [8, 4, 1],
-        "n_freq_downsample": [24, 12, 1],
-    })
-    configs.append({
-        "model_type": "NHiTSNet",
-        "config_name": "NHiTS-TrendWaveletAELG",
-        "stack_types": ["TrendWaveletAELG"] * 3,
-        "n_blocks_per_stack": 1,
-        "n_pools_kernel_size": [8, 4, 1],
-        "n_freq_downsample": [24, 12, 1],
-    })
+    configs.append(
+        {
+            "model_type": "NHiTSNet",
+            "config_name": "NHiTS-GenericAELG",
+            "stack_types": ["GenericAELG"] * 3,
+            "n_blocks_per_stack": 1,
+            "n_pools_kernel_size": [8, 4, 1],
+            "n_freq_downsample": [24, 12, 1],
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NHiTSNet",
+            "config_name": "NHiTS-TrendAELG+Coif2V3AELG",
+            "stack_types": ["TrendAELG", "Coif2WaveletV3AELG", "GenericAELG"],
+            "n_blocks_per_stack": 1,
+            "n_pools_kernel_size": [8, 4, 1],
+            "n_freq_downsample": [24, 12, 1],
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NHiTSNet",
+            "config_name": "NHiTS-TrendWaveletAELG",
+            "stack_types": ["TrendWaveletAELG"] * 3,
+            "n_blocks_per_stack": 1,
+            "n_pools_kernel_size": [8, 4, 1],
+            "n_freq_downsample": [24, 12, 1],
+        }
+    )
 
     # --- active_g=forecast variants (Generic-family only) ---
     # Evidence: active_g=forecast provides ~11.6% OWA improvement for Generic blocks
     # but is neutral-to-harmful for TrendWavelet blocks (see wavelet_study_3).
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "Generic-10-agF",
-        "stack_types": ["Generic"] * 10,
-        "n_blocks_per_stack": 1,
-        "active_g": "forecast",
-    })
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "GenericAELG-10-agF",
-        "stack_types": ["GenericAELG"] * 10,
-        "n_blocks_per_stack": 1,
-        "active_g": "forecast",
-    })
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "GenericAE-10-agF",
-        "stack_types": ["GenericAE"] * 10,
-        "n_blocks_per_stack": 1,
-        "active_g": "forecast",
-    })
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "BottleneckGenericAELG-10-agF",
-        "stack_types": ["BottleneckGenericAELG"] * 10,
-        "n_blocks_per_stack": 1,
-        "active_g": "forecast",
-    })
-    configs.append({
-        "model_type": "NBeatsNet",
-        "config_name": "BottleneckGenericAE-10-agF",
-        "stack_types": ["BottleneckGenericAE"] * 10,
-        "n_blocks_per_stack": 1,
-        "active_g": "forecast",
-    })
-    configs.append({
-        "model_type": "NHiTSNet",
-        "config_name": "NHiTS-Generic-agF",
-        "stack_types": ["Generic"] * 3,
-        "n_blocks_per_stack": 1,
-        "n_pools_kernel_size": [8, 4, 1],
-        "n_freq_downsample": [24, 12, 1],
-        "active_g": "forecast",
-    })
-    configs.append({
-        "model_type": "NHiTSNet",
-        "config_name": "NHiTS-GenericAELG-agF",
-        "stack_types": ["GenericAELG"] * 3,
-        "n_blocks_per_stack": 1,
-        "n_pools_kernel_size": [8, 4, 1],
-        "n_freq_downsample": [24, 12, 1],
-        "active_g": "forecast",
-    })
-    configs.append({
-        "model_type": "NHiTSNet",
-        "config_name": "NHiTS-GenericAE-agF",
-        "stack_types": ["GenericAE"] * 3,
-        "n_blocks_per_stack": 1,
-        "n_pools_kernel_size": [8, 4, 1],
-        "n_freq_downsample": [24, 12, 1],
-        "active_g": "forecast",
-    })
+    configs.append(
+        {
+            "model_type": "NBeatsNet",
+            "config_name": "Generic-10-agF",
+            "stack_types": ["Generic"] * 10,
+            "n_blocks_per_stack": 1,
+            "active_g": "forecast",
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NBeatsNet",
+            "config_name": "GenericAELG-10-agF",
+            "stack_types": ["GenericAELG"] * 10,
+            "n_blocks_per_stack": 1,
+            "active_g": "forecast",
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NBeatsNet",
+            "config_name": "GenericAE-10-agF",
+            "stack_types": ["GenericAE"] * 10,
+            "n_blocks_per_stack": 1,
+            "active_g": "forecast",
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NBeatsNet",
+            "config_name": "BottleneckGenericAELG-10-agF",
+            "stack_types": ["BottleneckGenericAELG"] * 10,
+            "n_blocks_per_stack": 1,
+            "active_g": "forecast",
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NBeatsNet",
+            "config_name": "BottleneckGenericAE-10-agF",
+            "stack_types": ["BottleneckGenericAE"] * 10,
+            "n_blocks_per_stack": 1,
+            "active_g": "forecast",
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NHiTSNet",
+            "config_name": "NHiTS-Generic-agF",
+            "stack_types": ["Generic"] * 3,
+            "n_blocks_per_stack": 1,
+            "n_pools_kernel_size": [8, 4, 1],
+            "n_freq_downsample": [24, 12, 1],
+            "active_g": "forecast",
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NHiTSNet",
+            "config_name": "NHiTS-GenericAELG-agF",
+            "stack_types": ["GenericAELG"] * 3,
+            "n_blocks_per_stack": 1,
+            "n_pools_kernel_size": [8, 4, 1],
+            "n_freq_downsample": [24, 12, 1],
+            "active_g": "forecast",
+        }
+    )
+    configs.append(
+        {
+            "model_type": "NHiTSNet",
+            "config_name": "NHiTS-GenericAE-agF",
+            "stack_types": ["GenericAE"] * 3,
+            "n_blocks_per_stack": 1,
+            "n_pools_kernel_size": [8, 4, 1],
+            "n_freq_downsample": [24, 12, 1],
+            "active_g": "forecast",
+        }
+    )
 
     return configs
 
@@ -308,6 +365,7 @@ def get_benchmark_configs():
 # ---------------------------------------------------------------------------
 # YAML Config Loading
 # ---------------------------------------------------------------------------
+
 
 def parse_stack_types(raw):
     """Parse stack_types from YAML, handling both list and string expression forms.
@@ -321,13 +379,15 @@ def parse_stack_types(raw):
         return raw
 
     if not isinstance(raw, str):
-        raise ValueError(f"stack_types must be a list or string expression, got {type(raw)}")
+        raise ValueError(
+            f"stack_types must be a list or string expression, got {type(raw)}"
+        )
 
     raw = raw.strip()
 
     # Handle "['X'] * N" or "['A', 'B'] * N" patterns safely
     # Split on ' * ' to separate list literal from multiplier
-    match = re.match(r'^(\[.*\])\s*\*\s*(\d+)$', raw)
+    match = re.match(r"^(\[.*\])\s*\*\s*(\d+)$", raw)
     if match:
         list_part = ast.literal_eval(match.group(1))
         multiplier = int(match.group(2))
@@ -360,9 +420,13 @@ def load_yaml_configs(yaml_path):
         "train_ratio": protocol_raw.get("train_ratio", TRAIN_RATIO),
         "val_ratio": protocol_raw.get("val_ratio", VAL_RATIO),
         "loss": protocol_raw.get("loss", LOSS),
-        "forecast_multiplier": protocol_raw.get("forecast_multiplier", FORECAST_MULTIPLIER),
+        "forecast_multiplier": protocol_raw.get(
+            "forecast_multiplier", FORECAST_MULTIPLIER
+        ),
         "batch_size": protocol_raw.get("batch_size", BATCH_SIZE),
-        "normalize": protocol_raw.get("normalize", None),  # None = auto-detect by dataset
+        "normalize": protocol_raw.get(
+            "normalize", None
+        ),  # None = auto-detect by dataset
         "include_target": protocol_raw.get("include_target", True),
     }
 
@@ -439,6 +503,7 @@ def load_yaml_configs(yaml_path):
 # Utility Functions
 # ---------------------------------------------------------------------------
 
+
 def set_seed(seed):
     pl.seed_everything(seed, workers=True)
 
@@ -479,7 +544,9 @@ def compute_denormalized_mse_mae(preds, targets, col_indices, col_means, col_std
         (denorm_mae, denorm_mse) on original-scale data
     """
     if col_means is None or col_stds is None:
-        return float(np.mean(np.abs(targets - preds))), float(np.mean((targets - preds) ** 2))
+        return float(np.mean(np.abs(targets - preds))), float(
+            np.mean((targets - preds) ** 2)
+        )
 
     preds_denorm = np.empty_like(preds)
     targets_denorm = np.empty_like(targets)
@@ -506,6 +573,7 @@ def resolve_accelerator():
 # Callbacks (from run_unified_benchmark.py)
 # ---------------------------------------------------------------------------
 
+
 class DivergenceDetector(pl.Callback):
     def __init__(self, relative_threshold=3.0, consecutive_epochs=3):
         super().__init__()
@@ -530,7 +598,10 @@ class DivergenceDetector(pl.Callback):
             self.best_val_loss = val_loss
             self.bad_epoch_count = 0
             return
-        if self.best_val_loss > 0 and val_loss > self.best_val_loss * self.relative_threshold:
+        if (
+            self.best_val_loss > 0
+            and val_loss > self.best_val_loss * self.relative_threshold
+        ):
             self.bad_epoch_count += 1
         else:
             self.bad_epoch_count = 0
@@ -562,6 +633,7 @@ class ConvergenceTracker(pl.Callback):
 # CSV Helpers
 # ---------------------------------------------------------------------------
 
+
 def init_csv(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if not os.path.exists(path):
@@ -580,8 +652,10 @@ def init_csv(path):
         return
 
     # Migrate header
-    print(f"  [MIGRATE] {os.path.basename(path)}: "
-          f"header {len(existing_header)} cols -> {len(CSV_COLUMNS)} cols")
+    print(
+        f"  [MIGRATE] {os.path.basename(path)}: "
+        f"header {len(existing_header)} cols -> {len(CSV_COLUMNS)} cols"
+    )
     with open(path, "r", newline="") as f:
         reader = csv.reader(f)
         old_header = next(reader)
@@ -619,10 +693,12 @@ def result_exists(path, config_name, dataset, horizon, run):
     with open(path, "r", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if (row.get("config_name") == config_name
-                    and row.get("dataset") == dataset
-                    and row.get("horizon") == str(horizon)
-                    and row.get("run") == str(run)):
+            if (
+                row.get("config_name") == config_name
+                and row.get("dataset") == dataset
+                and row.get("horizon") == str(horizon)
+                and row.get("run") == str(run)
+            ):
                 return True
     return False
 
@@ -630,6 +706,7 @@ def result_exists(path, config_name, dataset, horizon, run):
 # ---------------------------------------------------------------------------
 # Claim-based Job Locking (parallel-safe)
 # ---------------------------------------------------------------------------
+
 
 def _claim_key(config_name, dataset, horizon, run):
     """Deterministic filename for a job's claim file."""
@@ -643,26 +720,34 @@ def claim_job(config_name, dataset, horizon, run, worker_id=""):
     and timestamp so stale claims can be detected.
     """
     os.makedirs(CLAIMS_DIR, exist_ok=True)
-    claim_path = os.path.join(CLAIMS_DIR, _claim_key(config_name, dataset, horizon, run))
+    claim_path = os.path.join(
+        CLAIMS_DIR, _claim_key(config_name, dataset, horizon, run)
+    )
     try:
         fd = os.open(claim_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         with os.fdopen(fd, "w") as f:
-            f.write(json.dumps({
-                "worker_id": worker_id,
-                "pid": os.getpid(),
-                "claimed_at": time.time(),
-                "config_name": config_name,
-                "dataset": dataset,
-                "horizon": horizon,
-                "run": run,
-            }))
+            f.write(
+                json.dumps(
+                    {
+                        "worker_id": worker_id,
+                        "pid": os.getpid(),
+                        "claimed_at": time.time(),
+                        "config_name": config_name,
+                        "dataset": dataset,
+                        "horizon": horizon,
+                        "run": run,
+                    }
+                )
+            )
         return True
     except FileExistsError:
         # Another worker already claimed it — check for staleness
         try:
             mtime = os.path.getmtime(claim_path)
             if time.time() - mtime > STALE_CLAIM_SECONDS:
-                print(f"  [STALE] Reclaiming stale job: {config_name}/{dataset}-{horizon}/run{run}")
+                print(
+                    f"  [STALE] Reclaiming stale job: {config_name}/{dataset}-{horizon}/run{run}"
+                )
                 os.unlink(claim_path)
                 return claim_job(config_name, dataset, horizon, run, worker_id)
         except OSError:
@@ -672,7 +757,9 @@ def claim_job(config_name, dataset, horizon, run, worker_id=""):
 
 def release_claim(config_name, dataset, horizon, run):
     """Remove claim file after job completes (CSV row is the permanent record)."""
-    claim_path = os.path.join(CLAIMS_DIR, _claim_key(config_name, dataset, horizon, run))
+    claim_path = os.path.join(
+        CLAIMS_DIR, _claim_key(config_name, dataset, horizon, run)
+    )
     try:
         os.unlink(claim_path)
     except OSError:
@@ -681,7 +768,9 @@ def release_claim(config_name, dataset, horizon, run):
 
 def job_is_claimed(config_name, dataset, horizon, run):
     """Check if another worker has claimed this job (non-stale)."""
-    claim_path = os.path.join(CLAIMS_DIR, _claim_key(config_name, dataset, horizon, run))
+    claim_path = os.path.join(
+        CLAIMS_DIR, _claim_key(config_name, dataset, horizon, run)
+    )
     if not os.path.exists(claim_path):
         return False
     try:
@@ -696,6 +785,7 @@ def job_is_claimed(config_name, dataset, horizon, run):
 # ---------------------------------------------------------------------------
 # Inference
 # ---------------------------------------------------------------------------
+
 
 def run_inference(model, test_dm, device):
     model.eval()
@@ -716,6 +806,7 @@ def run_inference(model, test_dm, device):
 # ---------------------------------------------------------------------------
 # Single Experiment
 # ---------------------------------------------------------------------------
+
 
 def run_single_experiment(
     config,
@@ -747,41 +838,66 @@ def run_single_experiment(
 
     # Claim-based locking — attempt atomic claim for parallel workers
     if not claim_job(config_name, dataset_name, horizon, run_idx, worker_id):
-        print(f"  [CLAIMED] {config_name} / {dataset_name}-{horizon} / run {run_idx} "
-              f"(another worker)")
+        print(
+            f"  [CLAIMED] {config_name} / {dataset_name}-{horizon} / run {run_idx} "
+            f"(another worker)"
+        )
         return
 
     try:
         _run_experiment_body(
-            config, dataset_name, horizon, run_idx, csv_path,
-            max_epochs, patience, batch_size, worker_id,
-            protocol=protocol, block_params=block_params,
-            training=training, runs=runs,
+            config,
+            dataset_name,
+            horizon,
+            run_idx,
+            csv_path,
+            max_epochs,
+            patience,
+            batch_size,
+            worker_id,
+            protocol=protocol,
+            block_params=block_params,
+            training=training,
+            runs=runs,
         )
     except Exception as e:
-        print(f"  [ERROR] {config_name} / {dataset_name}-{horizon} / run {run_idx}: {e}")
+        print(
+            f"  [ERROR] {config_name} / {dataset_name}-{horizon} / run {run_idx}: {e}"
+        )
         release_claim(config_name, dataset_name, horizon, run_idx)
         raise
 
 
 def _run_experiment_body(
-    config, dataset_name, horizon, run_idx, csv_path,
-    max_epochs, patience, batch_size, worker_id,
-    protocol=None, block_params=None, training=None, runs=None,
+    config,
+    dataset_name,
+    horizon,
+    run_idx,
+    csv_path,
+    max_epochs,
+    patience,
+    batch_size,
+    worker_id,
+    protocol=None,
+    block_params=None,
+    training=None,
+    runs=None,
 ):
     """Inner body of run_single_experiment (wrapped in try/finally for claim safety)."""
     # Resolve protocol/block/training/runs params — use provided dicts or fall back to globals
     p_train_ratio = protocol["train_ratio"] if protocol else TRAIN_RATIO
     p_val_ratio = protocol["val_ratio"] if protocol else VAL_RATIO
     p_loss = protocol["loss"] if protocol else LOSS
-    p_forecast_multiplier = protocol["forecast_multiplier"] if protocol else FORECAST_MULTIPLIER
+    p_forecast_multiplier = (
+        protocol["forecast_multiplier"] if protocol else FORECAST_MULTIPLIER
+    )
     p_include_target = protocol["include_target"] if protocol else True
 
     # Normalize: use protocol value if explicitly set, otherwise auto-detect by dataset
     if protocol and protocol.get("normalize") is not None:
         p_normalize = protocol["normalize"]
     else:
-        p_normalize = (dataset_name == "weather")
+        p_normalize = dataset_name == "weather"
 
     bp_thetas_dim = block_params["thetas_dim"] if block_params else THETAS_DIM
     bp_latent_dim = block_params["latent_dim"] if block_params else LATENT_DIM
@@ -789,6 +905,14 @@ def _run_experiment_body(
 
     t_activation = training["activation"] if training else "ReLU"
     t_sum_losses = training["sum_losses"] if training else False
+
+    lr_scheduler_config = None
+    if training and "warmup_epochs" in training:
+        lr_scheduler_config = {
+            "warmup_epochs": training["warmup_epochs"],
+            "T_max": max_epochs,
+            "eta_min": 1e-6,
+        }
 
     r_base_seed = runs["base_seed"] if runs else BASE_SEED
 
@@ -801,10 +925,12 @@ def _run_experiment_body(
     # Load dataset with protocol params
     if dataset_name == "weather":
         dataset = WeatherDataset(
-            horizon, train_ratio=p_train_ratio, include_target=p_include_target)
+            horizon, train_ratio=p_train_ratio, include_target=p_include_target
+        )
     elif dataset_name == "traffic":
         dataset = TrafficDataset(
-            horizon, train_ratio=p_train_ratio, include_target=p_include_target)
+            horizon, train_ratio=p_train_ratio, include_target=p_include_target
+        )
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")
 
@@ -848,6 +974,7 @@ def _run_experiment_body(
         learning_rate=LEARNING_RATE,
         optimizer_name="Adam",
         no_val=False,
+        lr_scheduler_config=lr_scheduler_config,
     )
 
     if model_type == "NHiTSNet":
@@ -901,7 +1028,9 @@ def _run_experiment_body(
         mode="min",
         verbose=False,
     )
-    divergence_detector = DivergenceDetector(relative_threshold=3.0, consecutive_epochs=3)
+    divergence_detector = DivergenceDetector(
+        relative_threshold=3.0, consecutive_epochs=3
+    )
     convergence_tracker = ConvergenceTracker()
 
     trainer = pl.Trainer(
@@ -910,7 +1039,12 @@ def _run_experiment_body(
         max_epochs=max_epochs,
         precision=precision,
         gradient_clip_val=1.0,
-        callbacks=[chk_callback, early_stop_callback, divergence_detector, convergence_tracker],
+        callbacks=[
+            chk_callback,
+            early_stop_callback,
+            divergence_detector,
+            convergence_tracker,
+        ],
         logger=False,
         enable_progress_bar=True,
         deterministic=False,
@@ -918,10 +1052,15 @@ def _run_experiment_body(
     )
 
     # Train
-    stack_summary = (f"{n_stacks}x{stack_types[0]}" if len(set(stack_types)) == 1
-                     else f"{n_stacks} mixed")
-    print(f"  [RUN]  {config_name} / {dataset_name}-{horizon} / run {run_idx} "
-          f"(seed={seed}, {stack_summary}, params={n_params:,})")
+    stack_summary = (
+        f"{n_stacks}x{stack_types[0]}"
+        if len(set(stack_types)) == 1
+        else f"{n_stacks} mixed"
+    )
+    print(
+        f"  [RUN]  {config_name} / {dataset_name}-{horizon} / run {run_idx} "
+        f"(seed={seed}, {stack_summary}, params={n_params:,})"
+    )
     t0 = time.time()
     trainer.fit(model, datamodule=dm)
     training_time = time.time() - t0
@@ -936,14 +1075,19 @@ def _run_experiment_body(
     # Stopping reason
     if divergence_detector.diverged:
         stopping_reason = "DIVERGED"
-    elif hasattr(early_stop_callback, "stopped_epoch") and early_stop_callback.stopped_epoch > 0:
+    elif (
+        hasattr(early_stop_callback, "stopped_epoch")
+        and early_stop_callback.stopped_epoch > 0
+    ):
         stopping_reason = "EARLY_STOPPED"
     else:
         stopping_reason = "MAX_EPOCHS"
 
-    best_val_loss = (float(trainer.checkpoint_callback.best_model_score)
-                     if trainer.checkpoint_callback.best_model_score is not None
-                     else float("nan"))
+    best_val_loss = (
+        float(trainer.checkpoint_callback.best_model_score)
+        if trainer.checkpoint_callback.best_model_score is not None
+        else float("nan")
+    )
 
     # Inference — predictions are in normalized space since test_dm uses the
     # same col_means/col_stds from training
@@ -956,12 +1100,15 @@ def _run_experiment_body(
     # Denormalized metrics (original scale) and sMAPE
     col_indices = test_dm.test_dataset.col_indices
     denorm_mae, denorm_mse = compute_denormalized_mse_mae(
-        preds, targets, col_indices, dm.col_means, dm.col_stds)
+        preds, targets, col_indices, dm.col_means, dm.col_stds
+    )
     smape = compute_smape(preds, targets)
 
-    print(f"         MSE={mse_norm:.4f}  MAE={mae_norm:.4f}  "
-          f"dMSE={denorm_mse:.4f}  dMAE={denorm_mae:.4f}  sMAPE={smape:.2f}  "
-          f"time={training_time:.1f}s  epochs={epochs_trained}  [{stopping_reason}]")
+    print(
+        f"         MSE={mse_norm:.4f}  MAE={mae_norm:.4f}  "
+        f"dMSE={denorm_mse:.4f}  dMAE={denorm_mae:.4f}  sMAPE={smape:.2f}  "
+        f"time={training_time:.1f}s  epochs={epochs_trained}  [{stopping_reason}]"
+    )
 
     # Save result
     row = {
@@ -983,7 +1130,9 @@ def _run_experiment_body(
         "training_time_seconds": f"{training_time:.2f}",
         "epochs_trained": epochs_trained,
         "stopping_reason": stopping_reason,
-        "best_val_loss": f"{best_val_loss:.8f}" if math.isfinite(best_val_loss) else "nan",
+        "best_val_loss": (
+            f"{best_val_loss:.8f}" if math.isfinite(best_val_loss) else "nan"
+        ),
         "loss_function": p_loss,
         "active_g": str(config.get("active_g", False)),
         "normalize": p_normalize,
@@ -1005,6 +1154,7 @@ def _run_experiment_body(
 # ---------------------------------------------------------------------------
 # Analysis
 # ---------------------------------------------------------------------------
+
 
 def analyze_results(csv_path):
     """Print a comparison table from existing results."""
@@ -1047,34 +1197,50 @@ def analyze_results(csv_path):
             baseline_mse = baseline.get("mse", float("nan"))
             baseline_mae = baseline.get("mae", float("nan"))
 
-            print(f"\n  Horizon: {int(horizon)}  "
-                  f"(NHiTS published: MSE={baseline_mse:.3f}, MAE={baseline_mae:.3f})")
-            print(f"  {'Config':<40s} {'Model':<12s} {'MSE':>8s} {'MAE':>8s} "
-                  f"{'vs NHiTS':>9s} {'Runs':>5s}")
+            print(
+                f"\n  Horizon: {int(horizon)}  "
+                f"(NHiTS published: MSE={baseline_mse:.3f}, MAE={baseline_mae:.3f})"
+            )
+            print(
+                f"  {'Config':<40s} {'Model':<12s} {'MSE':>8s} {'MAE':>8s} "
+                f"{'vs NHiTS':>9s} {'Runs':>5s}"
+            )
             print(f"  {'─' * 85}")
 
-            summary = (h_df.groupby(["config_name", "model_type"])
-                       .agg(
-                           mse_mean=("mse", lambda x: pd.to_numeric(x, errors="coerce").mean()),
-                           mae_mean=("mae", lambda x: pd.to_numeric(x, errors="coerce").mean()),
-                           mse_std=("mse", lambda x: pd.to_numeric(x, errors="coerce").std()),
-                           n_runs=("run", "count"),
-                       )
-                       .reset_index()
-                       .sort_values("mse_mean"))
+            summary = (
+                h_df.groupby(["config_name", "model_type"])
+                .agg(
+                    mse_mean=(
+                        "mse",
+                        lambda x: pd.to_numeric(x, errors="coerce").mean(),
+                    ),
+                    mae_mean=(
+                        "mae",
+                        lambda x: pd.to_numeric(x, errors="coerce").mean(),
+                    ),
+                    mse_std=("mse", lambda x: pd.to_numeric(x, errors="coerce").std()),
+                    n_runs=("run", "count"),
+                )
+                .reset_index()
+                .sort_values("mse_mean")
+            )
 
             for _, row in summary.iterrows():
                 mse_m = row["mse_mean"]
                 mae_m = row["mae_mean"]
                 mse_s = row["mse_std"]
                 n = int(row["n_runs"])
-                gap = ((mse_m - baseline_mse) / baseline_mse * 100
-                       if math.isfinite(baseline_mse) and baseline_mse > 0
-                       else float("nan"))
+                gap = (
+                    (mse_m - baseline_mse) / baseline_mse * 100
+                    if math.isfinite(baseline_mse) and baseline_mse > 0
+                    else float("nan")
+                )
                 gap_str = f"{gap:+.1f}%" if math.isfinite(gap) else "N/A"
 
-                print(f"  {row['config_name']:<40s} {row['model_type']:<12s} "
-                      f"{mse_m:8.4f} {mae_m:8.4f} {gap_str:>9s} {n:5d}")
+                print(
+                    f"  {row['config_name']:<40s} {row['model_type']:<12s} "
+                    f"{mse_m:8.4f} {mae_m:8.4f} {gap_str:>9s} {n:5d}"
+                )
 
     print(f"\n{'=' * 100}\n")
 
@@ -1083,36 +1249,75 @@ def analyze_results(csv_path):
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
-        description="NHiTS-Protocol Benchmark for Novel Block Types")
-    parser.add_argument("--yaml", type=str, default=None,
-                        help="Path to YAML config file (overrides hardcoded configs)")
-    parser.add_argument("--dataset", type=str, nargs="+",
-                        default=None,
-                        choices=["weather", "traffic"],
-                        help="Dataset(s) to benchmark (default: weather traffic)")
-    parser.add_argument("--horizons", type=int, nargs="+",
-                        default=None,
-                        help="Forecast horizons to test (default: 96 192 336 720)")
-    parser.add_argument("--n-runs", type=int, default=None,
-                        help="Number of runs per config (default: 8)")
-    parser.add_argument("--max-epochs", type=int, default=None,
-                        help="Maximum training epochs")
-    parser.add_argument("--batch-size", type=int, default=None,
-                        help="Batch size")
-    parser.add_argument("--configs", type=str, nargs="*", default=None,
-                        help="Filter to specific config names")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print experiment plan without running")
-    parser.add_argument("--analyze", action="store_true",
-                        help="Analyze existing results and print comparison table")
-    parser.add_argument("--csv-path", type=str, default=None,
-                        help="Override CSV output path")
-    parser.add_argument("--worker-id", type=str, default="",
-                        help="Worker identifier for parallel execution (logged in claim files)")
-    parser.add_argument("--gpu", type=int, default=None,
-                        help="GPU index to use (sets CUDA_VISIBLE_DEVICES)")
+        description="NHiTS-Protocol Benchmark for Novel Block Types"
+    )
+    parser.add_argument(
+        "--yaml",
+        type=str,
+        default=None,
+        help="Path to YAML config file (overrides hardcoded configs)",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        nargs="+",
+        default=None,
+        choices=["weather", "traffic"],
+        help="Dataset(s) to benchmark (default: weather traffic)",
+    )
+    parser.add_argument(
+        "--horizons",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Forecast horizons to test (default: 96 192 336 720)",
+    )
+    parser.add_argument(
+        "--n-runs",
+        type=int,
+        default=None,
+        help="Number of runs per config (default: 8)",
+    )
+    parser.add_argument(
+        "--max-epochs", type=int, default=None, help="Maximum training epochs"
+    )
+    parser.add_argument(
+        "--patience", type=int, default=None, help="Early stopping patience"
+    )
+    parser.add_argument("--batch-size", type=int, default=None, help="Batch size")
+    parser.add_argument(
+        "--configs",
+        type=str,
+        nargs="*",
+        default=None,
+        help="Filter to specific config names",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print experiment plan without running"
+    )
+    parser.add_argument(
+        "--analyze",
+        action="store_true",
+        help="Analyze existing results and print comparison table",
+    )
+    parser.add_argument(
+        "--csv-path", type=str, default=None, help="Override CSV output path"
+    )
+    parser.add_argument(
+        "--worker-id",
+        type=str,
+        default="",
+        help="Worker identifier for parallel execution (logged in claim files)",
+    )
+    parser.add_argument(
+        "--gpu",
+        type=int,
+        default=None,
+        help="GPU index to use (sets CUDA_VISIBLE_DEVICES)",
+    )
 
     args = parser.parse_args()
 
@@ -1174,6 +1379,13 @@ def main():
         else:
             max_epochs = MAX_EPOCHS
 
+    patience = args.patience
+    if patience is None:
+        if training and "patience" in training:
+            patience = training["patience"]
+        else:
+            patience = PATIENCE
+
     batch_size = args.batch_size
     if batch_size is None:
         if protocol:
@@ -1185,9 +1397,11 @@ def main():
     if args.configs:
         all_configs = [c for c in all_configs if c["config_name"] in args.configs]
         if not all_configs:
-            available = ([c["config_name"] for c in load_yaml_configs(args.yaml)["configs"]]
-                         if args.yaml else
-                         [c["config_name"] for c in get_benchmark_configs()])
+            available = (
+                [c["config_name"] for c in load_yaml_configs(args.yaml)["configs"]]
+                if args.yaml
+                else [c["config_name"] for c in get_benchmark_configs()]
+            )
             print(f"No configs matched: {args.configs}")
             print(f"Available: {available}")
             return
@@ -1198,12 +1412,14 @@ def main():
         for horizon in horizons:
             for config in all_configs:
                 for run_idx in range(n_runs):
-                    jobs.append({
-                        "config": config,
-                        "dataset_name": dataset_name,
-                        "horizon": horizon,
-                        "run_idx": run_idx,
-                    })
+                    jobs.append(
+                        {
+                            "config": config,
+                            "dataset_name": dataset_name,
+                            "horizon": horizon,
+                            "run_idx": run_idx,
+                        }
+                    )
 
     total_jobs = len(jobs)
     worker_label = f" (worker: {args.worker_id})" if args.worker_id else ""
@@ -1226,10 +1442,13 @@ def main():
     if protocol and protocol.get("normalize") is not None:
         norm_desc = f"all={'yes' if protocol['normalize'] else 'no'}"
     else:
-        norm_desc = ", ".join(f"{d}={'yes' if d == 'weather' else 'no'}"
-                             for d in datasets)
-    print(f"  Protocol:   normalize=[{norm_desc}], train_ratio={p_train_ratio}, "
-          f"val_ratio={p_val_ratio}, loss={p_loss}, L={p_fcast_mult}H")
+        norm_desc = ", ".join(
+            f"{d}={'yes' if d == 'weather' else 'no'}" for d in datasets
+        )
+    print(
+        f"  Protocol:   normalize=[{norm_desc}], train_ratio={p_train_ratio}, "
+        f"val_ratio={p_val_ratio}, loss={p_loss}, L={p_fcast_mult}H"
+    )
     print()
 
     if args.dry_run:
@@ -1237,8 +1456,10 @@ def main():
         for config in all_configs:
             n = len(config["stack_types"])
             unique = list(dict.fromkeys(config["stack_types"]))
-            print(f"  {config['config_name']:<40s} {config['model_type']:<12s} "
-                  f"{n} stacks: {unique}")
+            print(
+                f"  {config['config_name']:<40s} {config['model_type']:<12s} "
+                f"{n} stacks: {unique}"
+            )
         print(f"\n{total_jobs} total experiments (dry run — not executing)")
         return
 
@@ -1257,6 +1478,7 @@ def main():
             run_idx=job["run_idx"],
             csv_path=csv_path,
             max_epochs=max_epochs,
+            patience=patience,
             batch_size=batch_size,
             worker_id=args.worker_id,
             protocol=protocol,

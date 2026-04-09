@@ -18,9 +18,9 @@
 
 experiment_name: NHiTS-Protocol-Weather
 description: >
-  Head-to-head benchmark of novel AELG block types against NHiTS published
+  Benchmark of novel block types against NHiTS published
   baselines on Weather dataset, using the NHiTS evaluation protocol.
-  Tests both NBeatsNet (10-stack) and NHiTSNet (3-stack) architectures.
+  Tests NHiTSNet (3-stack) architectures.
 
 dataset: weather
 horizons: [96, 192, 336, 720]
@@ -32,8 +32,9 @@ protocol:
   val_ratio: 0.1
   include_target: true     # 21 columns (with OT)
   loss: MSELoss
-  forecast_multiplier: 5   # L = 5*H
+  forecast_multiplier: 5
   batch_size: 256
+
 
 # NHiTS published baselines for comparison (Table 1)
 baselines:
@@ -43,60 +44,141 @@ baselines:
     Weather-336: {mse: 0.272, mae: 0.296}
     Weather-720: {mse: 0.348, mae: 0.349}
 
-# Benchmark configurations (9 configs)
+
 # Selection rationale:
 #   Reference baselines: NHiTS-Generic (NHiTS-G)
-
-#   NHiTSNet:  GenericAELG, TrendAELG+Coif2V3AELG+GenericAELG, TrendWaveletAELG
 configs:
   # --- Reference baselines (vanilla blocks, same pipeline) ---
   - name: NHiTS-Generic
     model: NHiTSNet
     stack_types: ['Generic', 'Generic', 'Generic']
-    n_pools_kernel_size: [8, 4, 1]
+    n_pools_kernel_size: [4, 2, 1]
     n_freq_downsample: [24, 12, 1]
 
   # --- NHiTSNet (3-stack with hierarchical pooling, 3 configs) ---
   - name: NHiTS-GenericAELG
     model: NHiTSNet
     stack_types: ['GenericAELG', 'GenericAELG', 'GenericAELG']
-    n_pools_kernel_size: [8, 4, 1]
+    n_pools_kernel_size: [4, 2, 1]
     n_freq_downsample: [24, 12, 1]
 
   - name: NHiTS-GenericAE
     model: NHiTSNet
     stack_types: ['GenericAE', 'GenericAE', 'GenericAE']
-    n_pools_kernel_size: [8, 4, 1]
+    n_pools_kernel_size: [4, 2, 1]
     n_freq_downsample: [24, 12, 1]
 
-  - name: NHiTS-TrendAELG+Coif2V3AELG
+  - name: NHiTS-TrendAELG+Coif2V3AELG+GenericAELG
     model: NHiTSNet
     stack_types: ['TrendAELG', 'Coif2WaveletV3AELG', 'GenericAELG']
-    n_pools_kernel_size: [8, 4, 1]
+    n_pools_kernel_size: [4, 2, 1]
     n_freq_downsample: [24, 12, 1]
 
-  - name: NHiTS-TrendAE+Coif2V3AE
+  - name: NHiTS-TrendAE+Coif2V3AE+GenericAE
     model: NHiTSNet
     stack_types: ['TrendAE', 'Coif2WaveletV3AE', 'GenericAE']
-    n_pools_kernel_size: [8, 4, 1]
+    n_pools_kernel_size: [4, 2, 1]
     n_freq_downsample: [24, 12, 1]
 
   - name: NHiTS-TrendWaveletAELG
     model: NHiTSNet
     stack_types: ['TrendWaveletAELG', 'TrendWaveletAELG', 'TrendWaveletAELG']
-    n_pools_kernel_size: [8, 4, 1]
+    n_pools_kernel_size: [4, 2, 1]
     n_freq_downsample: [24, 12, 1]
 
   - name: NHiTS-TrendWaveletAE
     model: NHiTSNet
     stack_types: ['TrendWaveletAE', 'TrendWaveletAE', 'TrendWaveletAE']
-    n_pools_kernel_size: [8, 4, 1]
+    n_pools_kernel_size: [4, 2, 1]
     n_freq_downsample: [24, 12, 1]
 
   - name: NHiTS-TrendWavelet
     model: NHiTSNet
     stack_types: ['TrendWavelet', 'TrendWavelet', 'TrendWavelet']
-    n_pools_kernel_size: [8, 4, 1]
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  # --- NHiTSNet (3-stack with hierarchical pooling): Generic-family ---
+  - name: NHiTS-Generic-agF
+    model: NHiTSNet
+    stack_types: ['Generic', 'Generic', 'Generic']
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+    active_g: forecast
+
+  - name: NHiTS-GenericAELG-agF
+    model: NHiTSNet
+    stack_types: ['GenericAELG', 'GenericAELG', 'GenericAELG']
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+    active_g: forecast
+
+  - name: NHiTS-GenericAE-agF
+    model: NHiTSNet
+    stack_types: ['GenericAE', 'GenericAE', 'GenericAE']
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+    active_g: forecast
+
+  # --- NHiTSNet (3-stack with hierarchical pooling): TrendWaveletGeneric-family ---
+  - name: NHiTS-TrendWaveletGeneric-agF
+    model: NHiTSNet
+    stack_types: ['TrendWaveletGeneric', 'TrendWaveletGeneric', 'TrendWaveletGeneric']
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+    active_g: forecast
+
+  - name: NHiTS-TrendWaveletGenericAELG-agF
+    model: NHiTSNet
+    stack_types: ['TrendWaveletGenericAELG', 'TrendWaveletGenericAELG', 'TrendWaveletGenericAELG']
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+    active_g: forecast
+
+  - name: NHiTS-TrendWaveletGenericVAE-agF
+    model: NHiTSNet
+    stack_types: ['TrendWaveletGenericVAE', 'TrendWaveletGenericVAE', 'TrendWaveletGenericVAE']
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+    active_g: forecast
+
+  # --- New: Alternating TrendAE + WaveletAE + TrendAE(3 wavelet families) (3-stack with hierarchical pooling) ---
+  - name: NHiTS-TrendAE+DB3V3AE+TrendAE
+    model: NHiTSNet
+    stack_types: ['TrendAE', 'DB3WaveletV3AE', 'TrendAE']
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  - name: NHiTS-TrendAE+Coif2V3AE+TrendAE
+    model: NHiTSNet
+    stack_types: ['TrendAE', 'Coif2WaveletV3AE', 'TrendAE']
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  - name: NHiTS-TrendAE+HaarV3AE+TrendAE
+    model: NHiTSNet
+    stack_types: ['TrendAE', 'HaarWaveletV3AE', 'TrendAE']
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  # --- New: Alternating TrendAE + WaveletAE + GenericAE (3 wavelet families) (3-stack with hierarchical pooling)  ---
+  - name: NHiTS-TrendAE+DB3V3AE+GenericAE
+    model: NHiTSNet
+    stack_types: ['TrendAE', 'DB3WaveletV3AE', 'GenericAE']
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  - name: NHiTS-TrendAE+HaarV3AE+GenericAE
+    model: NHiTSNet
+    stack_types: ['TrendAE', 'HaarWaveletV3AE', 'GenericAE']
+    n_pools_kernel_size: [4, 2, 1]
+    n_freq_downsample: [24, 12, 1]
+
+  # --- New: BottleneckGenericAELG (3-stack with hierarchical pooling)
+  - name: NHiTS-BottleneckGenericAELG
+    model: NHiTSNet
+    stack_types: ['BottleneckGenericAELG', 'BottleneckGenericAELG', 'BottleneckGenericAELG']
+    n_pools_kernel_size: [4, 2, 1]
     n_freq_downsample: [24, 12, 1]
 
 runs:
@@ -104,11 +186,13 @@ runs:
   base_seed: 1
 
 training:
-  max_epochs: 100
+  max_epochs: 200
   patience: 25
   activation: ReLU
   active_g: false
   sum_losses: false
+  num_workers: 4
+  warmup_epochs: 25  
 
 block_params:
   thetas_dim: 5

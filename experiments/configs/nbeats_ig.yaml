@@ -35,8 +35,8 @@ block_params:
 training:
   sum_losses: false
   activation: ReLU
-  max_epochs: 100
-  patience: 10
+  max_epochs: 200
+  patience: 20
 
 passes:
   - name: baseline
