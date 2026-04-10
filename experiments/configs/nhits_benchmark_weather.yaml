@@ -193,6 +193,7 @@ training:
   sum_losses: false
   num_workers: 4
   warmup_epochs: 25  
+  learning_rate: 1e-3
 
 block_params:
   thetas_dim: 5

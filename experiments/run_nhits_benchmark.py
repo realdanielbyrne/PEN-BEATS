@@ -438,6 +438,9 @@ def load_yaml_configs(yaml_path):
         "activation": training_raw.get("activation", "ReLU"),
         "active_g": training_raw.get("active_g", False),
         "sum_losses": training_raw.get("sum_losses", False),
+        "warmup_epochs": training_raw.get("warmup_epochs"),
+        "learning_rate": training_raw.get("learning_rate"),
+        "num_workers": training_raw.get("num_workers"),
     }
 
     # --- Extract block params ---
@@ -905,6 +908,13 @@ def _run_experiment_body(
 
     t_activation = training["activation"] if training else "ReLU"
     t_sum_losses = training["sum_losses"] if training else False
+    t_learning_rate = training.get("learning_rate") if training else None
+    if t_learning_rate is None:
+        t_learning_rate = LEARNING_RATE
+
+    t_num_workers = training.get("num_workers") if training else None
+    if t_num_workers is None:
+        t_num_workers = 0
 
     lr_scheduler_config = None
     if training and "warmup_epochs" in training:
@@ -971,7 +981,7 @@ def _run_experiment_body(
         activation=t_activation,
         latent_dim=bp_latent_dim,
         basis_dim=basis_dim,
-        learning_rate=LEARNING_RATE,
+        learning_rate=t_learning_rate,
         optimizer_name="Adam",
         no_val=False,
         lr_scheduler_config=lr_scheduler_config,
@@ -998,6 +1008,7 @@ def _run_experiment_body(
         no_val=False,
         normalize=p_normalize,
         val_ratio=p_val_ratio,
+        num_workers=t_num_workers,
     )
 
     # We need to call setup() on dm first to get normalization stats
@@ -1011,6 +1022,7 @@ def _run_experiment_body(
         batch_size=batch_size,
         col_means=dm.col_means,
         col_stds=dm.col_stds,
+        num_workers=t_num_workers,
     )
 
     # Trainer
