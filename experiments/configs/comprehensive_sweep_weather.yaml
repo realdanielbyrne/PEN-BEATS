@@ -52,6 +52,9 @@ description: >
 dataset: weather
 periods:
   - Weather-96
+  - Weather-192
+  - Weather-336
+  - Weather-720
 
 
 protocol:
@@ -69,7 +72,7 @@ training:
   patience: 20
   n_blocks_per_stack: 1
   share_weights: true
-  loss: SMAPELoss
+  loss: MSELoss
   optimizer: Adam
   learning_rate: 0.001
   forecast_multiplier: 5

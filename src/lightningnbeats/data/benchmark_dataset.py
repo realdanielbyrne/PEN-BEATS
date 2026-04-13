@@ -10,9 +10,15 @@ class BenchmarkDataset(ABC):
     All benchmark datasets must provide columnar-format DataFrames
     (rows=timesteps, cols=series) for train and test data, plus metadata
     needed by the experiment runner.
+
+    Datasets that follow the LTSF evaluation protocol (e.g. Weather,
+    Traffic) should also set ``val_data`` to a dedicated chronological
+    validation block so that the experiment runner can train on the full
+    training set without carving validation from it.
     """
 
     train_data: pd.DataFrame
+    val_data: pd.DataFrame | None  # dedicated validation block (LTSF datasets)
     test_data: pd.DataFrame
     forecast_length: int
     frequency: int

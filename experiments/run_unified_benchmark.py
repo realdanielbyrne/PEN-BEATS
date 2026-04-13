@@ -1049,6 +1049,7 @@ def run_single_experiment(
         # Data modules
         train_data = dataset.train_data
         test_data = dataset.test_data
+        ext_val_data = getattr(dataset, "val_data", None)
 
         pin_memory = num_workers > 0
         if datamodule_type == "univariate":
@@ -1074,7 +1075,8 @@ def run_single_experiment(
                 num_workers=num_workers,
                 pin_memory=pin_memory,
                 normalize=normalize,
-                val_ratio=val_ratio,
+                val_data=ext_val_data,
+                val_ratio=val_ratio if ext_val_data is None else None,
             )
             dm.setup()
 

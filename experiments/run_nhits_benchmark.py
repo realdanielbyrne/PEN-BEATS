@@ -128,6 +128,17 @@ BASE_SEED = 1  # Seeds 1-8 matching NHiTS
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 CSV_FILENAME = "nhits_benchmark_results.csv"
+
+# Horizon-adaptive NHiTS pooling/interpolation defaults.
+# For short horizons (96-336) the per-config values are used as-is.
+# For long horizons (≥720, L=3600) the fine stack's raw input is too large
+# and the coarse stack's forecast knots are too sparse, so we override.
+NHITS_HORIZON_OVERRIDES = {
+    720: {
+        "n_pools_kernel_size": [16, 8, 1],
+        "n_freq_downsample": [4, 2, 1],
+    },
+}
 CLAIMS_DIR = os.path.join(RESULTS_DIR, ".claims")
 STALE_CLAIM_SECONDS = 7200  # 2 hours — assume crashed worker
 
@@ -932,14 +943,20 @@ def _run_experiment_body(
     seed = r_base_seed + run_idx
     set_seed(seed)
 
-    # Load dataset with protocol params
+    # Load dataset with protocol params (70/10/20 LTSF split)
     if dataset_name == "weather":
         dataset = WeatherDataset(
-            horizon, train_ratio=p_train_ratio, include_target=p_include_target
+            horizon,
+            train_ratio=p_train_ratio,
+            val_ratio=p_val_ratio,
+            include_target=p_include_target,
         )
     elif dataset_name == "traffic":
         dataset = TrafficDataset(
-            horizon, train_ratio=p_train_ratio, include_target=p_include_target
+            horizon,
+            train_ratio=p_train_ratio,
+            val_ratio=p_val_ratio,
+            include_target=p_include_target,
         )
     else:
         raise ValueError(f"Unknown dataset: {dataset_name}")
@@ -988,8 +1005,15 @@ def _run_experiment_body(
     )
 
     if model_type == "NHiTSNet":
-        model_kwargs["n_pools_kernel_size"] = config["n_pools_kernel_size"]
-        model_kwargs["n_freq_downsample"] = config["n_freq_downsample"]
+        # Start with per-config values, then apply horizon-adaptive overrides
+        pools = list(config["n_pools_kernel_size"])
+        freqs = list(config["n_freq_downsample"])
+        if forecast_length in NHITS_HORIZON_OVERRIDES:
+            ho = NHITS_HORIZON_OVERRIDES[forecast_length]
+            pools = ho.get("n_pools_kernel_size", pools)
+            freqs = ho.get("n_freq_downsample", freqs)
+        model_kwargs["n_pools_kernel_size"] = pools
+        model_kwargs["n_freq_downsample"] = freqs
         ModelClass = NHiTSNet
     else:
         ModelClass = NBeatsNet
@@ -998,6 +1022,7 @@ def _run_experiment_body(
     n_params = count_parameters(model)
 
     train_data = dataset.train_data
+    val_data = dataset.val_data
     test_data = dataset.test_data
 
     dm = ColumnarCollectionTimeSeriesDataModule(
@@ -1007,7 +1032,7 @@ def _run_experiment_body(
         batch_size=batch_size,
         no_val=False,
         normalize=p_normalize,
-        val_ratio=p_val_ratio,
+        val_data=val_data,
         num_workers=t_num_workers,
     )
 
@@ -1040,8 +1065,13 @@ def _run_experiment_body(
         mode="min",
         verbose=False,
     )
+    # Long-horizon training (720-step forecast / 3600-step backcast) is
+    # inherently noisier; the standard 3× / 3-epoch threshold fires on
+    # normal fluctuations.  Use a looser threshold for those runs.
+    _div_threshold = 6.0 if forecast_length >= 720 else 3.0
+    _div_epochs = 5 if forecast_length >= 720 else 3
     divergence_detector = DivergenceDetector(
-        relative_threshold=3.0, consecutive_epochs=3
+        relative_threshold=_div_threshold, consecutive_epochs=_div_epochs
     )
     convergence_tracker = ConvergenceTracker()
 
