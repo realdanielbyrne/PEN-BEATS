@@ -65,9 +65,9 @@ We apply the autoencoder principle in two ways within N-BEATS. First, we replace
 
 ### 2.4 Overparameterization in Deep Learning
 
-The observation that neural networks can perform well with far fewer parameters than their full capacity suggests has been extensively studied. The lottery ticket hypothesis (Frankle & Carlin, 2019) demonstrated that sparse subnetworks within overparameterized models can match the full model's accuracy. Network pruning (Han et al., 2015) and knowledge distillation (Hinton et al., 2015) provide practical approaches to model compression.
+Overparameterization is now better understood as the default operating regime of modern neural networks rather than an exception. Li et al. (2020) explicitly note that modern networks are typically trained with parameter counts far exceeding the size of the training data. Long before that formulation became standard, pruning research had already shown that trained networks contain substantial redundancy. In *Optimal Brain Damage*, LeCun, Denker, and Solla (1990) showed that a trained network can often lose half or more of its weights while maintaining or even improving performance, using second-order information to identify dispensable parameters. Hassibi and Stork's *Optimal Brain Surgeon* (1992) strengthened that claim by showing that much more aggressive pruning is possible while preserving or improving generalization. Denil et al. (2013) made the redundancy argument even more explicit for deep models, showing that in the best case more than 95% of parameters could be predicted rather than learned without loss in accuracy.
 
-In time series forecasting, overparameterization is particularly concerning because datasets are often small relative to model capacity. The original N-BEATS-G configuration uses approximately 26M parameters for a 6-step-ahead forecast --- roughly 4.3M parameters per output dimension. On the Milk dataset (a single series with 156 training observations), this represents a 167,000$\times$ ratio of parameters to observations. Our results demonstrate that this extreme overparameterization is not merely wasteful but actively harmful: it induces training instability that causes 40--50% of runs to diverge on small datasets. Autoencoder-compressed variants with 400K--2M parameters eliminate this instability while maintaining equivalent accuracy, providing direct evidence that the vast majority of parameters in the original architecture are redundant.
+This redundancy persists in modern deep learning and is visible through both pruning and quantization. Han et al. (2015) pruned AlexNet by 9$\times$ and VGG-16 by 13$\times$ with no loss of accuracy, and Han, Mao, and Dally (2016) combined pruning with trained quantization and coding to achieve 35$\times$--49$\times$ compression while preserving baseline accuracy. Frankle and Carbin (2019) further showed that dense random initializations contain sparse trainable subnetworks that can match the accuracy of the full model, while modern post-training quantization methods such as SmoothQuant retain near-original accuracy even for very large language models under INT8 inference (Xiao et al., 2023). Taken together, this literature makes a consistent point: raw parameter count is a poor proxy for effective capacity, and large dense models often contain far more degrees of freedom than the task truly requires. In time series forecasting, where datasets are frequently small relative to model size, this matters acutely. The original N-BEATS-G configuration uses approximately 26M parameters for a 6-step-ahead forecast --- roughly 4.3M parameters per output dimension. On the Milk dataset (a single series with 156 training observations), this represents a 167,000$\times$ ratio of parameters to observations. Our results show that in this regime overparameterization is not merely wasteful but actively harmful: it induces training instability that causes 40--50% of runs to diverge on small datasets. Autoencoder-compressed variants with 400K--2M parameters eliminate this instability while maintaining equivalent accuracy, providing direct evidence that the vast majority of parameters in the original architecture are unnecessary for the forecasting problems studied here.
 
 ---
 
@@ -664,9 +664,15 @@ Cleveland, R. B., Cleveland, W. S., McRae, J. E., & Terpenning, I. (1990). STL: 
 
 Daubechies, I. (1992). *Ten Lectures on Wavelets*. SIAM. <https://doi.org/10.1137/1.9781611970104>
 
-Frankle, J., & Carlin, M. (2019). The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks. *International Conference on Learning Representations (ICLR 2019)*. <https://openreview.net/forum?id=rJl-b3RcF7>
+Denil, M., Shakibi, B., Dinh, L., Ranzato, M. A., & de Freitas, N. (2013). Predicting Parameters in Deep Learning. *Advances in Neural Information Processing Systems 26*. <https://papers.nips.cc/paper/5025-predicting-parameters-in-deep-learning>
 
-Han, S., Mao, H., & Dally, W. J. (2015). Deep Compression: Compressing Deep Neural Networks with Pruning, Trained Quantization and Huffman Coding. *arXiv preprint arXiv:1510.00149*.
+Frankle, J., & Carbin, M. (2019). The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks. *International Conference on Learning Representations (ICLR 2019)*. <https://openreview.net/forum?id=rJl-b3RcF7>
+
+Han, S., Pool, J., Tran, J., & Dally, W. J. (2015). Learning both Weights and Connections for Efficient Neural Network. *Advances in Neural Information Processing Systems 28*. <https://papers.nips.cc/paper/5784-learning-both-weights-and-connections-for-efficient-neural-network>
+
+Han, S., Mao, H., & Dally, W. J. (2016). Deep Compression: Compressing Deep Neural Networks with Pruning, Trained Quantization and Huffman Coding. *International Conference on Learning Representations (ICLR 2016)*. <https://arxiv.org/abs/1510.00149>
+
+Hassibi, B., & Stork, D. G. (1992). Second order derivatives for network pruning: Optimal Brain Surgeon. *Advances in Neural Information Processing Systems 5*. <https://proceedings.neurips.cc/paper/1992/hash/303ed4c69846ab36c2904d3ba8573050-Abstract.html>
 
 He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep Residual Learning for Image Recognition. *Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)*, 770-778. <https://doi.org/10.1109/CVPR.2016.90>
 
@@ -679,6 +685,10 @@ Holt, C. C. (1957). Forecasting Seasonals and Trends by Exponentially Weighted M
 Hyndman, R. J., & Khandakar, Y. (2008). Automatic Time Series Forecasting: The forecast Package for R. *Journal of Statistical Software*, 27(3), 1-22. <https://doi.org/10.18637/jss.v027.i03>
 
 Hyndman, R. J., Koehler, A. B., Snyder, R. D., & Grose, S. (2002). A state space framework for automatic forecasting using exponential smoothing methods. *International Journal of Forecasting*, 18(3), 439-454. <https://doi.org/10.1016/S0169-2070(01)00110-8>
+
+LeCun, Y., Denker, J. S., & Solla, S. A. (1990). Optimal Brain Damage. *Advances in Neural Information Processing Systems 2*, 598-605. <https://proceedings.neurips.cc/paper/1989/hash/6c9882bbac1c7093bd25041881277658-Abstract.html>
+
+Li, M., Soltanolkotabi, M., & Oymak, S. (2020). Gradient Descent with Early Stopping is Provably Robust to Label Noise for Overparameterized Neural Networks. *Proceedings of the Twenty Third International Conference on Artificial Intelligence and Statistics*, 4313-4324. <https://proceedings.mlr.press/v108/li20j.html>
 
 Lim, B., Arik, S. O., Loeff, N., & Pfister, T. (2021). Temporal Fusion Transformers for interpretable multi-horizon time series forecasting. *International Journal of Forecasting*, 37(4), 1748-1764. <https://doi.org/10.1016/j.ijforecast.2021.03.012>
 
@@ -709,6 +719,8 @@ van den Oord, A., Dieleman, S., Zen, H., Simonyan, K., Vinyals, O., Graves, A., 
 Vincent, P., Larochelle, H., Bengio, Y., & Manzagol, P.-A. (2008). Extracting and composing robust features with denoising autoencoders. *Proceedings of the 25th International Conference on Machine Learning (ICML)*, 1096-1103. <https://doi.org/10.1145/1390156.1390294>
 
 Winters, P. R. (1960). Forecasting Sales by Exponentially Weighted Moving Averages. *Management Science*, 6(3), 324-342. <https://doi.org/10.1287/mnsc.6.3.324>
+
+Xiao, G., Lin, J., Seznec, M., Wu, H., Demouth, J., & Han, S. (2023). SmoothQuant: Accurate and Efficient Post-Training Quantization for Large Language Models. *Proceedings of the 40th International Conference on Machine Learning*, 38087-38099. <https://proceedings.mlr.press/v202/xiao23c.html>
 
 Zeng, A., Chen, M., Zhang, L., & Xu, Q. (2023). Are Transformers Effective for Time Series Forecasting? *Proceedings of the AAAI Conference on Artificial Intelligence*, 37(9), 11121-11128. <https://doi.org/10.1609/aaai.v37i9.26317>
 
