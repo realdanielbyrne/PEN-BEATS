@@ -258,7 +258,7 @@ The parameter supports four modes: `False` (paper-faithful), `True` (activation 
 
 ### 3.6 NHiTS Compatibility
 
-All novel block types introduced in this work are fully compatible with N-HiTS (Challu et al., 2023). The N-HiTS architecture adds two stack-level operations --- multi-rate input pooling (MaxPool1d with configurable kernel size per stack) and hierarchical forecast interpolation --- that operate outside the block interface. Since our blocks accept a 1D input and produce (backcast, forecast) tuples, they plug into N-HiTS unchanged. The pooling reduces the effective input length seen by each block (reducing computational cost), while the interpolation upsamples the block's reduced-resolution forecast to the target horizon. We include `NHiTSNet` in the `lightningnbeats` package with full support for all novel block types; systematic evaluation of novel blocks within N-HiTS is deferred to future work (Appendix D).
+All novel block types introduced in this work are fully compatible with N-HiTS (Challu et al., 2023). The N-HiTS architecture adds two stack-level operations --- multi-rate input pooling (MaxPool1d with configurable kernel size per stack) and hierarchical forecast interpolation --- that operate outside the block interface. Since our blocks accept a 1D input and produce (backcast, forecast) tuples, they plug into N-HiTS unchanged. The pooling reduces the effective input length seen by each block (reducing computational cost), while the interpolation upsamples the block's reduced-resolution forecast to the target horizon. We include `NHiTSNet` in the `lightningnbeats` package with full support for all novel block types; Section 5.8 and Appendix D summarize a dedicated N-HiTS weather benchmark confirming that block-level transfer works empirically, although the ranking of block families and the best hyperparameter settings do shift under hierarchical pooling.
 
 ---
 
@@ -348,7 +348,7 @@ Table 3 presents the best configuration per dataset-period, ranked by the primar
 |---------|--------|:-----:|:---:|-------:|:-------------|
 | M4-Yearly | TW\_10s\_td3\_bdeq\_coif2 | 13.499 | 0.801 | 2.1M | Unified TrendWavelet (RB) |
 | M4-Quarterly | NBEATS-IG\_10s\_ag0 | 10.126 | 0.888 | 19.6M | Paper baseline (15-way tie) |
-| M4-Monthly | TW\_30s\_td3\_bd2eq\_coif2 | 13.279 | 0.915 | 7.1M | Unified TrendWavelet (RB) |
+| M4-Monthly | TW\_30s\_td3\_bd2eq\_coif2 | 13.279 | 0.914 | 7.1M | Unified TrendWavelet (RB) |
 | M4-Weekly | T+Db3V3\_30s\_bdeq | 6.671 | 0.735 | 15.8M | Alternating Trend+Wavelet (RB) |
 | M4-Daily$^\dagger$ | NBEATS-G\_30s\_ag0 | 2.603 | 0.861 | 26.0M | Paper baseline |
 | M4-Hourly | NBEATS-IG\_30s\_agf | 8.587 | 0.409 | 43.6M | Paper baseline |
@@ -357,6 +357,8 @@ Table 3 presents the best configuration per dataset-period, ranked by the primar
 | Milk | TALG+DB3V3ALG\_10s\_ag0 | 1.512 | --- | 1.0M | Alternating TrendAELG+WaveletAELG |
 
 $^\dagger$Preliminary: only 14 of 112 configurations tested. Weather-96 primary metric: MSE = 0.138.
+
+The new M4 sweep shows that the frontier is exceptionally compressed on all fully evaluated periods except Hourly. The top-5 configurations are separated by only 0.030 SMAPE on Yearly, 0.021 on Quarterly, 0.035 on Monthly, and 0.015 on Weekly --- roughly 0.2--0.3% relative spread in each case. In practice, this means that for M4 short-to-medium horizons the main architectural question is no longer "can wavelets beat the baseline?" but rather **which architecture reaches the same frontier with fewer parameters and lower seed variance**. Hourly is the clear exception: its top-5 spread widens to 0.102 SMAPE (1.19% relative), and the top two models are both paper baselines, indicating a genuine remaining advantage for the original prefix-body design at the longest M4 horizon.
 
 **Table 4: Novel vs. Paper Baseline Head-to-Head**
 
@@ -388,6 +390,8 @@ The most practically significant finding is the extreme parameter efficiency of 
 
 The TrendWavelet family with AELG backbone (TWAELG) at ~436K parameters is the most parameter-efficient competitive architecture in our sweep. These models use the AERootBlockLG backbone ($w = 256$, $d = 16$) with TrendWavelet basis expansion ($p = 3$ polynomial degree, wavelet `basis_dim` equal to the forecast length), stacked 10 deep.
 
+On M4 specifically, the compact frontier holds through Weekly: the best sub-1M models are only +0.18% (Yearly), +0.40% (Quarterly), +0.35% (Monthly), and +0.32% (Weekly) behind the winner while using 5--45$\times$ fewer parameters. The frontier bends noticeably only on the longest horizons: +2.76% on Hourly and +16.4% on the preliminary Daily subset. This suggests that the wavelet+AE designs capture almost all of the useful capacity for short and medium M4 horizons, but Hourly still rewards the additional depth and width of the original interpretable+generic baseline.
+
 [**Figure 4**: Parameter efficiency scatter plot. Each panel shows one dataset; x-axis is parameter count (log scale), y-axis is mean SMAPE (lower is better). Points colored by architecture category. Pareto frontier connects the configurations that are not dominated (no other config has both fewer parameters and better SMAPE). Paper baselines cluster in the top-right (high params, good SMAPE). Novel TWAELG/TWAE configurations populate the bottom-left (low params, comparable SMAPE), forming the efficient frontier. *To be produced from comprehensive sweep CSVs.*]
 
 **Table 6: Pareto-Optimal Configurations Across Regimes**
@@ -418,15 +422,11 @@ The pattern is clear: RootBlock-based configurations (which retain the full $w$-
 
 The most striking case is NBEATS-G (30-stack Generic) on Milk: with 26M parameters for a single univariate series of 156 observations, this configuration exhibits 40% divergence without `active_g`, and even with `active_g = \text{'forecast'}`, its SMAPE degrades from 19.35 to 2.42 --- far from the 1.51 achieved by TALG+DB3V3ALG at 1.0M parameters.
 
-[**Figure 5**: Training curves demonstrating convergence behavior, three panels.
+Within M4, the instability story is narrower and more precise than the cross-dataset summary in Table 7 suggests. Most architectures on Yearly, Monthly, and Hourly converge to tight bands with modest seed variance. The main M4 failure mode is **overparameterized Generic blocks on medium horizons**, especially NBEATS-G\_30s\_ag0 on Quarterly (12.74 $\pm$ 7.41 SMAPE) and Weekly (11.61 $\pm$ 7.16), where a subset of seeds gets trapped on high-loss plateaus while the best seeds remain competitive.
 
-**Panel A: Most configurations converge similarly.** Validation loss curves for 8 representative configurations on M4-Yearly, spanning paper baselines, unified TrendWavelet, and alternating TrendAELG+WaveletAELG. All converge to similar loss levels within 40--60 epochs with patience-20 early stopping, illustrating that the doubly-residual framework's convergence properties are robust across architecturally diverse block types.
+![Figure 5. M4 training curves](figures/figure5_m4_training_curves.svg)
 
-**Panel B: Generic bimodal convergence.** Ten seeds of NBEATS-G\_30s\_ag0 on Tourism-Yearly. The validation loss curves split into two modes: approximately 90% of seeds converge normally after an initial descent, while approximately 10% hang at a high validation loss plateau (2--5$\times$ above the converged group) for dozens of epochs. Some eventually drop to join the converged mode after extended training; others never converge. This bimodal pattern is the signature of overparameterized Generic blocks, where many initializations land in degenerate regions of parameter space.
-
-**Panel C: active\_g eliminates bimodal failure.** The same Generic architecture with `active_g = \text{'forecast'}`. All 10 seeds converge to a tight band --- the bimodal split is completely eliminated. However, the converged loss is slightly higher than the best seeds from Panel B, illustrating the convergence-vs-optimality trade-off. The ReLU constraint on forecasts prevents the catastrophic cancellation that causes bimodal failure, but also prevents the model from reaching the deepest minima accessible to unconstrained blocks.
-
-*To be produced from `val_loss_curve` column in comprehensive sweep CSVs.*]
+**Figure 5: Training curves from `comprehensive_sweep_m4_results.csv`.** Panel A shows mean validation curves for four near-frontier M4-Yearly configurations: the paper baseline NBEATS-IG\_10s\_ag0, the Yearly winner TW\_10s\_td3\_bdeq\_coif2, the alternating T+Db3V3\_30s\_bd2eq, and the compact TWAELG\_10s\_ld16\_coif2\_agf. All descend into the same narrow validation band despite large architectural differences. Panel B shows the 10 individual Quarterly training curves for NBEATS-G\_30s\_ag0; several seeds converge normally, but a small number remain at dramatically higher loss, producing the sweep's largest M4 variance. Panel C compares Weekly NBEATS-G\_30s with and without `active_g = \text{'forecast'}`. The activation collapses the spread from 11.61 $\pm$ 7.16 to 7.07 $\pm$ 0.24 SMAPE, eliminating the pathological high-loss trajectories, but the stabilized Generic model still trails the best alternating trend+wavelet stacks at 6.67.
 
 **Bimodal convergence is a Generic-block problem.** The bimodal pattern is most severe for Generic and BottleneckGeneric blocks, which lack structural constraints on their basis expansions. NBEATS-G\_30s\_ag0 shows catastrophic bimodal failure on M4-Quarterly (std = 7.4), M4-Weekly (std = 7.2), Tourism (10% divergence rate), and Milk (40% divergence). In contrast, TrendWavelet blocks are immune to bimodal convergence regardless of backbone type or depth --- their polynomial + wavelet basis provides sufficient structural constraint to regularize the optimization landscape.
 
@@ -449,6 +449,8 @@ The choice between unified and alternating stack architectures is horizon-depend
 | Milk | 6 | No | Alternating wins (but high divergence for non-AE) |
 
 **Pattern.** Short horizons ($H = 4$--8) favor unified TrendWavelet blocks, where the combined polynomial+wavelet decomposition within a single block is sufficient to capture the limited structure in short forecasts. Longer horizons and more complex data (multivariate Weather, M4-Weekly) favor alternating stacks, where the separation of Trend and Wavelet blocks across stacks allows each block type to specialize through the residual decomposition.
+
+The M4 sweep makes the horizon-depth transition especially clear: the winning models use 10 stacks at $H = 6$ (Yearly) and $H = 8$ (Quarterly), then switch to 30 stacks at $H = 13$ (Weekly), $H = 18$ (Monthly), and $H = 48$ (Hourly). What changes across these periods is not the existence of a competitive wavelet frontier --- which persists throughout --- but the amount of iterative decomposition required to reach it.
 
 This pattern has an intuitive explanation. For short horizons, the forecast output has few dimensions ($H = 4$--8), and a single block can efficiently decompose it using a combined basis. For longer horizons ($H \geq 13$), the forecast has enough structure to benefit from separate specialized blocks operating in sequence. The alternating pattern is particularly powerful on Weather-96 ($H = 96$), where the 96-dimensional forecast benefits from iterative refinement by complementary block types.
 
@@ -485,7 +487,7 @@ The `active_g` mechanism exhibits the most complex dataset dependence of any hyp
 - **Tourism**: Essential. `active_g = \text{'forecast'}` eliminates all bimodal convergence failures (Wilcoxon $p = 0.0002$) and is broadly beneficial across all architecture families.
 - **Milk**: Critical for Generic blocks specifically. Reduces NBEATS-G SMAPE from 19.35 to 2.42 (an 87% improvement), but is marginal for wavelet-based architectures that are already convergence-stable.
 - **Weather**: Catastrophic for unified/homogeneous stacks (SMAPE $\approx 100$ vs. $\approx 42$ without), but benign or slightly beneficial for alternating stacks. This asymmetry appears to arise because ReLU on forecast outputs interacts differently with the residual chain when all blocks are identical (unified) versus when they alternate between block types.
-- **M4**: Mixed. Slight improvement on Yearly and Hourly; slight degradation on Monthly; neutral elsewhere.
+- **M4**: Strongly horizon- and architecture-dependent. For the unstable 30-stack Generic baseline, `active_g = \text{'forecast'}` is transformative on Quarterly (12.74 $\rightarrow$ 10.59 SMAPE) and Weekly (11.61 $\rightarrow$ 7.07), and on Hourly it improves 36 of 38 matched config pairs while both winning paper baselines use `agf`. But it hurts most already-stable Monthly and Interpretable configurations, so on M4 it should be viewed as a **targeted stabilization tool**, not a universal default.
 
 **Safe default**: `active_g = \text{False}` is safe everywhere. `active_g = \text{'forecast'}` should be used with caution, particularly on Weather-like multivariate datasets with unified stacks.
 
@@ -555,6 +557,25 @@ The best generalist --- TALG+DB3V3ALG\_10s\_ag0 (alternating TrendAELG + DB3Wave
 
 Notably, the M4-Yearly winner (TW\_10s\_td3\_bdeq\_coif2, rank 1 on M4-Y) drops to rank 53 on Weather and 55 on Milk, illustrating the fundamental tension between per-dataset specialization and cross-dataset robustness. Conversely, the most parameter-efficient options (TWAELG at 436K, ranks 9--10 as generalists) provide an exceptional accuracy-per-parameter ratio across most datasets but struggle on Weather (rank 98), where their small capacity is insufficient for the 21-variable, 96-step forecasting task.
 
+### 5.8 Transferability to N-HiTS
+
+To test whether the novel block types transfer beyond the original doubly residual N-BEATS topology, we ran a dedicated `NHiTSNet` benchmark on the Weather dataset across four horizons (96, 192, 336, 720), totaling 408 runs. This benchmark uses the same block registry inside N-HiTS's hierarchical pooling and interpolation framework, allowing us to isolate **block transferability across architectures**.
+
+**Table 12: N-HiTS Weather Benchmark by Horizon**
+
+| Horizon | Best Novel Config | Novel MSE | Best Vanilla Baseline | Baseline MSE | $\Delta$MSE | Param Savings |
+|--------:|-------------------|:---------:|-----------------------|:------------:|:-----------:|:-------------:|
+| 96 | NHiTS-TWGVAE\_agf | 0.1779 | NHiTS-Generic | 0.2483 | −28.4% | 9$\times$ fewer |
+| 192 | NHiTS-GenericAELG | 0.1988 | NHiTS-Generic | 0.2031 | −2.1% | 2.3$\times$ fewer |
+| 336 | NHiTS-TWGVAE\_agf | 0.2170 | NHiTS-Generic | 0.2507 | −13.5% | 6.7$\times$ fewer |
+| 720 | NHiTS-TWG\_agf | 0.6021 | NHiTS-IG | 0.5849 | +2.9% | 9$\times$ fewer |
+
+Here `TWGVAE` denotes `TrendWaveletGenericVAE` and `TWG` denotes `TrendWaveletGeneric`. The transferred blocks beat the best vanilla N-HiTS baseline on three of four horizons, and on the remaining 720-step task the best novel model remains close: +2.9% MSE while using only 2.83M parameters versus 25.36M for NHiTS-IG.
+
+Two lessons follow. First, **the block innovations are genuinely architecture-transferable**: wavelet and compressed-backbone blocks remain competitive even after N-HiTS replaces N-BEATS's stack semantics with multi-rate pooling and hierarchical interpolation. Second, **transferability is not rank invariance**. The best N-BEATS blocks are not automatically the best N-HiTS blocks. On the pooled all-horizon Weather average across complete 20-run configurations, vanilla NHiTS-Generic remains best (0.3286 MSE), but several transferred variants sit very close with far fewer parameters --- for example, `NHiTS-TrendAE+DB3V3AE+TrendAE` reaches 0.3336 MSE with 408K parameters, and `NHiTS-TrendWaveletGenericAELG-agF` reaches 0.3357 with 312K.
+
+The N-HiTS benchmark also shows that hyperparameter guidance does not transfer wholesale. In the original N-BEATS sweep we treated VAE backbones as broadly uncompetitive, yet in N-HiTS the `TrendWaveletGenericVAE` variant wins at horizons 96 and 336. Conversely, `active_g = \text{'forecast'}` is helpful for the best transferred TrendWaveletGeneric variants but disastrous for pure N-HiTS Generic-family models (`NHiTS-Generic`: 0.3286 $\rightarrow$ 0.4326 MSE; `NHiTS-GenericAE`: 0.3379 $\rightarrow$ 0.4271). The correct conclusion is therefore stronger than simple plug-compatibility but weaker than universal recipe transfer: **the block interface transfers cleanly across architectures, but the optimal architecture-block-hyperparameter combination remains architecture-dependent**.
+
 ---
 
 ## 6. Discussion
@@ -621,9 +642,11 @@ This work presents a systematic exploration of alternative basis expansion funct
 
 **Third, architecture selection is inherently dataset-dependent.** Backbone hierarchy, stack architecture preference, optimal depth, and wavelet family all reverse across datasets. No single configuration dominates everywhere. However, the alternating TrendAELG + DB3WaveletV3AELG configuration at 10 stacks (2.4M parameters) provides the best cross-dataset generalist performance, ranking first on Weather, second on Milk, and competitive across all M4 periods.
 
-The power of the N-BEATS framework lies in its doubly residual stacking topology --- the iterative decomposition and hierarchical forecast aggregation --- rather than in any specific basis expansion. But the choice of basis determines parameter efficiency, convergence reliability, and the alignment of inductive biases with data structure. Wavelets and autoencoder compression provide tools to exploit this design freedom, delivering forecasting accuracy that matches the original N-BEATS with orders of magnitude fewer parameters.
+The dedicated N-HiTS benchmark extends this conclusion beyond a single architecture family. The same block registry transfers directly into N-HiTS and remains competitive there, beating the vanilla N-HiTS baselines on three of four tested Weather horizons. This supports the view that our main contribution is not a one-off modification to N-BEATS, but a library of basis-expansion blocks whose usefulness survives changes to the stack-level architecture.
 
-**Open questions** for future work include: (a) mechanistic understanding of why `active_g` catastrophically fails on Weather unified stacks but succeeds on alternating stacks; (b) why the backbone hierarchy reverses on multivariate/simple-univariate data versus competition-format data; (c) systematic evaluation of novel blocks within N-HiTS (Appendix D); and (d) extension to additional benchmarks (ETTh, ETTm, Exchange Rate) to test generalization of the architecture selection guidelines developed here.
+The power of the N-BEATS framework lies in its doubly residual stacking topology --- the iterative decomposition and hierarchical forecast aggregation --- rather than in any specific basis expansion. But the choice of basis determines parameter efficiency, convergence reliability, and the alignment of inductive biases with data structure. Wavelets and autoencoder compression provide tools to exploit this design freedom, delivering forecasting accuracy that matches the original N-BEATS with orders of magnitude fewer parameters and transferring meaningfully to related architectures such as N-HiTS.
+
+**Open questions** for future work include: (a) mechanistic understanding of why `active_g` catastrophically fails on Weather unified stacks but succeeds on alternating stacks; (b) why the backbone hierarchy reverses on multivariate/simple-univariate data versus competition-format data; (c) why the ranking of transferred blocks shifts under N-HiTS hierarchical pooling, including the surprising strength of `TrendWaveletGenericVAE`; and (d) extension to additional benchmarks (ETTh, ETTm, Exchange Rate) to test generalization of the architecture selection guidelines developed here.
 
 ---
 
@@ -789,7 +812,7 @@ The 11% gap between NBEATS-G and TrendWavelet RB is the largest baseline-vs-nove
 
 ---
 
-## Appendix D: NHiTS Transferability and Future Work
+## Appendix D: NHiTS Transferability
 
 ### D.1 Architectural Compatibility
 
@@ -801,7 +824,18 @@ All novel block types introduced in this work are fully compatible with N-HiTS (
 
 Both operations are external to the block interface: pooling happens before the block's forward pass, and interpolation happens after. Since all our blocks accept a 1D vector and return (backcast, forecast) tuples, they integrate into N-HiTS without any modification. The `NHiTSNet` class in `lightningnbeats` supports the full block registry.
 
-### D.2 Research Directions
+### D.2 Empirical Transfer Summary
+
+The dedicated `nhits_benchmark_results.csv` benchmark provides an initial empirical validation of this compatibility claim. Across 408 Weather runs spanning horizons 96, 192, 336, and 720, transferred block types outperform the vanilla N-HiTS baselines on three of four horizons:
+
+1. At horizon 96, `NHiTS-TrendWaveletGenericVAE-agF` achieves 0.1779 MSE versus 0.2483 for `NHiTS-Generic` (−28.4%).
+2. At horizon 192, `NHiTS-GenericAELG` achieves 0.1988 MSE versus 0.2031 for `NHiTS-Generic` (−2.1%).
+3. At horizon 336, `NHiTS-TrendWaveletGenericVAE-agF` achieves 0.2170 MSE versus 0.2507 for `NHiTS-Generic` (−13.5%).
+4. At horizon 720, the original `NHiTS-IG` remains best at 0.5849 MSE, but the best novel configuration (`NHiTS-TrendWaveletGeneric-agF`) is still close at 0.6021 with roughly 9$\times$ fewer parameters.
+
+These results support the core transferability claim of this paper: the benefits of structured basis blocks and compressed backbones are not confined to the N-BEATS residual stack. However, they also show that cross-architecture transfer is not trivial. Ranking order changes, and some settings that are weak in N-BEATS (notably VAE-based TrendWaveletGeneric) become competitive in N-HiTS under hierarchical pooling.
+
+### D.3 Research Directions
 
 Several questions about novel blocks in N-HiTS warrant systematic investigation:
 
