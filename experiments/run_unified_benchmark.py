@@ -142,7 +142,7 @@ N_RUNS_DEFAULT = 10
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 CLAIMS_DIR = os.path.join(RESULTS_DIR, ".claims")
-STALE_CLAIM_SECONDS = 7200  # 2 hours — assume crashed worker
+STALE_CLAIM_SECONDS = 14400  # 2 hours — assume crashed worker
 
 # ---------------------------------------------------------------------------
 # Dataset Periods
