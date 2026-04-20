@@ -352,20 +352,67 @@ class ForecastingDataset(Dataset):
 
 class ColumnarTimeSeriesDataset(Dataset):
     def __init__(
-        self, dataframe, backcast_length, forecast_length, col_means=None, col_stds=None
+        self,
+        dataframe,
+        backcast_length,
+        forecast_length,
+        col_means=None,
+        col_stds=None,
+        normalization_style=None,
+        return_scales=False,
+        eps=1e-5,
     ):
+        """Sliding-window dataset over a columnar DataFrame.
+
+        Parameters
+        ----------
+        normalization_style : {None, 'none', 'global', 'window'}, optional
+            - None / 'none' : no normalization (unless ``col_means`` is given,
+              which triggers legacy 'global' behavior for backward compat).
+            - 'global' : apply pre-computed per-column z-score using
+              ``col_means`` / ``col_stds`` once at dataset construction.
+            - 'window' : compute per-window mean/std from the input ``x``
+              inside ``__getitem__`` (RevIN-style), scale both ``x`` and
+              ``y``. Incompatible with ``col_means``/``col_stds``.
+        return_scales : bool, optional
+            When True in 'window' mode, ``__getitem__`` returns
+            ``(x_norm, y_norm, mu, sigma)`` so callers can denormalize
+            predictions for test-time metrics. Defaults to False.
+        eps : float, optional
+            Stability term added to per-window std. Defaults to 1e-5.
+        """
         self.backcast_length = backcast_length
         self.forecast_length = forecast_length
         self.min_length = backcast_length + forecast_length
         self.col_means = col_means
         self.col_stds = col_stds
 
+        if normalization_style is None:
+            normalization_style = "global" if col_means is not None else "none"
+        if normalization_style not in ("none", "global", "window"):
+            raise ValueError(
+                f"normalization_style must be one of "
+                f"{{'none','global','window'}}, got {normalization_style!r}"
+            )
+        if normalization_style == "window" and col_means is not None:
+            raise ValueError(
+                "normalization_style='window' is incompatible with precomputed "
+                "col_means/col_stds; pass normalization_style='global' instead."
+            )
+        self.normalization_style = normalization_style
+        self.return_scales = return_scales
+        self.eps = float(eps)
+
         # Drop columns with insufficient data and convert to dictionary of NumPy arrays
         self.data_dict = {}
         for col in dataframe.columns:
             series = self.pad_series(dataframe[col].dropna().values).astype(np.float32)
-            if self.col_means is not None and col in self.col_means:
-                series = (series - self.col_means[col]) / self.col_stds[col]
+            if (
+                self.normalization_style == "global"
+                and col_means is not None
+                and col in col_means
+            ):
+                series = (series - col_means[col]) / col_stds[col]
             self.data_dict[col] = series
 
         # Precompute column indices and starting positions
@@ -393,15 +440,30 @@ class ColumnarTimeSeriesDataset(Dataset):
     def __getitem__(self, idx):
         col, start_idx = self.col_indices[idx]
         series = self.data_dict[col]
-        x = torch.from_numpy(
-            series[start_idx : start_idx + self.backcast_length].copy()
-        )
-        y = torch.from_numpy(
-            series[
-                start_idx + self.backcast_length : start_idx + self.min_length
-            ].copy()
-        )
-        return x, y
+        x = series[start_idx : start_idx + self.backcast_length].copy()
+        y = series[
+            start_idx + self.backcast_length : start_idx + self.min_length
+        ].copy()
+
+        if self.normalization_style == "window":
+            mu = float(np.mean(x))
+            sigma = float(np.std(x))
+            if sigma < self.eps:
+                sigma = 1.0
+            x = (x - mu) / sigma
+            y = (y - mu) / sigma
+            x_t = torch.from_numpy(x).float()
+            y_t = torch.from_numpy(y).float()
+            if self.return_scales:
+                return (
+                    x_t,
+                    y_t,
+                    torch.tensor(mu, dtype=torch.float32),
+                    torch.tensor(sigma, dtype=torch.float32),
+                )
+            return x_t, y_t
+
+        return torch.from_numpy(x).float(), torch.from_numpy(y).float()
 
 
 class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
@@ -415,6 +477,7 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
         num_workers=0,
         pin_memory=False,
         normalize=False,
+        normalization_style=None,
         val_ratio=None,
         val_data=None,
     ):
@@ -430,8 +493,14 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
             backcast_length (int, optional):  Number of past observations to use for prediction. Defaults to 10.
             forecast_length (int, optional): Number of future observations to predict. Defaults to 4.
             batch_size (int, optional): The batch size. Defaults to 32.
-            normalize (bool, optional): If True, apply per-column z-score normalization using
-                training-split statistics. Defaults to False.
+            normalize (bool, optional): Legacy switch. If True and ``normalization_style``
+                is None, falls back to ``normalization_style='global'``. Defaults to False.
+            normalization_style ({None, 'none', 'global', 'window'}, optional):
+                'global' applies per-column z-score using training-split statistics
+                (legacy behavior). 'window' applies RevIN-style per-input-window
+                z-score inside ``ColumnarTimeSeriesDataset.__getitem__``; train/val
+                datasets skip global statistics in this mode. Defaults to None
+                (resolved from ``normalize``).
             val_ratio (float, optional): Fraction of training data to use as validation set.
                 When None (default), validation is the last backcast+forecast rows.
                 Ignored when ``val_data`` is provided.
@@ -447,6 +516,17 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.normalize = normalize
+
+        # Resolve normalization_style. Explicit value wins; otherwise derive
+        # from the legacy ``normalize`` bool for backward compatibility.
+        if normalization_style is None:
+            normalization_style = "global" if normalize else "none"
+        if normalization_style not in ("none", "global", "window"):
+            raise ValueError(
+                f"normalization_style must be one of "
+                f"{{'none','global','window'}}, got {normalization_style!r}"
+            )
+        self.normalization_style = normalization_style
         self.val_ratio = val_ratio
         self._external_val_data = val_data
 
@@ -474,8 +554,8 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
                 -self.forecast_length - self.backcast_length :
             ]
 
-        # Compute per-column normalization stats from training split
-        if self.normalize:
+        # Compute per-column normalization stats from training split (global mode only)
+        if self.normalization_style == "global":
             eps = 1e-8
             self.col_means = {}
             self.col_stds = {}
@@ -494,6 +574,7 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
             self.forecast_length,
             col_means=self.col_means,
             col_stds=self.col_stds,
+            normalization_style=self.normalization_style,
         )
         self.train_dataset = ColumnarTimeSeriesDataset(
             train_data,
@@ -501,6 +582,7 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
             self.forecast_length,
             col_means=self.col_means,
             col_stds=self.col_stds,
+            normalization_style=self.normalization_style,
         )
 
     def train_dataloader(self):
@@ -535,6 +617,8 @@ class ColumnarCollectionTimeSeriesTestDataModule(pl.LightningDataModule):
         pin_memory=False,
         col_means=None,
         col_stds=None,
+        normalization_style=None,
+        return_scales=False,
     ):
         """Takes two collections of time series organized into columns
         where each row represents a time step and each column represents
@@ -549,12 +633,27 @@ class ColumnarCollectionTimeSeriesTestDataModule(pl.LightningDataModule):
             batch_size (int, optional): The batch size. Defaults to 1024.
             col_means (dict, optional): Per-column means from training data for normalization.
             col_stds (dict, optional): Per-column stds from training data for normalization.
+            normalization_style ({None, 'none', 'global', 'window'}, optional):
+                'global' uses ``col_means``/``col_stds`` (legacy). 'window' applies
+                RevIN-style per-input-window normalization. Defaults to None
+                (resolved from ``col_means``: 'global' if present, else 'none').
+            return_scales (bool, optional): In 'window' mode, yield
+                ``(x, y, mu, sigma)`` from the test dataloader so callers can
+                denormalize predictions before computing metrics. Defaults to False.
         """
         super(ColumnarCollectionTimeSeriesTestDataModule, self).__init__()
 
         if backcast_length > len(train_data):
             raise ValueError(
                 f"backcast_length ({backcast_length}) cannot exceed training data length ({len(train_data)})"
+            )
+
+        if normalization_style is None:
+            normalization_style = "global" if col_means is not None else "none"
+        if normalization_style not in ("none", "global", "window"):
+            raise ValueError(
+                f"normalization_style must be one of "
+                f"{{'none','global','window'}}, got {normalization_style!r}"
             )
 
         self.test_data = pd.concat(
@@ -565,8 +664,10 @@ class ColumnarCollectionTimeSeriesTestDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
-        self.col_means = col_means
-        self.col_stds = col_stds
+        self.col_means = col_means if normalization_style == "global" else None
+        self.col_stds = col_stds if normalization_style == "global" else None
+        self.normalization_style = normalization_style
+        self.return_scales = return_scales
 
     def setup(self, stage: str = None):
         self.test_dataset = ColumnarTimeSeriesDataset(
@@ -575,6 +676,8 @@ class ColumnarCollectionTimeSeriesTestDataModule(pl.LightningDataModule):
             self.forecast_length,
             col_means=self.col_means,
             col_stds=self.col_stds,
+            normalization_style=self.normalization_style,
+            return_scales=self.return_scales,
         )
 
     def test_dataloader(self):

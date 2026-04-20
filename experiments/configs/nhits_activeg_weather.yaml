@@ -98,7 +98,8 @@ runs:
 
 training:
   max_epochs: 100
-  patience: 25
+  early_stopping: false    # Paper setting (disabled)
+  patience: 25             # Unused when early_stopping=false
   activation: ReLU
   active_g: forecast       # All configs in this file use active_g=forecast
   sum_losses: false

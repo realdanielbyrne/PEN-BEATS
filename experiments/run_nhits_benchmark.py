@@ -129,14 +129,27 @@ BASE_SEED = 1  # Seeds 1-8 matching NHiTS
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 CSV_FILENAME = "nhits_benchmark_results.csv"
 
-# Horizon-adaptive NHiTS pooling/interpolation defaults.
-# For short horizons (96-336) the per-config values are used as-is.
-# For long horizons (≥720, L=3600) the fine stack's raw input is too large
-# and the coarse stack's forecast knots are too sparse, so we override.
+# Horizon-adaptive NHiTS pooling/interpolation overrides.
+# Determined via 36-config grid search (experiments/configs/nhits_pooling_search.yaml)
+# over pool ∈ {[2,2,2],[4,2,1],[2,2,1],[8,4,1],[16,8,1],[32,16,1]} and
+# freq ∈ {[168,24,1],[144,36,1],[72,18,1],[48,12,1],[24,12,1],[1,1,1]}.
+# Winners per horizon (see experiments/analyze_pooling_search.py).
 NHITS_HORIZON_OVERRIDES = {
-    720: {
+    96: {
+        "n_pools_kernel_size": [2, 2, 2],
+        "n_freq_downsample": [180, 60, 1],
+    },
+    192: {
+        "n_pools_kernel_size": [4, 2, 1],
+        "n_freq_downsample": [24, 12, 1],
+    },
+    336: {
         "n_pools_kernel_size": [16, 8, 1],
-        "n_freq_downsample": [4, 2, 1],
+        "n_freq_downsample": [24, 12, 1],
+    },
+    720: {
+        "n_pools_kernel_size": [32, 16, 1],
+        "n_freq_downsample": [24, 12, 1],
     },
 }
 CLAIMS_DIR = os.path.join(RESULTS_DIR, ".claims")
@@ -173,6 +186,8 @@ CSV_COLUMNS = [
     "val_ratio",
     "include_target",
     "stack_types",
+    "n_pools_kernel_size",
+    "n_freq_downsample",
 ]
 
 
@@ -438,20 +453,59 @@ def load_yaml_configs(yaml_path):
         "normalize": protocol_raw.get(
             "normalize", None
         ),  # None = auto-detect by dataset
+        "normalization_style": protocol_raw.get("normalization_style", None),
         "include_target": protocol_raw.get("include_target", True),
     }
 
     # --- Extract training settings ---
     training_raw = yaml_data.get("training", {})
+
+    def _coerce_float(v):
+        # YAML 1.1 (PyYAML) does not parse unquoted '1e-3' as float — it stays
+        # a string. Coerce here so numerics written in scientific form survive.
+        if isinstance(v, str):
+            try:
+                return float(v)
+            except ValueError:
+                return v
+        return v
+
+    def _coerce_int(v):
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                return v
+        return v
+
+    # Parse optional nested lr_scheduler block (wins over top-level warmup_epochs)
+    lr_sched_raw = training_raw.get("lr_scheduler")
+    if isinstance(lr_sched_raw, dict):
+        lr_scheduler = {
+            "type": str(lr_sched_raw.get("type", "cosine")).lower(),
+            "warmup_epochs": _coerce_int(lr_sched_raw.get("warmup_epochs")),
+            "T_max": _coerce_int(lr_sched_raw.get("T_max")),
+            "eta_min": _coerce_float(lr_sched_raw.get("eta_min")),
+            "step_size": _coerce_int(lr_sched_raw.get("step_size")),
+            "gamma": _coerce_float(lr_sched_raw.get("gamma")),
+            "interval": lr_sched_raw.get("interval"),
+        }
+    else:
+        lr_scheduler = None
+
     training = {
-        "max_epochs": training_raw.get("max_epochs", MAX_EPOCHS),
-        "patience": training_raw.get("patience", PATIENCE),
+        "max_epochs": _coerce_int(training_raw.get("max_epochs", MAX_EPOCHS)),
+        "patience": _coerce_int(training_raw.get("patience", PATIENCE)),
         "activation": training_raw.get("activation", "ReLU"),
         "active_g": training_raw.get("active_g", False),
         "sum_losses": training_raw.get("sum_losses", False),
-        "warmup_epochs": training_raw.get("warmup_epochs"),
-        "learning_rate": training_raw.get("learning_rate"),
-        "num_workers": training_raw.get("num_workers"),
+        "warmup_epochs": _coerce_int(training_raw.get("warmup_epochs")),
+        "learning_rate": _coerce_float(training_raw.get("learning_rate")),
+        "num_workers": _coerce_int(training_raw.get("num_workers")),
+        "max_steps": _coerce_int(training_raw.get("max_steps")),
+        "early_stopping": training_raw.get("early_stopping", True),
+        "val_check_interval": _coerce_int(training_raw.get("val_check_interval")),
+        "lr_scheduler": lr_scheduler,
     }
 
     # --- Extract block params ---
@@ -501,6 +555,9 @@ def load_yaml_configs(yaml_path):
 
         configs.append(parsed)
 
+    # --- Top-level flags ---
+    skip_horizon_overrides = yaml_data.get("skip_horizon_overrides", False)
+
     return {
         "configs": configs,
         "protocol": protocol,
@@ -510,6 +567,7 @@ def load_yaml_configs(yaml_path):
         "dataset": dataset,
         "horizons": horizons,
         "experiment_name": experiment_name,
+        "skip_horizon_overrides": skip_horizon_overrides,
     }
 
 
@@ -802,19 +860,50 @@ def job_is_claimed(config_name, dataset, horizon, run):
 
 
 def run_inference(model, test_dm, device):
+    """Run the test dataloader and return predictions and targets.
+
+    When the test DataModule uses ``normalization_style='window'`` with
+    ``return_scales=True``, each batch is ``(x, y, mu, sigma)`` in normalized
+    space. We return both the normalized arrays (``preds``, ``targets``) and
+    the original-scale arrays (``preds_raw``, ``targets_raw``) so callers can
+    report paper-aligned MSE/MAE in the denormalized domain. In the default
+    ``(x, y)`` case the raw arrays are identical to the normalized ones.
+    """
     model.eval()
     model.to(device)
-    all_preds = []
-    all_targets = []
+    all_preds, all_targets = [], []
+    all_preds_raw, all_targets_raw = [], []
     test_dm.setup("test")
     with torch.no_grad():
         for batch in test_dm.test_dataloader():
-            x, y = batch
-            x = x.to(device)
-            _, forecast = model(x)
-            all_preds.append(forecast.cpu().numpy())
-            all_targets.append(y.numpy())
-    return np.concatenate(all_preds, axis=0), np.concatenate(all_targets, axis=0)
+            if len(batch) == 4:
+                x, y, mu, sigma = batch
+                x = x.to(device)
+                _, forecast = model(x)
+                f_np = forecast.cpu().numpy()
+                y_np = y.numpy()
+                mu_np = mu.numpy().reshape(-1, 1)
+                sigma_np = sigma.numpy().reshape(-1, 1)
+                all_preds.append(f_np)
+                all_targets.append(y_np)
+                all_preds_raw.append(f_np * sigma_np + mu_np)
+                all_targets_raw.append(y_np * sigma_np + mu_np)
+            else:
+                x, y = batch
+                x = x.to(device)
+                _, forecast = model(x)
+                f_np = forecast.cpu().numpy()
+                y_np = y.numpy()
+                all_preds.append(f_np)
+                all_targets.append(y_np)
+                all_preds_raw.append(f_np)
+                all_targets_raw.append(y_np)
+    return (
+        np.concatenate(all_preds, axis=0),
+        np.concatenate(all_targets, axis=0),
+        np.concatenate(all_preds_raw, axis=0),
+        np.concatenate(all_targets_raw, axis=0),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -836,6 +925,7 @@ def run_single_experiment(
     block_params=None,
     training=None,
     runs=None,
+    skip_horizon_overrides=False,
 ):
     """Run a single NHiTS-protocol experiment."""
     global _shutdown_requested
@@ -873,6 +963,7 @@ def run_single_experiment(
             block_params=block_params,
             training=training,
             runs=runs,
+            skip_horizon_overrides=skip_horizon_overrides,
         )
     except Exception as e:
         print(
@@ -896,6 +987,7 @@ def _run_experiment_body(
     block_params=None,
     training=None,
     runs=None,
+    skip_horizon_overrides=False,
 ):
     """Inner body of run_single_experiment (wrapped in try/finally for claim safety)."""
     # Resolve protocol/block/training/runs params — use provided dicts or fall back to globals
@@ -913,6 +1005,17 @@ def _run_experiment_body(
     else:
         p_normalize = dataset_name == "weather"
 
+    # Normalization style: explicit protocol value wins; else legacy bool maps to
+    # 'global' / 'none'. 'window' selects RevIN-style per-input-window z-score.
+    p_normalization_style = protocol.get("normalization_style") if protocol else None
+    if p_normalization_style is None:
+        p_normalization_style = "global" if p_normalize else "none"
+    elif p_normalization_style not in ("none", "global", "window"):
+        raise ValueError(
+            f"protocol.normalization_style must be one of "
+            f"{{'none','global','window'}}, got {p_normalization_style!r}"
+        )
+
     bp_thetas_dim = block_params["thetas_dim"] if block_params else THETAS_DIM
     bp_latent_dim = block_params["latent_dim"] if block_params else LATENT_DIM
     bp_basis_dim_spec = block_params["basis_dim"] if block_params else "eq_fcast"
@@ -927,9 +1030,44 @@ def _run_experiment_body(
     if t_num_workers is None:
         t_num_workers = 0
 
+    t_max_steps = training.get("max_steps") if training else None
+    t_early_stopping = training.get("early_stopping", True) if training else True
+    t_val_check_interval = training.get("val_check_interval") if training else None
+
+    # Assemble lr_scheduler_config. Preferred path is training['lr_scheduler']
+    # (nested block supporting {'type': 'cosine'|'step', ...}); fall back to
+    # legacy top-level training['warmup_epochs'] for existing YAML configs.
     lr_scheduler_config = None
-    if training and "warmup_epochs" in training:
+    t_lr_sched = training.get("lr_scheduler") if training else None
+    if isinstance(t_lr_sched, dict):
+        sched_type = str(t_lr_sched.get("type", "cosine")).lower()
+        if sched_type in ("cosine", "cosine_warmup", "sequential"):
+            lr_scheduler_config = {
+                "type": "cosine",
+                "warmup_epochs": t_lr_sched.get("warmup_epochs", 15),
+                "T_max": t_lr_sched.get("T_max") or max_epochs,
+                "eta_min": t_lr_sched.get("eta_min", 1e-6),
+            }
+        elif sched_type == "step":
+            if t_lr_sched.get("step_size") is None:
+                raise ValueError(
+                    "training.lr_scheduler.type='step' requires 'step_size'."
+                )
+            lr_scheduler_config = {
+                "type": "step",
+                "step_size": t_lr_sched["step_size"],
+                "gamma": t_lr_sched.get("gamma", 0.5),
+            }
+        else:
+            raise ValueError(
+                f"Unknown training.lr_scheduler.type {sched_type!r}; "
+                "expected one of {'cosine', 'step'}."
+            )
+        if t_lr_sched.get("interval"):
+            lr_scheduler_config["interval"] = t_lr_sched["interval"]
+    elif training and training.get("warmup_epochs") is not None:
         lr_scheduler_config = {
+            "type": "cosine",
             "warmup_epochs": training["warmup_epochs"],
             "T_max": max_epochs,
             "eta_min": 1e-6,
@@ -1004,11 +1142,16 @@ def _run_experiment_body(
         lr_scheduler_config=lr_scheduler_config,
     )
 
+    pools = []
+    freqs = []
     if model_type == "NHiTSNet":
-        # Start with per-config values, then apply horizon-adaptive overrides
-        pools = list(config["n_pools_kernel_size"])
-        freqs = list(config["n_freq_downsample"])
-        if forecast_length in NHITS_HORIZON_OVERRIDES:
+        # Per-config values are optional. When omitted, fall back to
+        # NHiTSNet's own defaults ([2]*n_stacks / [1]*n_stacks). Horizon
+        # overrides still take precedence unless skip_horizon_overrides
+        # is set (e.g. during parameter search).
+        pools = list(config.get("n_pools_kernel_size", [2] * n_stacks))
+        freqs = list(config.get("n_freq_downsample", [1] * n_stacks))
+        if not skip_horizon_overrides and forecast_length in NHITS_HORIZON_OVERRIDES:
             ho = NHITS_HORIZON_OVERRIDES[forecast_length]
             pools = ho.get("n_pools_kernel_size", pools)
             freqs = ho.get("n_freq_downsample", freqs)
@@ -1032,6 +1175,7 @@ def _run_experiment_body(
         batch_size=batch_size,
         no_val=False,
         normalize=p_normalize,
+        normalization_style=p_normalization_style,
         val_data=val_data,
         num_workers=t_num_workers,
     )
@@ -1039,6 +1183,8 @@ def _run_experiment_body(
     # We need to call setup() on dm first to get normalization stats
     dm.setup()
 
+    # In 'window' mode we ask the test DM to emit (x, y, mu, sigma) so predictions
+    # can be denormalized back to the original scale before computing metrics.
     test_dm = ColumnarCollectionTimeSeriesTestDataModule(
         train_data,
         test_data,
@@ -1047,6 +1193,8 @@ def _run_experiment_body(
         batch_size=batch_size,
         col_means=dm.col_means,
         col_stds=dm.col_stds,
+        normalization_style=p_normalization_style,
+        return_scales=(p_normalization_style == "window"),
         num_workers=t_num_workers,
     )
 
@@ -1075,23 +1223,27 @@ def _run_experiment_body(
     )
     convergence_tracker = ConvergenceTracker()
 
-    trainer = pl.Trainer(
+    trainer_callbacks = [chk_callback, divergence_detector, convergence_tracker]
+    if t_early_stopping:
+        trainer_callbacks.insert(1, early_stop_callback)
+
+    trainer_kwargs = dict(
         accelerator=accelerator,
         devices=1,
         max_epochs=max_epochs,
         precision=precision,
         gradient_clip_val=1.0,
-        callbacks=[
-            chk_callback,
-            early_stop_callback,
-            divergence_detector,
-            convergence_tracker,
-        ],
+        callbacks=trainer_callbacks,
         logger=False,
         enable_progress_bar=True,
         deterministic=False,
         log_every_n_steps=1,
     )
+    if t_max_steps is not None:
+        trainer_kwargs["max_steps"] = t_max_steps
+    if t_val_check_interval is not None:
+        trainer_kwargs["val_check_interval"] = t_val_check_interval
+    trainer = pl.Trainer(**trainer_kwargs)
 
     # Train
     stack_summary = (
@@ -1118,10 +1270,13 @@ def _run_experiment_body(
     if divergence_detector.diverged:
         stopping_reason = "DIVERGED"
     elif (
-        hasattr(early_stop_callback, "stopped_epoch")
+        t_early_stopping
+        and hasattr(early_stop_callback, "stopped_epoch")
         and early_stop_callback.stopped_epoch > 0
     ):
         stopping_reason = "EARLY_STOPPED"
+    elif t_max_steps is not None and trainer.global_step >= t_max_steps:
+        stopping_reason = "MAX_STEPS"
     else:
         stopping_reason = "MAX_EPOCHS"
 
@@ -1131,20 +1286,25 @@ def _run_experiment_body(
         else float("nan")
     )
 
-    # Inference — predictions are in normalized space since test_dm uses the
-    # same col_means/col_stds from training
-    preds, targets = run_inference(model, test_dm, device)
+    # Inference. In 'global' / 'none' modes preds_raw == preds and targets_raw ==
+    # targets. In 'window' mode the raw arrays are denormalized per-sample using
+    # the (mu, sigma) emitted by the test dataset.
+    preds, targets, preds_raw, targets_raw = run_inference(model, test_dm, device)
 
     # Metrics on normalized data (primary — matches NHiTS evaluation)
     mse_norm = compute_mse(preds, targets)
     mae_norm = compute_mae(preds, targets)
 
     # Denormalized metrics (original scale) and sMAPE
-    col_indices = test_dm.test_dataset.col_indices
-    denorm_mae, denorm_mse = compute_denormalized_mse_mae(
-        preds, targets, col_indices, dm.col_means, dm.col_stds
-    )
-    smape = compute_smape(preds, targets)
+    if p_normalization_style == "window":
+        denorm_mse = float(np.mean((targets_raw - preds_raw) ** 2))
+        denorm_mae = float(np.mean(np.abs(targets_raw - preds_raw)))
+    else:
+        col_indices = test_dm.test_dataset.col_indices
+        denorm_mae, denorm_mse = compute_denormalized_mse_mae(
+            preds, targets, col_indices, dm.col_means, dm.col_stds
+        )
+    smape = compute_smape(preds_raw, targets_raw)
 
     print(
         f"         MSE={mse_norm:.4f}  MAE={mae_norm:.4f}  "
@@ -1182,6 +1342,8 @@ def _run_experiment_body(
         "val_ratio": p_val_ratio,
         "include_target": p_include_target,
         "stack_types": str(list(dict.fromkeys(stack_types))),
+        "n_pools_kernel_size": str(pools) if pools else "",
+        "n_freq_downsample": str(freqs) if freqs else "",
     }
     append_result(csv_path, row)
     release_claim(config_name, dataset_name, horizon, run_idx)
@@ -1380,6 +1542,7 @@ def main():
     training = None
     runs = None
 
+    skip_horizon_overrides = False
     if args.yaml:
         yaml_data = load_yaml_configs(args.yaml)
         all_configs = yaml_data["configs"]
@@ -1387,6 +1550,7 @@ def main():
         block_params = yaml_data["block_params"]
         training = yaml_data["training"]
         runs = yaml_data["runs"]
+        skip_horizon_overrides = yaml_data.get("skip_horizon_overrides", False)
     else:
         all_configs = get_benchmark_configs()
 
@@ -1527,6 +1691,7 @@ def main():
             block_params=block_params,
             training=training,
             runs=runs,
+            skip_horizon_overrides=skip_horizon_overrides,
         )
         completed += 1
 

@@ -331,6 +331,62 @@ class Generic(RootBlock):
         return backcast, forecast
 
 
+class NHiTSGenericRoot(nn.Module):
+    def __init__(
+        self,
+        units: int,
+        backcast_length: int,
+        forecast_length: int,
+        thetas_dim: int = 5,
+        share_weights: bool = False,
+        activation: str = "ReLU",
+        active_g: bool = False,
+    ):
+        """NHiTS paper-faithful Generic block (2-layer MLP tower).
+
+        Matches the NHiTS reference implementation (neuralforecast) which uses
+        ``mlp_units = [[512, 512]]`` per block — i.e. 2 FC+activation layers,
+        not the 4-layer tower inherited from N-BEATS. The backcast/forecast
+        projection heads are identical to :class:`Generic` (direct projection
+        to backcast_length and forecast_length, no bottleneck).
+
+        Args are kept API-compatible with :class:`Generic` so the block can be
+        dispatched through the same ``create_stack`` branch. ``thetas_dim`` and
+        ``share_weights`` are accepted but unused.
+        """
+        super(NHiTSGenericRoot, self).__init__()
+        if activation not in ACTIVATIONS:
+            raise ValueError(f"'{activation}' is not in {ACTIVATIONS}")
+
+        self.units = units
+        self.backcast_length = backcast_length
+        self.forecast_length = forecast_length
+        self.active_g = active_g
+        self.activation = getattr(nn, activation)()
+
+        self.fc1 = nn.Linear(backcast_length, units)
+        self.fc2 = nn.Linear(units, units)
+
+        self.theta_b_fc = nn.Linear(units, backcast_length, bias=False)
+        self.theta_f_fc = nn.Linear(units, forecast_length, bias=False)
+
+    def forward(self, x):
+        x = squeeze_last_dim(x)
+        x = self.activation(self.fc1(x))
+        x = self.activation(self.fc2(x))
+
+        backcast = self.theta_b_fc(x)
+        forecast = self.theta_f_fc(x)
+
+        if self.active_g:
+            if self.active_g != "forecast":
+                backcast = self.activation(backcast)
+            if self.active_g != "backcast":
+                forecast = self.activation(forecast)
+
+        return backcast, forecast
+
+
 class BottleneckGeneric(RootBlock):
     def __init__(
         self,
