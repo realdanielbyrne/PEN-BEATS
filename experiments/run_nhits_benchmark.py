@@ -499,6 +499,13 @@ def load_yaml_configs(yaml_path):
             "step_size": _coerce_int(lr_sched_raw.get("step_size")),
             "gamma": _coerce_float(lr_sched_raw.get("gamma")),
             "interval": lr_sched_raw.get("interval"),
+            # plateau-specific fields
+            "factor": _coerce_float(lr_sched_raw.get("factor")),
+            "patience": _coerce_int(lr_sched_raw.get("patience")),
+            "min_lr": _coerce_float(lr_sched_raw.get("min_lr", lr_sched_raw.get("eta_min"))),
+            "mode": lr_sched_raw.get("mode", "min"),
+            "cooldown": _coerce_int(lr_sched_raw.get("cooldown")),
+            "monitor": lr_sched_raw.get("monitor", "val_loss"),
         }
     else:
         lr_scheduler = None
@@ -1116,6 +1123,20 @@ def _run_experiment_body(
                 "T_max": t_lr_sched.get("T_max") or max_epochs,
                 "eta_min": t_lr_sched.get("eta_min", 1e-6),
             }
+        elif sched_type == "plateau":
+            lr_scheduler_config = {
+                "type": "plateau",
+                "factor": t_lr_sched.get("factor") if t_lr_sched.get("factor") is not None else 0.5,
+                "patience": t_lr_sched.get("patience") if t_lr_sched.get("patience") is not None else 10,
+                "min_lr": (
+                    t_lr_sched.get("min_lr")
+                    if t_lr_sched.get("min_lr") is not None
+                    else t_lr_sched.get("eta_min", 1e-5)
+                ),
+                "mode": t_lr_sched.get("mode", "min"),
+                "cooldown": t_lr_sched.get("cooldown") if t_lr_sched.get("cooldown") is not None else 0,
+                "monitor": t_lr_sched.get("monitor", "val_loss"),
+            }
         elif sched_type == "step":
             if t_lr_sched.get("step_size") is None:
                 raise ValueError(
@@ -1129,7 +1150,7 @@ def _run_experiment_body(
         else:
             raise ValueError(
                 f"Unknown training.lr_scheduler.type {sched_type!r}; "
-                "expected one of {'cosine', 'step'}."
+                "expected one of {{'cosine', 'plateau', 'step'}}."
             )
         if t_lr_sched.get("interval"):
             lr_scheduler_config["interval"] = t_lr_sched["interval"]
@@ -1577,6 +1598,18 @@ def main():
         "--dry-run", action="store_true", help="Print experiment plan without running"
     )
     parser.add_argument(
+        "--scheduler-type",
+        choices=["cosine", "plateau", "step", "none"],
+        default=None,
+        help=(
+            "Override lr_scheduler type from YAML. "
+            "'cosine' = warmup + CosineAnnealingLR; "
+            "'plateau' = ReduceLROnPlateau (monitors val_loss); "
+            "'step' = StepLR (requires step_size in YAML); "
+            "'none' = constant LR (disables scheduler)."
+        ),
+    )
+    parser.add_argument(
         "--analyze",
         action="store_true",
         help="Analyze existing results and print comparison table",
@@ -1665,6 +1698,16 @@ def main():
             patience = training["patience"]
         else:
             patience = PATIENCE
+
+    if args.scheduler_type is not None:
+        if training is None:
+            training = {}
+        if args.scheduler_type == "none":
+            training["lr_scheduler"] = None
+        else:
+            if not isinstance(training.get("lr_scheduler"), dict):
+                training["lr_scheduler"] = {}
+            training["lr_scheduler"]["type"] = args.scheduler_type
 
     batch_size = args.batch_size
     if batch_size is None:
