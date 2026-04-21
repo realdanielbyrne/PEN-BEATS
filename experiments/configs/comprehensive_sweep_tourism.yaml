@@ -53,14 +53,12 @@ dataset: tourism
 periods:
   - Tourism-Yearly
 
-
-
 training:
   active_g: false
   sum_losses: false
   activation: ReLU
-  max_epochs: 500
-  patience: 100
+  max_epochs: 200
+  patience: 20
   n_blocks_per_stack: 1
   share_weights: true
   loss: SMAPELoss
@@ -76,6 +74,29 @@ lr_scheduler:
 block_params:
   wavelet_type: db3
 
+runs:
+  n_runs: 10
+  seed_mode: random
+
+output:
+  results_dir: experiments/results
+  csv_filename: comprehensive_sweep_tourism_results.csv
+  save_predictions: false
+
+logging:
+  wandb:
+    enabled: false
+    project: nbeats-lightning
+  tensorboard: false
+
+hardware:
+  accelerator: auto
+  num_workers: 5
+  pin_memory: true
+  
+analysis:
+  enabled: true
+  ranking: true
 
 extra_csv_columns:
   - arch_family
@@ -2735,27 +2756,3 @@ configs:
       trend_thetas_dim_cfg: null
       skip_distance_cfg: 5
       active_g_cfg: false
-
-runs:
-  n_runs: 10
-  seed_mode: random
-
-output:
-  results_dir: experiments/results
-  csv_filename: comprehensive_sweep_tourism_results.csv
-  save_predictions: false
-
-logging:
-  wandb:
-    enabled: false
-    project: nbeats-lightning
-  tensorboard: false
-
-hardware:
-  accelerator: auto
-  num_workers: 0
-  worker_id: ""
-
-analysis:
-  enabled: true
-  ranking: true

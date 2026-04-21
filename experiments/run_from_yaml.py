@@ -93,16 +93,16 @@ DEFAULT_TRAINING = {
     "sum_losses": False,
     "activation": "ReLU",
     "loss": LOSS,
-    "optimizer": "Adam",          # Adam | SGD | RMSprop | Adagrad | Adadelta | AdamW
+    "optimizer": "Adam",  # Adam | SGD | RMSprop | Adagrad | Adadelta | AdamW
     "learning_rate": LEARNING_RATE,
     "max_epochs": MAX_EPOCHS,
     "patience": EARLY_STOPPING_PATIENCE,
     "n_blocks_per_stack": 1,
     "share_weights": True,
-    "batch_size": None,          # None = auto-resolve per dataset/period
-    "forecast_multiplier": None, # None = auto-resolve per dataset
-    "skip_distance": 0,          # Re-inject original input every N stacks (0 = disabled)
-    "skip_alpha": 0.0,           # Mixing weight for skip injection (float or "learnable")
+    "batch_size": None,  # None = auto-resolve per dataset/period
+    "forecast_multiplier": None,  # None = auto-resolve per dataset
+    "skip_distance": 0,  # Re-inject original input every N stacks (0 = disabled)
+    "skip_alpha": 0.0,  # Mixing weight for skip injection (float or "learnable")
 }
 
 DEFAULT_PROTOCOL = {
@@ -132,13 +132,13 @@ DEFAULT_RUNS = {
     "n_runs": N_RUNS_DEFAULT,
     "base_seed": BASE_SEED,
     "seed_mode": "sequential",  # sequential | random | fixed
-    "seed": None,               # fixed seed used when seed_mode="fixed"
-    "seeds": None,              # explicit per-run list; overrides seed_mode + base_seed
+    "seed": None,  # fixed seed used when seed_mode="fixed"
+    "seeds": None,  # explicit per-run list; overrides seed_mode + base_seed
 }
 
 DEFAULT_OUTPUT = {
     "results_dir": os.path.join(_EXPERIMENTS_DIR, "results"),
-    "csv_filename": None,            # None → "{experiment_name}_results.csv"
+    "csv_filename": None,  # None → "{experiment_name}_results.csv"
     "save_predictions": True,
     "predictions_subdir": "predictions",
 }
@@ -164,6 +164,7 @@ DEFAULT_HARDWARE = {
 # Utility: Deep Merge
 # ---------------------------------------------------------------------------
 
+
 def deep_merge(base: dict, override: dict) -> dict:
     """Recursively merge *override* into *base*, returning a new dict.
 
@@ -172,9 +173,7 @@ def deep_merge(base: dict, override: dict) -> dict:
     """
     result = copy.deepcopy(base)
     for key, val in override.items():
-        if (key in result
-                and isinstance(result[key], dict)
-                and isinstance(val, dict)):
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
             result[key] = deep_merge(result[key], val)
         else:
             result[key] = val
@@ -206,6 +205,7 @@ def apply_protocol_training_fallbacks(
 # YAML Loading
 # ---------------------------------------------------------------------------
 
+
 def load_yaml_config(path: str) -> dict:
     """Load and return a YAML configuration file as a plain dict."""
     with open(path, "r", encoding="utf-8") as fh:
@@ -218,6 +218,7 @@ def load_yaml_config(path: str) -> dict:
 # ---------------------------------------------------------------------------
 # Stack Type Parsing
 # ---------------------------------------------------------------------------
+
 
 def parse_stack_spec(spec) -> list:
     """Parse a stack specification into a flat list of block-type strings.
@@ -317,6 +318,7 @@ def parse_stack_spec(spec) -> list:
 # Config Building
 # ---------------------------------------------------------------------------
 
+
 def _extract_stack_spec(config_spec: dict, top_level_cfg: dict):
     """Extract the stack specification from config_spec or top-level config."""
     # Config-level 'stacks' key takes priority, then 'stack_types'
@@ -354,9 +356,7 @@ def resolve_config(config_spec: dict, top_level_cfg: dict) -> dict:
         built = UNIFIED_CONFIGS[builtin_name]
         base = {
             "name": config_spec.get("name", builtin_name),
-            "category": config_spec.get(
-                "category", built.get("category", "builtin")
-            ),
+            "category": config_spec.get("category", built.get("category", "builtin")),
             "stack_types": list(built["stack_types"]),
             "n_blocks_per_stack": config_spec.get(
                 "n_blocks_per_stack", built.get("n_blocks_per_stack", 1)
@@ -403,7 +403,8 @@ def resolve_config(config_spec: dict, top_level_cfg: dict) -> dict:
     top_protocol = deep_merge(DEFAULT_PROTOCOL, top_level_cfg.get("protocol", {}) or {})
     cfg_protocol = deep_merge(top_protocol, config_spec.get("protocol", {}) or {})
     cfg_training = apply_protocol_training_fallbacks(
-        cfg_training, cfg_protocol, explicit_training)
+        cfg_training, cfg_protocol, explicit_training
+    )
 
     # Propagate n_blocks_per_stack and share_weights into training for convenience
     cfg_training["n_blocks_per_stack"] = base["n_blocks_per_stack"]
@@ -412,9 +413,7 @@ def resolve_config(config_spec: dict, top_level_cfg: dict) -> dict:
     base["protocol"] = cfg_protocol
 
     # ── Merge block params ────────────────────────────────────────────────
-    top_block = deep_merge(
-        DEFAULT_BLOCK_PARAMS, top_level_cfg.get("block_params", {})
-    )
+    top_block = deep_merge(DEFAULT_BLOCK_PARAMS, top_level_cfg.get("block_params", {}))
     cfg_block = deep_merge(top_block, config_spec.get("block_params", {}))
     base["block_params"] = cfg_block
 
@@ -488,8 +487,13 @@ def build_configs(top_level_cfg: dict) -> list:
     }
     # Propagate any config-level overrides from top-level
     for key in (
-        "n_blocks_per_stack", "share_weights",
-        "training", "block_params", "lr_scheduler", "extra_fields", "protocol",
+        "n_blocks_per_stack",
+        "share_weights",
+        "training",
+        "block_params",
+        "lr_scheduler",
+        "extra_fields",
+        "protocol",
     ):
         if key in top_level_cfg:
             single_spec[key] = top_level_cfg[key]
@@ -499,6 +503,7 @@ def build_configs(top_level_cfg: dict) -> list:
 # ---------------------------------------------------------------------------
 # Pass Building
 # ---------------------------------------------------------------------------
+
 
 def build_passes(top_level_cfg: dict) -> list:
     """Build the list of pass dicts from a YAML config.
@@ -540,6 +545,7 @@ def build_passes(top_level_cfg: dict) -> list:
 # CSV Column Building
 # ---------------------------------------------------------------------------
 
+
 def build_csv_columns(top_level_cfg: dict) -> list:
     """Return the CSV column list: base columns + any extras from YAML."""
     extras = top_level_cfg.get("extra_csv_columns") or []
@@ -550,33 +556,74 @@ def build_csv_columns(top_level_cfg: dict) -> list:
 # LR Scheduler Resolution
 # ---------------------------------------------------------------------------
 
+
 def resolve_lr_scheduler(lr_scheduler_cfg, max_epochs: int):
     """Convert YAML lr_scheduler mapping to a run_single_experiment-compatible dict.
 
     Returns ``None`` if the scheduler is disabled or max_epochs is too
     small for the warmup period.
 
-    Expected YAML structure::
+    Expected YAML structure for cosine (default)::
 
         lr_scheduler:
+          type: cosine          # optional; cosine is the default
           warmup_epochs: 15
           T_max: null      # null → max_epochs - warmup_epochs
           eta_min: 0.000001
+
+    Expected YAML structure for ReduceLROnPlateau::
+
+        lr_scheduler:
+          type: plateau
+          factor: 0.5      # LR multiplier on trigger
+          patience: 10     # epochs with no improvement before reducing
+          min_lr: 0.00001  # LR floor
+          mode: min        # "min" for val_loss, "max" for accuracy metrics
+          cooldown: 0      # epochs to wait after reduction before monitoring resumes
+          monitor: val_loss
+
+    Set to ``null`` or omit entirely to disable (constant LR).
     """
     if not lr_scheduler_cfg:
         return None
+
+    sched_type = str(lr_scheduler_cfg.get("type", "cosine")).lower()
+
+    if sched_type == "plateau":
+        return {
+            "type": "plateau",
+            "factor": float(lr_scheduler_cfg.get("factor", 0.5)),
+            "patience": int(lr_scheduler_cfg.get("patience", 10)),
+            "min_lr": float(
+                lr_scheduler_cfg.get("min_lr", lr_scheduler_cfg.get("eta_min", 1e-5))
+            ),
+            "mode": str(lr_scheduler_cfg.get("mode", "min")),
+            "cooldown": int(lr_scheduler_cfg.get("cooldown", 0)),
+            "monitor": str(lr_scheduler_cfg.get("monitor", "val_loss")),
+        }
+
+    if sched_type == "none":
+        return None
+
+    # cosine / cosine_warmup / sequential (default)
     warmup = int(lr_scheduler_cfg.get("warmup_epochs", 15))
     if max_epochs <= warmup:
         return None
     t_max_raw = lr_scheduler_cfg.get("T_max")
     t_max = int(t_max_raw) if t_max_raw is not None else max(max_epochs - warmup, 1)
     eta_min = float(lr_scheduler_cfg.get("eta_min", 1e-6))
-    return {"warmup_epochs": warmup, "T_max": t_max, "eta_min": eta_min}
+    return {
+        "type": sched_type,
+        "warmup_epochs": warmup,
+        "T_max": t_max,
+        "eta_min": eta_min,
+    }
 
 
 # ---------------------------------------------------------------------------
 # Dataset Key Helper
 # ---------------------------------------------------------------------------
+
 
 def _dataset_key_from_dataset(dataset) -> str:
     """Derive the FORECAST_MULTIPLIERS / BATCH_SIZES key from a dataset object."""
@@ -584,7 +631,7 @@ def _dataset_key_from_dataset(dataset) -> str:
     for key in ("m4", "tourism", "milk", "traffic", "weather"):
         if key in name:
             return key
-    return "m4"   # safe fallback
+    return "m4"  # safe fallback
 
 
 def _resolve_batch_size(training: dict, dataset, period: str) -> int:
@@ -644,7 +691,7 @@ def _compute_seed(runs_cfg: dict, run_idx: int) -> int:
 
     seed_mode = runs_cfg.get("seed_mode", "sequential")
     if seed_mode == "random":
-        return int(np.random.randint(0, 2 ** 31))
+        return int(np.random.randint(0, 2**31))
     elif seed_mode == "fixed":
         fixed = runs_cfg.get("seed")
         return int(fixed) if fixed is not None else BASE_SEED
@@ -656,6 +703,7 @@ def _compute_seed(runs_cfg: dict, run_idx: int) -> int:
 # ---------------------------------------------------------------------------
 # Single Run Wrapper
 # ---------------------------------------------------------------------------
+
 
 def run_single_config(
     config: dict,
@@ -816,6 +864,7 @@ def run_single_config(
 # Standard Run Loop
 # ---------------------------------------------------------------------------
 
+
 def _run_standard(
     configs: list,
     passes: list,
@@ -853,9 +902,9 @@ def _run_standard(
 
                 done += 1
                 exp_tag = pass_name
-                if (not dry_run
-                        and result_exists(csv_path, exp_tag, config_name,
-                                          period, run_idx)):
+                if not dry_run and result_exists(
+                    csv_path, exp_tag, config_name, period, run_idx
+                ):
                     print(
                         f"    [{done}/{total}] [SKIP] "
                         f"{config_name} / {period} / run {run_idx}"
@@ -863,9 +912,11 @@ def _run_standard(
                     continue
 
                 seed = _compute_seed(runs_cfg, run_idx)
-                print(f"\n    [{done}/{total}] "
-                      f"{config_name} / {period} / run {run_idx}"
-                      f"  (seed={seed})")
+                print(
+                    f"\n    [{done}/{total}] "
+                    f"{config_name} / {period} / run {run_idx}"
+                    f"  (seed={seed})"
+                )
 
                 run_single_config(
                     config=config,
@@ -890,6 +941,7 @@ def _run_standard(
 # ---------------------------------------------------------------------------
 # Successive Halving
 # ---------------------------------------------------------------------------
+
 
 def _load_round_results(csv_path: str, round_num: int) -> list:
     """Return all CSV rows that belong to search round *round_num*."""
@@ -1008,7 +1060,7 @@ def rank_configs_for_promotion(
         f"{'ValLoss':>9} {'Div%':>5} {'Runs':>4}"
     )
     print(f"  {'-'*75}")
-    for i, r in enumerate(rankings[:min(40, total)]):
+    for i, r in enumerate(rankings[: min(40, total)]):
         marker = " *" if r["config_name"] in promoted else "  "
         div_str = f"{r['divergence_rate'] * 100:.0f}%"
         meta_str = (
@@ -1032,10 +1084,7 @@ def _init_meta_forecaster(mf_cfg: dict):
 
     Returns None (with a warning) if training data is missing or training fails.
     """
-    training_csvs = [
-        os.path.abspath(p)
-        for p in (mf_cfg.get("training_csvs") or [])
-    ]
+    training_csvs = [os.path.abspath(p) for p in (mf_cfg.get("training_csvs") or [])]
     existing = [p for p in training_csvs if os.path.exists(p)]
     if not existing:
         print(
@@ -1167,7 +1216,7 @@ def _run_successive_halving(
         n_runs_round = int(round_spec.get("n_runs", 3))
         keep_fraction = float(round_spec.get("keep_fraction", 0.5))
         top_k = round_spec.get("top_k")
-        is_last_round = (round_idx == len(search_rounds) - 1)
+        is_last_round = round_idx == len(search_rounds) - 1
 
         print(
             f"\n  -- Search Round {round_num}/{len(search_rounds)} --  "
@@ -1190,11 +1239,13 @@ def _run_successive_halving(
                         return
 
                     exp_tag = f"{pass_name}_r{round_num}"
-                    if (not dry_run
-                            and result_exists(
-                                csv_path, exp_tag, config_name,
-                                period, run_idx,
-                            )):
+                    if not dry_run and result_exists(
+                        csv_path,
+                        exp_tag,
+                        config_name,
+                        period,
+                        run_idx,
+                    ):
                         print(
                             f"    [SKIP] r{round_num} / {config_name} "
                             f"/ {period} / run {run_idx}"
@@ -1222,11 +1273,7 @@ def _run_successive_halving(
                     )
 
         # After round 1, enrich CSV with meta-forecaster predictions
-        use_meta = (
-            round_num == 1
-            and meta_forecaster is not None
-            and not dry_run
-        )
+        use_meta = round_num == 1 and meta_forecaster is not None and not dry_run
         if use_meta:
             _update_meta_predictions(csv_path, round_num, meta_forecaster)
 
@@ -1261,6 +1308,7 @@ def _run_successive_halving(
 # ---------------------------------------------------------------------------
 # Post-Experiment Analysis
 # ---------------------------------------------------------------------------
+
 
 def _run_analysis(csv_path: str, analysis_cfg: dict, dataset_name: str):
     """Print an optional post-experiment summary after all runs complete."""
@@ -1308,21 +1356,16 @@ def _print_ranking_table(rows: list):
         key=lambda x: x[1],
     )
 
-    print(
-        f"\n  {'Rank':<5} {'Config':<42} "
-        f"{'Mean OWA':>9} {'Std':>8} {'N':>4}"
-    )
+    print(f"\n  {'Rank':<5} {'Config':<42} " f"{'Mean OWA':>9} {'Std':>8} {'N':>4}")
     print(f"  {'-'*67}")
     for i, (name, mean_owa, std_owa, n) in enumerate(ranked):
-        print(
-            f"  {i + 1:<5} {name:<42} "
-            f"{mean_owa:>9.4f} {std_owa:>8.4f} {n:>4}"
-        )
+        print(f"  {i + 1:<5} {name:<42} " f"{mean_owa:>9.4f} {std_owa:>8.4f} {n:>4}")
 
 
 # ---------------------------------------------------------------------------
 # Main Orchestrator
 # ---------------------------------------------------------------------------
+
 
 def run_experiment(
     top_level_cfg: dict,
@@ -1400,9 +1443,11 @@ def run_experiment(
     print(f"\n{'=' * 70}")
     print(f"YAML Experiment Launcher")
     print(f"  Experiment:  {experiment_name}")
-    print(f"  Configs:     {len(configs)}  "
-          f"({', '.join(c['name'] for c in configs[:5])}"
-          f"{'...' if len(configs) > 5 else ''})")
+    print(
+        f"  Configs:     {len(configs)}  "
+        f"({', '.join(c['name'] for c in configs[:5])}"
+        f"{'...' if len(configs) > 5 else ''})"
+    )
     print(f"  Passes:      {[p['name'] for p in passes]}")
     print(f"  Datasets:    {dataset_names}")
     print(f"  Runs/config: {n_runs}")
@@ -1444,8 +1489,7 @@ def run_experiment(
         os.makedirs(results_dir, exist_ok=True)
 
         csv_filename = (
-            output_cfg.get("csv_filename")
-            or f"{experiment_name}_results.csv"
+            output_cfg.get("csv_filename") or f"{experiment_name}_results.csv"
         )
         csv_path = os.path.join(results_dir, csv_filename)
 
@@ -1467,8 +1511,7 @@ def run_experiment(
             print(f"\n  Period: {period}")
 
             if analyze_only:
-                _run_analysis(csv_path, {**analysis_cfg, "enabled": True},
-                              dataset_name)
+                _run_analysis(csv_path, {**analysis_cfg, "enabled": True}, dataset_name)
                 continue
 
             if not dry_run:
@@ -1537,6 +1580,7 @@ def run_experiment(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="YAML-driven Unified Experiment Launcher for N-BEATS Lightning",
@@ -1561,19 +1605,27 @@ Examples:
         help="Override dataset (default: from YAML).",
     )
     parser.add_argument(
-        "--periods", nargs="+", default=None,
+        "--periods",
+        nargs="+",
+        default=None,
         help="Override period(s) (default: from YAML).",
     )
     parser.add_argument(
-        "--n-runs", type=int, default=None,
+        "--n-runs",
+        type=int,
+        default=None,
         help="Override number of runs per config (default: from YAML).",
     )
     parser.add_argument(
-        "--max-epochs", type=int, default=None,
+        "--max-epochs",
+        type=int,
+        default=None,
         help="Override maximum training epochs (default: from YAML).",
     )
     parser.add_argument(
-        "--batch-size", type=int, default=None,
+        "--batch-size",
+        type=int,
+        default=None,
         help="Override batch size (default: auto per dataset/period).",
     )
     parser.add_argument(
@@ -1583,40 +1635,64 @@ Examples:
         help="Override accelerator (default: from YAML or 'auto').",
     )
     parser.add_argument(
-        "--gpu-id", type=int, default=None,
+        "--gpu-id",
+        type=int,
+        default=None,
         help="GPU index to use (sets CUDA_VISIBLE_DEVICES). Overrides YAML hardware.gpu_id.",
     )
     parser.add_argument(
-        "--num-workers", type=int, default=None,
+        "--num-workers",
+        type=int,
+        default=None,
         help="Override DataLoader workers (default: from YAML).",
     )
     parser.add_argument(
-        "--worker-id", default=None,
+        "--worker-id",
+        default=None,
         help="Optional worker label recorded in atomic claim files.",
     )
     parser.add_argument(
-        "--wandb", action="store_true", default=False,
+        "--wandb",
+        action="store_true",
+        default=False,
         help="Enable Weights & Biases logging.",
     )
     parser.add_argument(
-        "--wandb-project", default=None,
+        "--wandb-project",
+        default=None,
         help="W&B project name (default: from YAML).",
     )
     parser.add_argument(
-        "--no-save-predictions", action="store_true",
+        "--no-save-predictions",
+        action="store_true",
         help="Disable NPZ prediction saving.",
     )
     parser.add_argument(
-        "--results-dir", default=None,
+        "--results-dir",
+        default=None,
         help="Override results directory (default: experiments/results).",
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Print what would run without executing any training.",
     )
     parser.add_argument(
-        "--analyze-only", action="store_true",
+        "--analyze-only",
+        action="store_true",
         help="Skip all training; run analysis on existing results only.",
+    )
+    parser.add_argument(
+        "--scheduler-type",
+        choices=["cosine", "plateau", "step", "none"],
+        default=None,
+        help=(
+            "Override lr_scheduler type from YAML. "
+            "'cosine' = warmup + CosineAnnealingLR; "
+            "'plateau' = ReduceLROnPlateau (monitors val_loss); "
+            "'step' = StepLR (requires step_size in YAML); "
+            "'none' = constant LR (disables scheduler)."
+        ),
     )
 
     args = parser.parse_args()
@@ -1651,17 +1727,22 @@ Examples:
     if args.worker_id is not None:
         cli_overrides.setdefault("hardware", {})["worker_id"] = args.worker_id
     if args.wandb:
-        cli_overrides.setdefault("logging", {}).setdefault(
-            "wandb", {}
-        )["enabled"] = True
+        cli_overrides.setdefault("logging", {}).setdefault("wandb", {})[
+            "enabled"
+        ] = True
     if args.wandb_project is not None:
-        cli_overrides.setdefault("logging", {}).setdefault(
-            "wandb", {}
-        )["project"] = args.wandb_project
+        cli_overrides.setdefault("logging", {}).setdefault("wandb", {})[
+            "project"
+        ] = args.wandb_project
     if args.no_save_predictions:
         cli_overrides.setdefault("output", {})["save_predictions"] = False
     if args.results_dir is not None:
         cli_overrides.setdefault("output", {})["results_dir"] = args.results_dir
+    if args.scheduler_type is not None:
+        if args.scheduler_type == "none":
+            cli_overrides["lr_scheduler"] = None
+        else:
+            cli_overrides.setdefault("lr_scheduler", {})["type"] = args.scheduler_type
 
     # ── Run ──────────────────────────────────────────────────────────────
     run_experiment(

@@ -232,11 +232,36 @@ block_params:
 
 ## `lr_scheduler` — Learning Rate Scheduler
 
+Cosine annealing with warmup (default):
+
 ```yaml
 lr_scheduler:
+  type: cosine             # optional; "cosine" is the default
   warmup_epochs: 15        # Hold LR constant for this many epochs
   T_max: null              # CosineAnnealing period; null = max_epochs - warmup_epochs
   eta_min: 0.000001        # Minimum LR after cosine decay
+```
+
+ReduceLROnPlateau (recommended when using early stopping):
+
+```yaml
+lr_scheduler:
+  type: plateau
+  factor: 0.5              # Multiply LR by this on trigger (default 0.5)
+  patience: 10             # Epochs with no val_loss improvement before reducing (default 10)
+  min_lr: 0.00001          # LR floor (default 1e-5); also accepts eta_min as alias
+  mode: min                # "min" for val_loss; "max" for accuracy-style metrics
+  cooldown: 0              # Epochs to wait after a reduction before resuming (default 0)
+  monitor: val_loss        # Metric to watch (default "val_loss")
+```
+
+StepLR (fixed-interval decay):
+
+```yaml
+lr_scheduler:
+  type: step
+  step_size: 50            # Required: decay every N epochs
+  gamma: 0.5               # Decay factor (default 0.5)
 ```
 
 Set to `null` or omit to disable the scheduler entirely (constant LR).

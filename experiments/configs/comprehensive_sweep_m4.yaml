@@ -51,12 +51,7 @@ description: >
 
 dataset: m4
 periods:
-
   - Daily
-
-hardware:
-  pin_memory: true
-  num_workers: 10
 
 training:
   active_g: false
@@ -78,6 +73,29 @@ lr_scheduler:
 block_params:
   wavelet_type: db3
 
+runs:
+  n_runs: 10
+  seed_mode: random
+
+output:
+  results_dir: experiments/results
+  csv_filename: comprehensive_sweep_m4_results.csv
+  save_predictions: false
+
+logging:
+  wandb:
+    enabled: false
+    project: nbeats-lightning
+  tensorboard: false
+
+hardware:
+  accelerator: auto
+  num_workers: 5
+  pin_memory: true
+
+analysis:
+  enabled: true
+  ranking: true
 
 extra_csv_columns:
   - arch_family
@@ -2738,26 +2756,4 @@ configs:
       skip_distance_cfg: 5
       active_g_cfg: false
 
-runs:
-  n_runs: 10
-  seed_mode: random
 
-output:
-  results_dir: experiments/results
-  csv_filename: comprehensive_sweep_m4_results.csv
-  save_predictions: false
-
-logging:
-  wandb:
-    enabled: false
-    project: nbeats-lightning
-  tensorboard: false
-
-hardware:
-  accelerator: auto
-  num_workers: 0
-  worker_id: ""
-
-analysis:
-  enabled: true
-  ranking: true
