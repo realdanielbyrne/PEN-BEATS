@@ -188,6 +188,8 @@ class _NBeatsBase(pl.LightningModule):
         loss = loss + self.kl_weight * kl_loss
 
         self.log("train_loss", loss, prog_bar=True)
+        lr = self.trainer.optimizers[0].param_groups[0]["lr"]
+        self.log("lr", lr, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
