@@ -502,7 +502,9 @@ def load_yaml_configs(yaml_path):
             # plateau-specific fields
             "factor": _coerce_float(lr_sched_raw.get("factor")),
             "patience": _coerce_int(lr_sched_raw.get("patience")),
-            "min_lr": _coerce_float(lr_sched_raw.get("min_lr", lr_sched_raw.get("eta_min"))),
+            "min_lr": _coerce_float(
+                lr_sched_raw.get("min_lr", lr_sched_raw.get("eta_min"))
+            ),
             "mode": lr_sched_raw.get("mode", "min"),
             "cooldown": _coerce_int(lr_sched_raw.get("cooldown")),
             "monitor": lr_sched_raw.get("monitor", "val_loss"),
@@ -1126,15 +1128,27 @@ def _run_experiment_body(
         elif sched_type == "plateau":
             lr_scheduler_config = {
                 "type": "plateau",
-                "factor": t_lr_sched.get("factor") if t_lr_sched.get("factor") is not None else 0.5,
-                "patience": t_lr_sched.get("patience") if t_lr_sched.get("patience") is not None else 10,
+                "factor": (
+                    t_lr_sched.get("factor")
+                    if t_lr_sched.get("factor") is not None
+                    else 0.5
+                ),
+                "patience": (
+                    t_lr_sched.get("patience")
+                    if t_lr_sched.get("patience") is not None
+                    else 10
+                ),
                 "min_lr": (
                     t_lr_sched.get("min_lr")
                     if t_lr_sched.get("min_lr") is not None
                     else t_lr_sched.get("eta_min", 1e-5)
                 ),
                 "mode": t_lr_sched.get("mode", "min"),
-                "cooldown": t_lr_sched.get("cooldown") if t_lr_sched.get("cooldown") is not None else 0,
+                "cooldown": (
+                    t_lr_sched.get("cooldown")
+                    if t_lr_sched.get("cooldown") is not None
+                    else 0
+                ),
                 "monitor": t_lr_sched.get("monitor", "val_loss"),
             }
         elif sched_type == "step":
