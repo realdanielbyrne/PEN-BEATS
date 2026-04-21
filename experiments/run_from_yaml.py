@@ -113,6 +113,16 @@ DEFAULT_PROTOCOL = {
     "loss": None,
     "forecast_multiplier": None,
     "batch_size": None,
+    # ── Paper-style sampling (N-BEATS / NHiTS) ──────────────────────────
+    # "sliding" (default) enumerates all valid (col, start_idx) windows
+    # and shuffles one full pass per epoch. "paper" draws batches by
+    # sampling windows uniformly at random per step, with replacement,
+    # exactly steps_per_epoch updates per Lightning epoch.
+    "sampling_style": "sliding",
+    "steps_per_epoch": None,
+    "sampling_weights": "uniform",
+    # Required to use max_epochs (instead of max_steps) under "paper".
+    "acknowledge_epoch_semantics": False,
 }
 
 DEFAULT_BLOCK_PARAMS = {
@@ -857,6 +867,13 @@ def run_single_config(
         generic_dim=int(block_params.get("generic_dim", 5)),
         t_width=int(block_params.get("t_width", 256)),
         kl_weight=float(block_params.get("kl_weight", 0.1)),
+        sampling_style=str(protocol.get("sampling_style", "sliding")),
+        steps_per_epoch=protocol.get("steps_per_epoch"),
+        sampling_weights=str(protocol.get("sampling_weights", "uniform")),
+        acknowledge_epoch_semantics=bool(
+            protocol.get("acknowledge_epoch_semantics", False)
+        ),
+        max_steps=training.get("max_steps"),
     )
 
 

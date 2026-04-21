@@ -1,4 +1,10 @@
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import (
+    DataLoader,
+    Dataset,
+    RandomSampler,
+    WeightedRandomSampler,
+    random_split,
+)
 import numpy as np
 import pandas as pd
 import torch
@@ -480,6 +486,9 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
         normalization_style=None,
         val_ratio=None,
         val_data=None,
+        sampling_style="sliding",
+        steps_per_epoch=None,
+        sampling_weights="uniform",
     ):
         """
         The ColumnarCollectionTimeSeriesDataModule class is a PyTorch Datamodule that takes a
@@ -507,6 +516,22 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
             val_data (pd.DataFrame, optional): Dedicated external validation DataFrame.
                 When provided, ``val_ratio`` is ignored and ``dataframe`` is used
                 entirely for training.
+            sampling_style ({'sliding', 'paper'}, optional): Training-batch sampling
+                protocol. ``'sliding'`` (default) shuffles the enumerated sliding-window
+                dataset for one full pass per epoch (legacy behavior). ``'paper'``
+                reproduces the N-BEATS / NHiTS iteration-based uniform sampling
+                protocol: each epoch draws ``steps_per_epoch * batch_size`` windows
+                with replacement. Affects ``train_dataloader()`` only; validation
+                and test dataloaders always use dense sliding windows.
+            steps_per_epoch (int, optional): Required when ``sampling_style='paper'``.
+                Number of gradient updates per Lightning epoch. Must be a positive int.
+            sampling_weights ({'uniform', 'by_series'}, optional): Weighting scheme
+                when ``sampling_style='paper'``. ``'uniform'`` (default) draws
+                uniformly over the enumerated window index list, which biases
+                toward long series in proportion to their window count.
+                ``'by_series'`` weights each index by ``1 / n_windows_in_its_column``
+                so every series is equally likely per step. Ignored when
+                ``sampling_style='sliding'``.
         """
         super().__init__()
         self.backcast_length = backcast_length
@@ -529,6 +554,36 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
         self.normalization_style = normalization_style
         self.val_ratio = val_ratio
         self._external_val_data = val_data
+
+        if sampling_style not in ("sliding", "paper"):
+            raise ValueError(
+                f"sampling_style must be one of {{'sliding','paper'}}, "
+                f"got {sampling_style!r}"
+            )
+        if sampling_weights not in ("uniform", "by_series"):
+            raise ValueError(
+                f"sampling_weights must be one of {{'uniform','by_series'}}, "
+                f"got {sampling_weights!r}"
+            )
+        if sampling_style == "paper":
+            if steps_per_epoch is None:
+                raise ValueError(
+                    "sampling_style='paper' requires steps_per_epoch to be set."
+                )
+            if not isinstance(steps_per_epoch, int) or isinstance(
+                steps_per_epoch, bool
+            ):
+                raise ValueError(
+                    f"steps_per_epoch must be a positive int, got {steps_per_epoch!r}"
+                )
+            if steps_per_epoch <= 0:
+                raise ValueError(
+                    f"steps_per_epoch must be a positive int, got {steps_per_epoch!r}"
+                )
+        self.sampling_style = sampling_style
+        self.steps_per_epoch = steps_per_epoch
+        self.sampling_weights = sampling_weights
+        self._by_series_weights = None
 
         self.total_length = backcast_length + forecast_length
         self.dataframe = dataframe
@@ -585,11 +640,52 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
             normalization_style=self.normalization_style,
         )
 
+        # Cache per-index weights for 'by_series' sampling so each series is
+        # drawn with equal probability regardless of how many windows it offers.
+        if self.sampling_style == "paper" and self.sampling_weights == "by_series":
+            col_counts = {}
+            for col, _ in self.train_dataset.col_indices:
+                col_counts[col] = col_counts.get(col, 0) + 1
+            self._by_series_weights = torch.tensor(
+                [1.0 / col_counts[col] for col, _ in self.train_dataset.col_indices],
+                dtype=torch.double,
+            )
+        else:
+            self._by_series_weights = None
+
     def train_dataloader(self):
+        if self.sampling_style == "sliding":
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.batch_size,
+                shuffle=True,
+                num_workers=self.num_workers,
+                pin_memory=self.pin_memory,
+                persistent_workers=self.num_workers > 0,
+            )
+
+        num_samples = self.steps_per_epoch * self.batch_size
+        if self.sampling_weights == "by_series":
+            if self._by_series_weights is None:
+                raise RuntimeError(
+                    "by_series weights are unset; call setup() before train_dataloader()."
+                )
+            sampler = WeightedRandomSampler(
+                self._by_series_weights,
+                num_samples=num_samples,
+                replacement=True,
+            )
+        else:
+            sampler = RandomSampler(
+                self.train_dataset,
+                replacement=True,
+                num_samples=num_samples,
+            )
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
-            shuffle=True,
+            sampler=sampler,
+            shuffle=False,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             persistent_workers=self.num_workers > 0,

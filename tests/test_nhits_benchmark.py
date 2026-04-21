@@ -3,6 +3,7 @@
 import os
 import sys
 import tempfile
+import warnings
 
 import pytest
 import yaml
@@ -150,4 +151,130 @@ class TestLoadYamlConfigs:
         r = result["runs"]
         assert r["n_runs"] == 8
         assert r["base_seed"] == 1
+
+
+# ---------------------------------------------------------------------------
+# sampling_style='paper' — epochs-vs-steps guard
+# ---------------------------------------------------------------------------
+
+
+def _paper_protocol(
+    *,
+    sampling_style="paper",
+    steps_per_epoch=5,
+    sampling_weights="uniform",
+    acknowledge_epoch_semantics=False,
+):
+    return {
+        "train_ratio": 0.7,
+        "val_ratio": 0.1,
+        "loss": "MSELoss",
+        "forecast_multiplier": 5,
+        "batch_size": 32,
+        "normalize": False,
+        "normalization_style": None,
+        "include_target": True,
+        "sampling_style": sampling_style,
+        "steps_per_epoch": steps_per_epoch,
+        "sampling_weights": sampling_weights,
+        "acknowledge_epoch_semantics": acknowledge_epoch_semantics,
+    }
+
+
+def _paper_training(*, max_steps=None):
+    return {
+        "activation": "ReLU",
+        "active_g": False,
+        "sum_losses": False,
+        "learning_rate": 1e-3,
+        "num_workers": 0,
+        "max_steps": max_steps,
+        "early_stopping": True,
+        "val_check_interval": None,
+    }
+
+
+class TestPaperSamplingEpochsGuard:
+    """The epochs-vs-steps guard in _run_experiment_body."""
+
+    @pytest.fixture
+    def stub_args(self, tmp_path):
+        config = {
+            "config_name": "DummyCfg",
+            "model_type": "NBeatsNet",
+            "stack_types": ["Generic"],
+            "active_g": False,
+        }
+        return dict(
+            config=config,
+            dataset_name="weather",
+            horizon=96,
+            run_idx=0,
+            csv_path=str(tmp_path / "results.csv"),
+            max_epochs=10,
+            patience=3,
+            batch_size=32,
+            worker_id="test",
+            block_params={"thetas_dim": 5, "latent_dim": 4, "basis_dim": "eq_fcast"},
+            runs={"base_seed": 1},
+            skip_horizon_overrides=False,
+        )
+
+    def test_paper_without_max_steps_errors(self, stub_args):
+        stub_args["protocol"] = _paper_protocol()
+        stub_args["training"] = _paper_training(max_steps=None)
+        with pytest.raises(ValueError, match="acknowledge_epoch_semantics"):
+            rnb._run_experiment_body(**stub_args)
+
+    def test_paper_with_acknowledge_epoch_semantics_warns(self, stub_args, monkeypatch):
+        stub_args["protocol"] = _paper_protocol(acknowledge_epoch_semantics=True)
+        stub_args["training"] = _paper_training(max_steps=None)
+
+        # Stop execution right after the guard runs so we don't try to load
+        # the real Weather dataset.
+        def _blow_up(*a, **kw):
+            raise RuntimeError("short-circuit after guard")
+
+        monkeypatch.setattr(rnb, "WeatherDataset", _blow_up)
+
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            with pytest.raises(RuntimeError, match="short-circuit after guard"):
+                rnb._run_experiment_body(**stub_args)
+
+        messages = [str(w.message) for w in captured if issubclass(w.category, UserWarning)]
+        assert any("gradient steps" in m for m in messages), messages
+
+    def test_paper_with_max_steps_silent(self, stub_args, monkeypatch):
+        stub_args["protocol"] = _paper_protocol()
+        stub_args["training"] = _paper_training(max_steps=50)
+
+        def _blow_up(*a, **kw):
+            raise RuntimeError("short-circuit after guard")
+
+        monkeypatch.setattr(rnb, "WeatherDataset", _blow_up)
+
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            with pytest.raises(RuntimeError, match="short-circuit after guard"):
+                rnb._run_experiment_body(**stub_args)
+
+        # No UserWarning about gradient-step budget should have been emitted.
+        assert not any(
+            "gradient steps" in str(w.message)
+            for w in captured
+            if issubclass(w.category, UserWarning)
+        )
+
+    def test_paper_rejects_invalid_steps_per_epoch(self, stub_args):
+        stub_args["protocol"] = _paper_protocol(steps_per_epoch=0)
+        stub_args["training"] = _paper_training(max_steps=50)
+        with pytest.raises(ValueError, match="steps_per_epoch"):
+            rnb._run_experiment_body(**stub_args)
+
+    def test_paper_missing_steps_per_epoch_errors(self, stub_args):
+        stub_args["protocol"] = _paper_protocol(steps_per_epoch=None)
+        stub_args["training"] = _paper_training(max_steps=50)
+        with pytest.raises(ValueError, match="steps_per_epoch"):
+            rnb._run_experiment_body(**stub_args)
 

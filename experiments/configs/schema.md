@@ -200,6 +200,10 @@ protocol:
   forecast_multiplier: null # fallback when training.forecast_multiplier is not explicitly set
   batch_size: null          # fallback when training.batch_size is not explicitly set
   datamodule: columnar      # "columnar" (default) or "univariate" (80/20 random split)
+  sampling_style: sliding   # "sliding" (default) or "paper" (N-BEATS/NHiTS iteration sampling)
+  steps_per_epoch: null     # required when sampling_style='paper'; gradient updates per epoch
+  sampling_weights: uniform # "uniform" (default) or "by_series" (equal-probability per series)
+  acknowledge_epoch_semantics: false  # opt-in when using max_epochs under sampling_style='paper'
 ```
 
 Notes:
@@ -210,6 +214,10 @@ Notes:
 - `loss`, `forecast_multiplier`, and `batch_size` act as **fallbacks** only when the same fields are not explicitly set under `training`.
 - An explicit `training.batch_size` takes precedence over the tuned `BATCH_SIZES` table. When `training.batch_size` is not set, the tuned table provides the default.
 - `datamodule: univariate` selects `TimeSeriesDataModule` with a flat numpy array and 80/20 random train/val split (via `torch.utils.data.random_split`). This matches the behavior of standalone convergence scripts (e.g. `run_milk_convergence_10stack.py`). Only meaningful for single-series datasets like Milk.
+- `sampling_style` controls training-batch sampling. `'sliding'` (default) enumerates every valid `(column, start_idx)` window and shuffles one full pass per epoch. `'paper'` reproduces the N-BEATS / NHiTS iteration-based protocol: each Lightning epoch draws exactly `steps_per_epoch * batch_size` windows with replacement. **Training-only**: validation and test dataloaders always use dense sliding windows with no replacement.
+- `steps_per_epoch` is **required** when `sampling_style='paper'` (hard error if missing) and must be a positive int. Ignored for `'sliding'`.
+- `sampling_weights='uniform'` samples uniformly over the enumerated window list — biases toward long series proportionally to their window count. `'by_series'` weights each index by `1 / n_windows_in_its_column`, giving every series an equal per-step draw probability (closer to the strict paper protocol for multi-series datasets like Traffic). Ignored for `'sliding'`.
+- **Epoch semantics under `'paper'`**: one "epoch" equals `steps_per_epoch` gradient updates rather than one full pass over the data, so `training.max_epochs` has a different meaning than under `'sliding'`. If `sampling_style='paper'` and `training.max_steps` is unset, you must set `acknowledge_epoch_semantics: true` to opt in (a `UserWarning` then reports the total `max_epochs * steps_per_epoch` step budget). Preferred path: set `training.max_steps` for an unambiguous total training budget.
 
 ---
 

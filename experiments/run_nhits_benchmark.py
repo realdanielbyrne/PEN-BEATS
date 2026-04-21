@@ -32,6 +32,7 @@ import signal
 import sys
 import tempfile
 import time
+import warnings
 from contextlib import contextmanager
 
 # File locking — cross-platform
@@ -188,6 +189,9 @@ CSV_COLUMNS = [
     "stack_types",
     "n_pools_kernel_size",
     "n_freq_downsample",
+    "sampling_style",
+    "steps_per_epoch",
+    "sampling_weights",
 ]
 
 
@@ -455,6 +459,12 @@ def load_yaml_configs(yaml_path):
         ),  # None = auto-detect by dataset
         "normalization_style": protocol_raw.get("normalization_style", None),
         "include_target": protocol_raw.get("include_target", True),
+        "sampling_style": protocol_raw.get("sampling_style", "sliding"),
+        "steps_per_epoch": protocol_raw.get("steps_per_epoch", None),
+        "sampling_weights": protocol_raw.get("sampling_weights", "uniform"),
+        "acknowledge_epoch_semantics": protocol_raw.get(
+            "acknowledge_epoch_semantics", False
+        ),
     }
 
     # --- Extract training settings ---
@@ -1016,6 +1026,42 @@ def _run_experiment_body(
             f"{{'none','global','window'}}, got {p_normalization_style!r}"
         )
 
+    p_sampling_style = (
+        protocol.get("sampling_style", "sliding") if protocol else "sliding"
+    )
+    p_steps_per_epoch = protocol.get("steps_per_epoch") if protocol else None
+    p_sampling_weights = (
+        protocol.get("sampling_weights", "uniform") if protocol else "uniform"
+    )
+    p_ack_epoch_semantics = bool(
+        protocol.get("acknowledge_epoch_semantics", False) if protocol else False
+    )
+    if p_sampling_style not in ("sliding", "paper"):
+        raise ValueError(
+            f"protocol.sampling_style must be one of {{'sliding','paper'}}, "
+            f"got {p_sampling_style!r}"
+        )
+    if p_sampling_weights not in ("uniform", "by_series"):
+        raise ValueError(
+            f"protocol.sampling_weights must be one of {{'uniform','by_series'}}, "
+            f"got {p_sampling_weights!r}"
+        )
+    if p_sampling_style == "paper":
+        if p_steps_per_epoch is None:
+            raise ValueError(
+                "protocol.sampling_style='paper' requires "
+                "protocol.steps_per_epoch to be set."
+            )
+        if (
+            not isinstance(p_steps_per_epoch, int)
+            or isinstance(p_steps_per_epoch, bool)
+            or p_steps_per_epoch <= 0
+        ):
+            raise ValueError(
+                f"protocol.steps_per_epoch must be a positive int, "
+                f"got {p_steps_per_epoch!r}"
+            )
+
     bp_thetas_dim = block_params["thetas_dim"] if block_params else THETAS_DIM
     bp_latent_dim = block_params["latent_dim"] if block_params else LATENT_DIM
     bp_basis_dim_spec = block_params["basis_dim"] if block_params else "eq_fcast"
@@ -1033,6 +1079,28 @@ def _run_experiment_body(
     t_max_steps = training.get("max_steps") if training else None
     t_early_stopping = training.get("early_stopping", True) if training else True
     t_val_check_interval = training.get("val_check_interval") if training else None
+
+    # Epochs-vs-steps guard: paper-style sampling redefines "epoch" as
+    # steps_per_epoch gradient updates, so max_epochs has different semantics
+    # than sliding mode. Force the user to either specify max_steps
+    # (unambiguous) or explicitly acknowledge the epoch semantics shift.
+    if p_sampling_style == "paper" and t_max_steps is None:
+        if not p_ack_epoch_semantics:
+            raise ValueError(
+                "sampling_style='paper' changes epoch semantics: one epoch = "
+                "steps_per_epoch gradient updates. Specify training.max_steps "
+                "for an unambiguous budget, or set "
+                "protocol.acknowledge_epoch_semantics: true to keep using "
+                "training.max_epochs (total steps will be "
+                "max_epochs * steps_per_epoch)."
+            )
+        warnings.warn(
+            f"sampling_style='paper' with max_epochs={max_epochs} and no "
+            f"max_steps: total training = {max_epochs * p_steps_per_epoch} "
+            f"gradient steps (steps_per_epoch={p_steps_per_epoch}).",
+            UserWarning,
+            stacklevel=2,
+        )
 
     # Assemble lr_scheduler_config. Preferred path is training['lr_scheduler']
     # (nested block supporting {'type': 'cosine'|'step', ...}); fall back to
@@ -1178,6 +1246,9 @@ def _run_experiment_body(
         normalization_style=p_normalization_style,
         val_data=val_data,
         num_workers=t_num_workers,
+        sampling_style=p_sampling_style,
+        steps_per_epoch=p_steps_per_epoch,
+        sampling_weights=p_sampling_weights,
     )
 
     # We need to call setup() on dm first to get normalization stats
@@ -1344,6 +1415,9 @@ def _run_experiment_body(
         "stack_types": str(list(dict.fromkeys(stack_types))),
         "n_pools_kernel_size": str(pools) if pools else "",
         "n_freq_downsample": str(freqs) if freqs else "",
+        "sampling_style": p_sampling_style,
+        "steps_per_epoch": p_steps_per_epoch if p_steps_per_epoch is not None else "",
+        "sampling_weights": p_sampling_weights,
     }
     append_result(csv_path, row)
     release_claim(config_name, dataset_name, horizon, run_idx)

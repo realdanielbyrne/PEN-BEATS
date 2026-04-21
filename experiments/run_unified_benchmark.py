@@ -37,6 +37,7 @@ import signal
 import sys
 import tempfile
 import time
+import warnings
 from contextlib import contextmanager
 
 # fcntl is Unix-only; use msvcrt on Windows for cross-platform file locking
@@ -955,6 +956,11 @@ def run_single_experiment(
     generic_dim=5,  # Learned generic branch rank for TrendWaveletGeneric* blocks
     t_width=256,  # Hidden layer width for Trend/TrendWavelet-family blocks
     kl_weight=0.1,  # KL divergence loss weight for VAE-family blocks
+    sampling_style="sliding",  # "sliding" (default) | "paper" (iteration sampling)
+    steps_per_epoch=None,  # required when sampling_style="paper"
+    sampling_weights="uniform",  # "uniform" | "by_series"
+    acknowledge_epoch_semantics=False,  # opt-in for max_epochs under paper sampling
+    max_steps=None,  # paper-faithful total gradient-step budget; overrides max_epochs when set
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -983,6 +989,55 @@ def run_single_experiment(
         return
 
     try:
+        # ── Sampling-style validation + epochs-vs-steps guard ───────────
+        # Paper sampling changes epoch semantics (1 epoch = steps_per_epoch
+        # gradient updates). Validate up front before any expensive work.
+        if sampling_style not in ("sliding", "paper"):
+            raise ValueError(
+                f"sampling_style must be one of {{'sliding','paper'}}, "
+                f"got {sampling_style!r}"
+            )
+        if sampling_weights not in ("uniform", "by_series"):
+            raise ValueError(
+                f"sampling_weights must be one of {{'uniform','by_series'}}, "
+                f"got {sampling_weights!r}"
+            )
+        if sampling_style == "paper":
+            if (
+                steps_per_epoch is None
+                or not isinstance(steps_per_epoch, int)
+                or isinstance(steps_per_epoch, bool)
+                or steps_per_epoch <= 0
+            ):
+                raise ValueError(
+                    "sampling_style='paper' requires protocol.steps_per_epoch "
+                    f"to be a positive int, got {steps_per_epoch!r}"
+                )
+            if datamodule_type != "columnar":
+                raise ValueError(
+                    "sampling_style='paper' is only supported with "
+                    "datamodule='columnar'; got datamodule_type="
+                    f"{datamodule_type!r}."
+                )
+            if max_steps is None:
+                if not acknowledge_epoch_semantics:
+                    raise ValueError(
+                        "sampling_style='paper' changes epoch semantics: one "
+                        "epoch = steps_per_epoch gradient updates. Specify "
+                        "training.max_steps for an unambiguous budget, or "
+                        "set protocol.acknowledge_epoch_semantics: true to "
+                        "keep using training.max_epochs (total steps will "
+                        "be max_epochs * steps_per_epoch)."
+                    )
+                warnings.warn(
+                    f"sampling_style='paper' with max_epochs={max_epochs} "
+                    f"and no max_steps: total training = "
+                    f"{max_epochs * steps_per_epoch} gradient steps "
+                    f"(steps_per_epoch={steps_per_epoch}).",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
         seed = seed if seed is not None else (BASE_SEED + run_idx)
         set_seed(seed)
 
@@ -1077,6 +1132,9 @@ def run_single_experiment(
                 normalize=normalize,
                 val_data=ext_val_data,
                 val_ratio=val_ratio if ext_val_data is None else None,
+                sampling_style=sampling_style,
+                steps_per_epoch=steps_per_epoch,
+                sampling_weights=sampling_weights,
             )
             dm.setup()
 
@@ -1154,6 +1212,7 @@ def run_single_experiment(
             accelerator=accelerator,
             devices=1,
             max_epochs=max_epochs,
+            max_steps=max_steps if max_steps is not None else -1,
             precision=precision,
             gradient_clip_val=1.0,
             callbacks=[

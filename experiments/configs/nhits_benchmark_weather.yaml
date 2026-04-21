@@ -48,6 +48,55 @@ protocol:
   forecast_multiplier: 5
   batch_size: 256
 
+  # ── Paper-faithful batch sampling ───────────────────────────────────
+  # NHiTS (Challu et al. 2023) trains by sampling (series, start_idx)
+  # uniformly at random per gradient step, not by iterating the dense
+  # sliding-window dataset. Under 'paper', one "epoch" = steps_per_epoch
+  # gradient updates; batches are drawn with replacement.
+  sampling_style: paper          # sliding (default) | paper
+  steps_per_epoch: 1000          # required under 'paper'; paper default
+  # 'uniform'   = draw uniformly over all valid (series, start) windows
+  #               — matches the N-BEATS / NHiTS paper protocol. For
+  #               Weather (21 equal-length columns) it's also equivalent
+  #               to 'by_series'.
+  # 'by_series' = weight each window by 1 / n_windows_in_its_column so
+  #               every series has equal per-step probability. Mainly
+  #               useful when column lengths differ.
+  sampling_weights: uniform
+
+runs:
+  n_runs: 5
+  base_seed: 1
+
+training:
+  # Under protocol.sampling_style='paper', one "epoch" = steps_per_epoch
+  # gradient updates. max_steps is the total gradient-step budget and
+  # takes precedence over max_epochs. Setting max_steps is REQUIRED when
+  # sampling_style='paper' (unless protocol.acknowledge_epoch_semantics
+  # is set to true).
+  max_steps: 30000         # 30 epochs × 1000 steps/epoch (paper-scale)
+  max_epochs: 30           # Upper cap only; max_steps stops training first
+  early_stopping: false    # Paper setting (disabled)
+  val_check_interval: 1000 # Validate every 1000 steps
+  patience: 25             # Unused when early_stopping=false
+  activation: ReLU
+  active_g: false
+  sum_losses: false
+  num_workers: 5
+  learning_rate: 0.001     
+  
+  # NHiTS paper uses a 3-step StepLR decay (gamma=0.5). With max_epochs=30
+  # and step_size=8 the LR steps at epochs 8 / 16 / 24 for 3 total decays.
+  lr_scheduler:
+    type: step
+    step_size: 8
+    gamma: 0.5
+
+block_params:
+  thetas_dim: 5
+  latent_dim: 16           # Research-confirmed optimal (ld=16 >> ld=4/8)
+  basis_dim: eq_fcast      # Dynamic: set to forecast_length per horizon
+
 
 # NHiTS published baselines for comparison (Table 1)
 baselines:
@@ -164,35 +213,3 @@ configs:
     model: NHiTSNet
     stack_types: ['BottleneckGenericAE', 'BottleneckGenericAE', 'BottleneckGenericAE']
 
-
-runs:
-  n_runs: 5
-  base_seed: 1
-
-training:
-  # Paper-faithful NHiTS protocol (neuralforecast defaults):
-  #   max_steps=1000, batch_size=32, early stopping disabled,
-  #   validate every 100 steps. max_epochs kept as an upper cap only.
-  #max_steps: 1000          # Paper setting (neuralforecast NHiTS default)
-  max_epochs: 25         # Upper cap only; max_steps stops training first
-  early_stopping: false    # Paper setting (disabled)
-  #val_check_interval: 500  # Validate every 100 steps
-  patience: 25             # Unused when early_stopping=false
-  activation: ReLU
-  active_g: false
-  sum_losses: false
-  num_workers: 4
-  learning_rate: 0.001     # 1e-3 (written as 0.001 to force YAML float parse)
-  # NHiTS paper uses a 3-step StepLR decay (gamma=0.5). With max_epochs=25
-  # and step_size=8 the LR steps at epochs 8 / 16 / 24 for 3 total decays.
-  # Switch to {type: cosine, warmup_epochs: 5, T_max: <max_epochs>} to use
-  # the ConstantLR-warmup + CosineAnnealingLR schedule instead.
-  lr_scheduler:
-    type: step
-    step_size: 8
-    gamma: 0.5
-
-block_params:
-  thetas_dim: 5
-  latent_dim: 16           # Research-confirmed optimal (ld=16 >> ld=4/8)
-  basis_dim: eq_fcast      # Dynamic: set to forecast_length per horizon
