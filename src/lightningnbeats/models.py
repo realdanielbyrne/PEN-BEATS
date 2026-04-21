@@ -7,6 +7,7 @@ from torch import nn, optim
 from torch.optim.lr_scheduler import (
     ConstantLR,
     CosineAnnealingLR,
+    ReduceLROnPlateau,
     SequentialLR,
     StepLR,
 )
@@ -120,6 +121,33 @@ class _NBeatsBase(pl.LightningModule):
                     schedulers=[warmup_scheduler, cosine_scheduler],
                     milestones=[warmup_epochs],
                 )
+                return {
+                    "optimizer": optimizer,
+                    "lr_scheduler": {"scheduler": scheduler, "interval": interval},
+                }
+            elif sched_type == "plateau":
+                monitor = str(cfg.get("monitor", "val_loss"))
+                factor = float(cfg.get("factor", 0.5))
+                plateau_patience = int(cfg.get("patience", 10))
+                min_lr = float(cfg.get("min_lr", cfg.get("eta_min", 1e-5)))
+                mode = str(cfg.get("mode", "min"))
+                cooldown = int(cfg.get("cooldown", 0))
+                scheduler = ReduceLROnPlateau(
+                    optimizer,
+                    mode=mode,
+                    factor=factor,
+                    patience=plateau_patience,
+                    min_lr=min_lr,
+                    cooldown=cooldown,
+                )
+                return {
+                    "optimizer": optimizer,
+                    "lr_scheduler": {
+                        "scheduler": scheduler,
+                        "monitor": monitor,
+                        "interval": interval,
+                    },
+                }
             elif sched_type == "step":
                 step_size = cfg.get("step_size")
                 if step_size is None:
@@ -130,16 +158,15 @@ class _NBeatsBase(pl.LightningModule):
                 scheduler = StepLR(
                     optimizer, step_size=int(step_size), gamma=float(gamma)
                 )
+                return {
+                    "optimizer": optimizer,
+                    "lr_scheduler": {"scheduler": scheduler, "interval": interval},
+                }
             else:
                 raise ValueError(
                     f"Unknown lr_scheduler_config type {sched_type!r}; "
-                    "expected one of {'cosine', 'step'}."
+                    "expected one of {{'cosine', 'plateau', 'step'}}."
                 )
-
-            return {
-                "optimizer": optimizer,
-                "lr_scheduler": {"scheduler": scheduler, "interval": interval},
-            }
 
         return optimizer
 
