@@ -43,8 +43,30 @@ protocol:
   include_target: true
   loss: MSELoss
   forecast_multiplier: 5
-  batch_size: 256
-  num_workers: 4
+  batch_size: 256  
+
+hardware:  
+  num_workers: 5
+
+runs:
+  n_runs: 2
+  base_seed: 1
+
+training:
+  max_epochs: 20
+  early_stopping: false    # Paper setting (disabled)
+  patience: 20             # Unused when early_stopping=false
+  activation: ReLU
+  active_g: false
+  sum_losses: false
+  warmup_epochs: 5
+  learning_rate: .001
+
+block_params:
+  thetas_dim: 5
+  latent_dim: 16
+  basis_dim: eq_fcast
+
 
 configs:
   # --- Pool [2,2,2] × 3 freq options ---
@@ -373,21 +395,4 @@ configs:
     n_freq_downsample: [64, 8, 1]
 
 
-runs:
-  n_runs: 2
-  base_seed: 1
 
-training:
-  max_epochs: 200
-  early_stopping: false    # Paper setting (disabled)
-  patience: 25             # Unused when early_stopping=false
-  activation: ReLU
-  active_g: false
-  sum_losses: false
-  warmup_epochs: 25
-  learning_rate: .001
-
-block_params:
-  thetas_dim: 5
-  latent_dim: 16
-  basis_dim: eq_fcast
