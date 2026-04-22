@@ -51,14 +51,13 @@ protocol:
   # ── Paper-faithful batch sampling ───────────────────────────────────
   # NHiTS (Challu et al. 2023) trains by sampling (series, start_idx)
   # uniformly at random per gradient step, not by iterating the dense
-  # sliding-window dataset. Under 'paper', one "epoch" = steps_per_epoch
+  # sliding-window dataset. Under 'nhits_paper', one "epoch" = steps_per_epoch
   # gradient updates; batches are drawn with replacement.
-  sampling_style: paper          # sliding (default) | paper
-  steps_per_epoch: 1000          # required under 'paper'; paper default
+  sampling_style: nhits_paper    # sliding (default) | nhits_paper | nbeats_paper
+  steps_per_epoch: 1000          # required under 'nhits_paper'; paper default
   # 'uniform'   = draw uniformly over all valid (series, start) windows
-  #               — matches the N-BEATS / NHiTS paper protocol. For
-  #               Weather (21 equal-length columns) it's also equivalent
-  #               to 'by_series'.
+  #               — matches the NHiTS paper protocol. For Weather (21
+  #               equal-length columns) it's also equivalent to 'by_series'.
   # 'by_series' = weight each window by 1 / n_windows_in_its_column so
   #               every series has equal per-step probability. Mainly
   #               useful when column lengths differ.
@@ -69,10 +68,10 @@ runs:
   base_seed: 1
 
 training:
-  # Under protocol.sampling_style='paper', one "epoch" = steps_per_epoch
+  # Under protocol.sampling_style='nhits_paper', one "epoch" = steps_per_epoch
   # gradient updates. max_steps is the total gradient-step budget and
   # takes precedence over max_epochs. Setting max_steps is REQUIRED when
-  # sampling_style='paper' (unless protocol.acknowledge_epoch_semantics
+  # sampling_style='nhits_paper' (unless protocol.acknowledge_epoch_semantics
   # is set to true).
   max_steps: 30000         # 30 epochs × 1000 steps/epoch (paper-scale)
   max_epochs: 30           # Upper cap only; max_steps stops training first

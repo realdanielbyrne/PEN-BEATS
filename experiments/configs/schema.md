@@ -200,10 +200,14 @@ protocol:
   forecast_multiplier: null # fallback when training.forecast_multiplier is not explicitly set
   batch_size: null          # fallback when training.batch_size is not explicitly set
   datamodule: columnar      # "columnar" (default) or "univariate" (80/20 random split)
-  sampling_style: sliding   # "sliding" (default) or "paper" (N-BEATS/NHiTS iteration sampling)
-  steps_per_epoch: null     # required when sampling_style='paper'; gradient updates per epoch
+  sampling_style: sliding   # "sliding" (default) | "nhits_paper" | "nbeats_paper"
+  steps_per_epoch: null     # required when sampling_style is 'nhits_paper' or 'nbeats_paper'
   sampling_weights: uniform # "uniform" (default) or "by_series" (equal-probability per series)
-  acknowledge_epoch_semantics: false  # opt-in when using max_epochs under sampling_style='paper'
+  lh_multiplier: null       # required when sampling_style='nbeats_paper'; Lh = lh_multiplier * H.
+                            # May be a scalar (same for all periods) or a period-keyed dict
+                            # (e.g. {Yearly: 1.5, Quarterly: 1.5, Monthly: 10, ...}).
+                            # A 'default' key in the dict is used as fallback for unlisted periods.
+  acknowledge_epoch_semantics: false  # opt-in when using max_epochs under nhits_paper/nbeats_paper
 ```
 
 Notes:
@@ -214,10 +218,15 @@ Notes:
 - `loss`, `forecast_multiplier`, and `batch_size` act as **fallbacks** only when the same fields are not explicitly set under `training`.
 - An explicit `training.batch_size` takes precedence over the tuned `BATCH_SIZES` table. When `training.batch_size` is not set, the tuned table provides the default.
 - `datamodule: univariate` selects `TimeSeriesDataModule` with a flat numpy array and 80/20 random train/val split (via `torch.utils.data.random_split`). This matches the behavior of standalone convergence scripts (e.g. `run_milk_convergence_10stack.py`). Only meaningful for single-series datasets like Milk.
-- `sampling_style` controls training-batch sampling. `'sliding'` (default) enumerates every valid `(column, start_idx)` window and shuffles one full pass per epoch. `'paper'` reproduces the N-BEATS / NHiTS iteration-based protocol: each Lightning epoch draws exactly `steps_per_epoch * batch_size` windows with replacement. **Training-only**: validation and test dataloaders always use dense sliding windows with no replacement.
-- `steps_per_epoch` is **required** when `sampling_style='paper'` (hard error if missing) and must be a positive int. Ignored for `'sliding'`.
-- `sampling_weights='uniform'` samples uniformly over the enumerated window list — biases toward long series proportionally to their window count. `'by_series'` weights each index by `1 / n_windows_in_its_column`, giving every series an equal per-step draw probability (closer to the strict paper protocol for multi-series datasets like Traffic). Ignored for `'sliding'`.
-- **Epoch semantics under `'paper'`**: one "epoch" equals `steps_per_epoch` gradient updates rather than one full pass over the data, so `training.max_epochs` has a different meaning than under `'sliding'`. If `sampling_style='paper'` and `training.max_steps` is unset, you must set `acknowledge_epoch_semantics: true` to opt in (a `UserWarning` then reports the total `max_epochs * steps_per_epoch` step budget). Preferred path: set `training.max_steps` for an unambiguous total training budget.
+- `sampling_style` controls training-batch sampling. Three modes are supported:
+  - `'sliding'` (default): enumerates every valid `(column, start_idx)` window and shuffles one full pass per epoch.
+  - `'nhits_paper'`: reproduces the NHiTS iteration-based protocol (Challu et al. 2023): each Lightning epoch draws exactly `steps_per_epoch * batch_size` windows **with replacement** from all valid windows. No insample length constraint.
+  - `'nbeats_paper'`: same replacement-sampling protocol as `nhits_paper`, plus the **Lh insample constraint** from Oreshkin et al. (2020): each series' valid windows are restricted to the last `lh_multiplier * H` timesteps (Lh = 7H recommended for M4, matching the paper's maximum ensemble lookback). Requires `lh_multiplier` to be set.
+  **Training-only**: validation and test dataloaders always use dense sliding windows with no replacement.
+- `steps_per_epoch` is **required** when `sampling_style` is `'nhits_paper'` or `'nbeats_paper'` (hard error if missing) and must be a positive int. Ignored for `'sliding'`.
+- `lh_multiplier` is **required** when `sampling_style='nbeats_paper'`. Sets Lh = lh_multiplier × H. Use `7` to match the N-BEATS paper's maximum ensemble lookback (Lh = 7H). Ignored for other sampling styles.
+- `sampling_weights='uniform'` samples uniformly over the enumerated window list — biases toward long series proportionally to their window count. `'by_series'` weights each index by `1 / n_windows_in_its_column`, giving every series an equal per-step draw probability. Ignored for `'sliding'`.
+- **Epoch semantics under `'nhits_paper'` / `'nbeats_paper'`**: one "epoch" equals `steps_per_epoch` gradient updates rather than one full pass over the data, so `training.max_epochs` has a different meaning than under `'sliding'`. If `training.max_steps` is unset, you must set `acknowledge_epoch_semantics: true` to opt in (a `UserWarning` then reports the total `max_epochs * steps_per_epoch` step budget). Preferred path: set `training.max_steps` for an unambiguous total training budget.
 
 ---
 
@@ -271,6 +280,26 @@ lr_scheduler:
   step_size: 50            # Required: decay every N epochs
   gamma: 0.5               # Decay factor (default 0.5)
 ```
+
+MultiStepLR — paper-faithful policy (Oreshkin et al. 2020: halve LR every 10% of training):
+
+```yaml
+lr_scheduler:
+  type: multistep
+  n_milestones: 10         # Evenly-spaced drops; milestones computed as
+                           # [round(max_epochs * i / n_milestones) for i in 1..n_milestones]
+  gamma: 0.5               # LR multiplier at each milestone (default 0.5)
+
+# OR provide explicit milestone epochs:
+lr_scheduler:
+  type: multistep
+  milestones: [15, 30, 45, 60, 75, 90, 105, 120, 135, 150]
+  gamma: 0.5
+```
+
+> **Early stopping note:** When using `multistep`, set `training.patience` to at least
+> `max_epochs / n_milestones + 5` so early stopping cannot fire between scheduled drops.
+> For 150 epochs / 10 milestones (interval = 15 epochs), use `patience: 20`.
 
 Set to `null` or omit to disable the scheduler entirely (constant LR).
 

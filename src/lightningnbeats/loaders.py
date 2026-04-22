@@ -367,6 +367,7 @@ class ColumnarTimeSeriesDataset(Dataset):
         normalization_style=None,
         return_scales=False,
         eps=1e-5,
+        max_insample_length=None,
     ):
         """Sliding-window dataset over a columnar DataFrame.
 
@@ -386,6 +387,13 @@ class ColumnarTimeSeriesDataset(Dataset):
             predictions for test-time metrics. Defaults to False.
         eps : float, optional
             Stability term added to per-window std. Defaults to 1e-5.
+        max_insample_length : int or None, optional
+            When set, restricts valid training windows to only those whose
+            start index falls within the last ``max_insample_length`` positions
+            of each series. Implements the Lh insample constraint from the
+            N-BEATS paper (Oreshkin et al., 2020): set to ``lh_multiplier *
+            forecast_length`` (e.g. 7 * H) to match the paper's maximum
+            ensemble lookback. Ignored when None (all valid windows used).
         """
         self.backcast_length = backcast_length
         self.forecast_length = forecast_length
@@ -421,11 +429,18 @@ class ColumnarTimeSeriesDataset(Dataset):
                 series = (series - col_means[col]) / col_stds[col]
             self.data_dict[col] = series
 
-        # Precompute column indices and starting positions
+        # Precompute column indices and starting positions.
+        # When max_insample_length is set (N-BEATS Lh constraint), restrict each
+        # series to only windows starting within its last max_insample_length positions.
         self.col_indices = [
             (col, idx)
             for col, series in self.data_dict.items()
-            for idx in range(len(series) - self.min_length + 1)
+            for idx in range(
+                max(0, len(series) - self.min_length + 1 - max_insample_length)
+                if max_insample_length is not None
+                else 0,
+                len(series) - self.min_length + 1,
+            )
         ]
 
     def pad_series(self, series):
@@ -489,6 +504,7 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
         sampling_style="sliding",
         steps_per_epoch=None,
         sampling_weights="uniform",
+        lh_multiplier=None,
     ):
         """
         The ColumnarCollectionTimeSeriesDataModule class is a PyTorch Datamodule that takes a
@@ -516,22 +532,33 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
             val_data (pd.DataFrame, optional): Dedicated external validation DataFrame.
                 When provided, ``val_ratio`` is ignored and ``dataframe`` is used
                 entirely for training.
-            sampling_style ({'sliding', 'paper'}, optional): Training-batch sampling
-                protocol. ``'sliding'`` (default) shuffles the enumerated sliding-window
-                dataset for one full pass per epoch (legacy behavior). ``'paper'``
-                reproduces the N-BEATS / NHiTS iteration-based uniform sampling
+            sampling_style ({'sliding', 'nhits_paper', 'nbeats_paper'}, optional):
+                Training-batch sampling protocol. ``'sliding'`` (default) shuffles
+                the enumerated sliding-window dataset for one full pass per epoch.
+                ``'nhits_paper'`` reproduces the NHiTS iteration-based uniform sampling
                 protocol: each epoch draws ``steps_per_epoch * batch_size`` windows
-                with replacement. Affects ``train_dataloader()`` only; validation
-                and test dataloaders always use dense sliding windows.
-            steps_per_epoch (int, optional): Required when ``sampling_style='paper'``.
+                with replacement (no insample length constraint).
+                ``'nbeats_paper'`` adds the N-BEATS Lh insample constraint on top of
+                the same replacement-sampling protocol (requires ``lh_multiplier``).
+                Affects ``train_dataloader()`` only; validation and test dataloaders
+                always use dense sliding windows.
+            steps_per_epoch (int, optional): Required when ``sampling_style`` is
+                ``'nhits_paper'`` or ``'nbeats_paper'``.
                 Number of gradient updates per Lightning epoch. Must be a positive int.
             sampling_weights ({'uniform', 'by_series'}, optional): Weighting scheme
-                when ``sampling_style='paper'``. ``'uniform'`` (default) draws
-                uniformly over the enumerated window index list, which biases
-                toward long series in proportion to their window count.
-                ``'by_series'`` weights each index by ``1 / n_windows_in_its_column``
-                so every series is equally likely per step. Ignored when
-                ``sampling_style='sliding'``.
+                when ``sampling_style`` is ``'nhits_paper'`` or ``'nbeats_paper'``.
+                ``'uniform'`` (default) draws uniformly over the enumerated window
+                index list, which biases toward long series in proportion to their
+                window count. ``'by_series'`` weights each index by
+                ``1 / n_windows_in_its_column`` so every series is equally likely
+                per step. Ignored when ``sampling_style='sliding'``.
+            lh_multiplier (int or None, optional): Required when
+                ``sampling_style='nbeats_paper'``. Restricts each series' valid
+                training windows to only those starting within the last
+                ``lh_multiplier * forecast_length`` timesteps of the series. Implements
+                the Lh insample constraint from the N-BEATS paper (Oreshkin et al.,
+                2020). Use ``lh_multiplier=7`` to match the paper's maximum ensemble
+                lookback (Lh = 7H). Ignored for other sampling styles.
         """
         super().__init__()
         self.backcast_length = backcast_length
@@ -555,9 +582,9 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
         self.val_ratio = val_ratio
         self._external_val_data = val_data
 
-        if sampling_style not in ("sliding", "paper"):
+        if sampling_style not in ("sliding", "nhits_paper", "nbeats_paper"):
             raise ValueError(
-                f"sampling_style must be one of {{'sliding','paper'}}, "
+                f"sampling_style must be one of {{'sliding','nhits_paper','nbeats_paper'}}, "
                 f"got {sampling_style!r}"
             )
         if sampling_weights not in ("uniform", "by_series"):
@@ -565,10 +592,10 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
                 f"sampling_weights must be one of {{'uniform','by_series'}}, "
                 f"got {sampling_weights!r}"
             )
-        if sampling_style == "paper":
+        if sampling_style in ("nhits_paper", "nbeats_paper"):
             if steps_per_epoch is None:
                 raise ValueError(
-                    "sampling_style='paper' requires steps_per_epoch to be set."
+                    f"sampling_style={sampling_style!r} requires steps_per_epoch to be set."
                 )
             if not isinstance(steps_per_epoch, int) or isinstance(
                 steps_per_epoch, bool
@@ -580,9 +607,24 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
                 raise ValueError(
                     f"steps_per_epoch must be a positive int, got {steps_per_epoch!r}"
                 )
+        if sampling_style == "nbeats_paper":
+            if lh_multiplier is None:
+                raise ValueError(
+                    "sampling_style='nbeats_paper' requires lh_multiplier to be set "
+                    "(e.g. lh_multiplier=1.5 for Yearly/Quarterly, 10 for other M4 periods)."
+                )
+            if isinstance(lh_multiplier, bool) or not isinstance(lh_multiplier, (int, float)):
+                raise ValueError(
+                    f"lh_multiplier must be a positive number, got {lh_multiplier!r}"
+                )
+            if lh_multiplier <= 0:
+                raise ValueError(
+                    f"lh_multiplier must be a positive number, got {lh_multiplier!r}"
+                )
         self.sampling_style = sampling_style
         self.steps_per_epoch = steps_per_epoch
         self.sampling_weights = sampling_weights
+        self.lh_multiplier = lh_multiplier
         self._by_series_weights = None
 
         self.total_length = backcast_length + forecast_length
@@ -631,6 +673,11 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
             col_stds=self.col_stds,
             normalization_style=self.normalization_style,
         )
+        max_insample_length = (
+            int(round(self.lh_multiplier * self.forecast_length))
+            if self.sampling_style == "nbeats_paper"
+            else None
+        )
         self.train_dataset = ColumnarTimeSeriesDataset(
             train_data,
             self.backcast_length,
@@ -638,11 +685,12 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
             col_means=self.col_means,
             col_stds=self.col_stds,
             normalization_style=self.normalization_style,
+            max_insample_length=max_insample_length,
         )
 
         # Cache per-index weights for 'by_series' sampling so each series is
         # drawn with equal probability regardless of how many windows it offers.
-        if self.sampling_style == "paper" and self.sampling_weights == "by_series":
+        if self.sampling_style in ("nhits_paper", "nbeats_paper") and self.sampling_weights == "by_series":
             col_counts = {}
             for col, _ in self.train_dataset.col_indices:
                 col_counts[col] = col_counts.get(col, 0) + 1
@@ -664,6 +712,9 @@ class ColumnarCollectionTimeSeriesDataModule(pl.LightningDataModule):
                 persistent_workers=self.num_workers > 0,
             )
 
+        # Both 'nhits_paper' and 'nbeats_paper' use replacement sampling with a fixed
+        # step budget per epoch. For 'nbeats_paper', the Lh constraint has already
+        # been applied to col_indices in setup(), so no dataloader changes are needed.
         num_samples = self.steps_per_epoch * self.batch_size
         if self.sampling_weights == "by_series":
             if self._by_series_weights is None:

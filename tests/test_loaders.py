@@ -127,7 +127,7 @@ class TestColumnarTestModule:
         assert dm.test_data.index[0] == 0
 
 
-# --- sampling_style='paper' tests ---
+# --- sampling_style='nhits_paper' tests ---
 
 def _build_columnar_dm(
     n_timesteps=30,
@@ -184,7 +184,7 @@ class TestPaperSamplingValidation:
 
     def test_paper_requires_steps_per_epoch(self):
         with pytest.raises(ValueError, match="steps_per_epoch"):
-            _build_columnar_dm(sampling_style="paper")
+            _build_columnar_dm(sampling_style="nhits_paper")
 
     def test_rejects_invalid_style(self):
         with pytest.raises(ValueError, match="sampling_style"):
@@ -193,27 +193,27 @@ class TestPaperSamplingValidation:
     def test_rejects_invalid_weights(self):
         with pytest.raises(ValueError, match="sampling_weights"):
             _build_columnar_dm(
-                sampling_style="paper",
+                sampling_style="nhits_paper",
                 steps_per_epoch=10,
                 sampling_weights="foo",
             )
 
     def test_rejects_zero_steps_per_epoch(self):
         with pytest.raises(ValueError, match="steps_per_epoch"):
-            _build_columnar_dm(sampling_style="paper", steps_per_epoch=0)
+            _build_columnar_dm(sampling_style="nhits_paper", steps_per_epoch=0)
 
     def test_rejects_negative_steps_per_epoch(self):
         with pytest.raises(ValueError, match="steps_per_epoch"):
-            _build_columnar_dm(sampling_style="paper", steps_per_epoch=-1)
+            _build_columnar_dm(sampling_style="nhits_paper", steps_per_epoch=-1)
 
 
 class TestPaperSamplingBehavior:
-    """Runtime behavior under sampling_style='paper'."""
+    """Runtime behavior under sampling_style='nhits_paper'."""
 
     def test_uniform_sampler_num_samples(self):
         dm = _build_columnar_dm(
             batch_size=4,
-            sampling_style="paper",
+            sampling_style="nhits_paper",
             steps_per_epoch=7,
         )
         dm.setup()
@@ -225,7 +225,7 @@ class TestPaperSamplingBehavior:
     def test_uniform_epoch_batch_count(self):
         dm = _build_columnar_dm(
             batch_size=4,
-            sampling_style="paper",
+            sampling_style="nhits_paper",
             steps_per_epoch=5,
         )
         dm.setup()
@@ -239,7 +239,7 @@ class TestPaperSamplingBehavior:
             n_timesteps=BACKCAST_LENGTH + FORECAST_LENGTH + 1,  # 2 windows per col
             n_series=2,
             batch_size=2,
-            sampling_style="paper",
+            sampling_style="nhits_paper",
             steps_per_epoch=50,
         )
         dm.setup()
@@ -253,7 +253,7 @@ class TestPaperSamplingBehavior:
     def test_by_series_sampler_type(self):
         dm = _build_columnar_dm(
             batch_size=4,
-            sampling_style="paper",
+            sampling_style="nhits_paper",
             steps_per_epoch=10,
             sampling_weights="by_series",
         )
@@ -283,7 +283,7 @@ class TestPaperSamplingBehavior:
             forecast_length=forecast,
             batch_size=1,
             no_val=True,
-            sampling_style="paper",
+            sampling_style="nhits_paper",
             steps_per_epoch=1000,
             sampling_weights="by_series",
         )
@@ -316,7 +316,7 @@ class TestPaperSamplingValTestUnaffected:
             backcast_length=BACKCAST_LENGTH,
             forecast_length=FORECAST_LENGTH,
             batch_size=4,
-            sampling_style="paper",
+            sampling_style="nhits_paper",
             steps_per_epoch=3,
         )
         dm.setup()

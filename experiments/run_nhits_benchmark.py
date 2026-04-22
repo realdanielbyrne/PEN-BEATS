@@ -1045,9 +1045,9 @@ def _run_experiment_body(
     p_ack_epoch_semantics = bool(
         protocol.get("acknowledge_epoch_semantics", False) if protocol else False
     )
-    if p_sampling_style not in ("sliding", "paper"):
+    if p_sampling_style not in ("sliding", "nhits_paper"):
         raise ValueError(
-            f"protocol.sampling_style must be one of {{'sliding','paper'}}, "
+            f"protocol.sampling_style must be one of {{'sliding','nhits_paper'}}, "
             f"got {p_sampling_style!r}"
         )
     if p_sampling_weights not in ("uniform", "by_series"):
@@ -1055,10 +1055,10 @@ def _run_experiment_body(
             f"protocol.sampling_weights must be one of {{'uniform','by_series'}}, "
             f"got {p_sampling_weights!r}"
         )
-    if p_sampling_style == "paper":
+    if p_sampling_style == "nhits_paper":
         if p_steps_per_epoch is None:
             raise ValueError(
-                "protocol.sampling_style='paper' requires "
+                "protocol.sampling_style='nhits_paper' requires "
                 "protocol.steps_per_epoch to be set."
             )
         if (
@@ -1093,10 +1093,10 @@ def _run_experiment_body(
     # steps_per_epoch gradient updates, so max_epochs has different semantics
     # than sliding mode. Force the user to either specify max_steps
     # (unambiguous) or explicitly acknowledge the epoch semantics shift.
-    if p_sampling_style == "paper" and t_max_steps is None:
+    if p_sampling_style == "nhits_paper" and t_max_steps is None:
         if not p_ack_epoch_semantics:
             raise ValueError(
-                "sampling_style='paper' changes epoch semantics: one epoch = "
+                "sampling_style='nhits_paper' changes epoch semantics: one epoch = "
                 "steps_per_epoch gradient updates. Specify training.max_steps "
                 "for an unambiguous budget, or set "
                 "protocol.acknowledge_epoch_semantics: true to keep using "
@@ -1104,7 +1104,7 @@ def _run_experiment_body(
                 "max_epochs * steps_per_epoch)."
             )
         warnings.warn(
-            f"sampling_style='paper' with max_epochs={max_epochs} and no "
+            f"sampling_style='nhits_paper' with max_epochs={max_epochs} and no "
             f"max_steps: total training = {max_epochs * p_steps_per_epoch} "
             f"gradient steps (steps_per_epoch={p_steps_per_epoch}).",
             UserWarning,

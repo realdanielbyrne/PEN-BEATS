@@ -190,6 +190,30 @@ def deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def _resolve_lh_multiplier(lh_spec, period: str):
+    """Resolve lh_multiplier from a scalar or period-keyed dict.
+
+    The N-BEATS paper uses period-specific Lh values (e.g. 1.5 for Yearly and
+    Quarterly, 10 for Monthly/Weekly/Daily/Hourly). ``lh_spec`` may be:
+      - None   → returns None (no Lh constraint)
+      - scalar → returned as float directly (same value for all periods)
+      - dict   → looked up by ``period`` key; falls back to ``"default"`` key;
+                  raises ValueError if the period is not found and no default exists
+    """
+    if lh_spec is None:
+        return None
+    if isinstance(lh_spec, dict):
+        if period in lh_spec:
+            return float(lh_spec[period])
+        if "default" in lh_spec:
+            return float(lh_spec["default"])
+        raise ValueError(
+            f"lh_multiplier is a dict but has no entry for period {period!r} "
+            f"and no 'default' key. Keys present: {list(lh_spec.keys())}"
+        )
+    return float(lh_spec)
+
+
 def apply_protocol_training_fallbacks(
     training: dict,
     protocol: dict,
@@ -592,6 +616,22 @@ def resolve_lr_scheduler(lr_scheduler_cfg, max_epochs: int):
           cooldown: 0      # epochs to wait after reduction before monitoring resumes
           monitor: val_loss
 
+    Expected YAML structure for MultiStepLR (paper-faithful)::
+
+        lr_scheduler:
+          type: multistep
+          n_milestones: 10   # evenly-spaced drops; milestones computed from max_epochs
+          gamma: 0.5         # LR multiplier at each milestone
+
+        # OR provide explicit milestones:
+        lr_scheduler:
+          type: multistep
+          milestones: [15, 30, 45, 60, 75, 90, 105, 120, 135, 150]
+          gamma: 0.5
+
+        # NOTE: set training.patience > max_epochs / n_milestones to avoid
+        # early stopping firing between scheduled drops.
+
     Set to ``null`` or omit entirely to disable (constant LR).
     """
     if not lr_scheduler_cfg:
@@ -611,6 +651,19 @@ def resolve_lr_scheduler(lr_scheduler_cfg, max_epochs: int):
             "cooldown": int(lr_scheduler_cfg.get("cooldown", 0)),
             "monitor": str(lr_scheduler_cfg.get("monitor", "val_loss")),
         }
+
+    if sched_type == "multistep":
+        gamma = float(lr_scheduler_cfg.get("gamma", 0.5))
+        explicit_milestones = lr_scheduler_cfg.get("milestones")
+        if explicit_milestones is not None:
+            milestones = [int(m) for m in explicit_milestones]
+        else:
+            n_milestones = int(lr_scheduler_cfg.get("n_milestones", 10))
+            milestones = [
+                max(1, round(max_epochs * i / n_milestones))
+                for i in range(1, n_milestones + 1)
+            ]
+        return {"type": "multistep", "milestones": milestones, "gamma": gamma}
 
     if sched_type == "none":
         return None
@@ -795,7 +848,28 @@ def run_single_config(
         return
 
     max_epochs = int(training.get("max_epochs", MAX_EPOCHS))
-    lr_scheduler_cfg = resolve_lr_scheduler(config.get("lr_scheduler"), max_epochs)
+
+    # When max_steps is set (paper-sampling protocol), the effective epoch budget
+    # is min(max_epochs, ceil(max_steps / steps_per_epoch)), not the safety-cap
+    # max_epochs.  Use the effective budget so milestone schedulers (MultiStepLR)
+    # and cosine T_max are computed against the epochs that will actually run.
+    max_steps_raw = training.get("max_steps")
+    steps_per_epoch_raw = protocol.get("steps_per_epoch")
+    if (
+        max_steps_raw is not None
+        and steps_per_epoch_raw
+        and int(steps_per_epoch_raw) > 0
+    ):
+        effective_max_epochs = min(
+            max_epochs,
+            math.ceil(int(max_steps_raw) / int(steps_per_epoch_raw)),
+        )
+    else:
+        effective_max_epochs = max_epochs
+
+    lr_scheduler_cfg = resolve_lr_scheduler(
+        config.get("lr_scheduler"), effective_max_epochs
+    )
     forecast_multiplier = _resolve_forecast_multiplier(training, dataset)
 
     # Extra CSV fields
@@ -870,6 +944,7 @@ def run_single_config(
         sampling_style=str(protocol.get("sampling_style", "sliding")),
         steps_per_epoch=protocol.get("steps_per_epoch"),
         sampling_weights=str(protocol.get("sampling_weights", "uniform")),
+        lh_multiplier=_resolve_lh_multiplier(protocol.get("lh_multiplier"), period),
         acknowledge_epoch_semantics=bool(
             protocol.get("acknowledge_epoch_semantics", False)
         ),

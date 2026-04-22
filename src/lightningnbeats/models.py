@@ -7,6 +7,7 @@ from torch import nn, optim
 from torch.optim.lr_scheduler import (
     ConstantLR,
     CosineAnnealingLR,
+    MultiStepLR,
     ReduceLROnPlateau,
     SequentialLR,
     StepLR,
@@ -162,10 +163,24 @@ class _NBeatsBase(pl.LightningModule):
                     "optimizer": optimizer,
                     "lr_scheduler": {"scheduler": scheduler, "interval": interval},
                 }
+            elif sched_type == "multistep":
+                milestones = cfg.get("milestones")
+                if not milestones:
+                    raise ValueError(
+                        "lr_scheduler_config={'type': 'multistep'} requires a 'milestones' list."
+                    )
+                gamma = float(cfg.get("gamma", 0.5))
+                scheduler = MultiStepLR(
+                    optimizer, milestones=[int(m) for m in milestones], gamma=gamma
+                )
+                return {
+                    "optimizer": optimizer,
+                    "lr_scheduler": {"scheduler": scheduler, "interval": interval},
+                }
             else:
                 raise ValueError(
                     f"Unknown lr_scheduler_config type {sched_type!r}; "
-                    "expected one of {{'cosine', 'plateau', 'step'}}."
+                    "expected one of {{'cosine', 'plateau', 'step', 'multistep'}}."
                 )
 
         return optimizer
@@ -374,6 +389,11 @@ class NBeatsNet(_NBeatsBase):
               ``T_max`` (int, default 35), ``eta_min`` (float, default 1e-6).
             - ``'step'``: ``torch.optim.lr_scheduler.StepLR``. Required key:
               ``step_size`` (int). Optional: ``gamma`` (float, default 0.5).
+            - ``'multistep'``: ``torch.optim.lr_scheduler.MultiStepLR``.
+              Required key: ``milestones`` (list[int], pre-computed by
+              ``resolve_lr_scheduler``). Optional: ``gamma`` (float, default
+              0.5). Paper-faithful: use ``n_milestones=10`` in YAML and set
+              early-stopping ``patience > max_epochs / n_milestones``.
 
             The optional ``interval`` key (``'epoch'`` or ``'step'``, default
             ``'epoch'``) controls when Lightning steps the scheduler. Default
@@ -870,9 +890,12 @@ class NHiTSNet(_NBeatsBase):
         ``'cosine'`` (default) uses ConstantLR warmup + CosineAnnealingLR
         (keys: ``warmup_epochs``, ``T_max``, ``eta_min``); ``'step'`` uses
         ``torch.optim.lr_scheduler.StepLR`` (required: ``step_size``;
-        optional: ``gamma`` default 0.5). Optional ``interval`` key
-        (``'epoch'``/``'step'``) controls the Lightning update frequency.
-        Default None.
+        optional: ``gamma`` default 0.5); ``'multistep'`` uses
+        ``torch.optim.lr_scheduler.MultiStepLR`` (required: ``milestones``
+        list[int]; optional: ``gamma`` default 0.5 — paper-faithful with
+        ``n_milestones=10`` and ``patience > max_epochs / n_milestones``).
+        Optional ``interval`` key (``'epoch'``/``'step'``) controls the
+        Lightning update frequency. Default None.
     """
 
     def __init__(

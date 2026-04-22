@@ -154,13 +154,13 @@ class TestLoadYamlConfigs:
 
 
 # ---------------------------------------------------------------------------
-# sampling_style='paper' — epochs-vs-steps guard
+# sampling_style='nhits_paper' — epochs-vs-steps guard
 # ---------------------------------------------------------------------------
 
 
 def _paper_protocol(
     *,
-    sampling_style="paper",
+    sampling_style="nhits_paper",
     steps_per_epoch=5,
     sampling_weights="uniform",
     acknowledge_epoch_semantics=False,
