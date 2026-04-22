@@ -90,7 +90,7 @@ logging:
 
 hardware:
   accelerator: auto
-  num_workers: 5
+  num_workers: 3
   pin_memory: true
 
 analysis:
