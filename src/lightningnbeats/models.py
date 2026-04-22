@@ -45,6 +45,38 @@ def _validate_stack_type(stack_type: str) -> None:
         )
 
 
+def _validate_active_g_value(v) -> None:
+    """Reject anything that isn't bool / 'backcast' / 'forecast'."""
+    if isinstance(v, bool):
+        return
+    if isinstance(v, str) and v in ("backcast", "forecast"):
+        return
+    raise ValueError(
+        f"active_g must be True, False, 'backcast', 'forecast', or a list of "
+        f"those values (one per stack); got {v!r}"
+    )
+
+
+def _normalize_active_g(active_g, n_stacks: int) -> list:
+    """Normalize ``active_g`` into a per-stack list of length ``n_stacks``.
+
+    Scalars (bool / 'backcast' / 'forecast') are broadcast to every stack.
+    A list input must have one entry per stack; each entry is validated
+    independently and may differ from its neighbors.
+    """
+    if isinstance(active_g, list):
+        if len(active_g) != n_stacks:
+            raise ValueError(
+                f"active_g list length {len(active_g)} must equal the number "
+                f"of stacks ({n_stacks})."
+            )
+        for v in active_g:
+            _validate_active_g_value(v)
+        return list(active_g)
+    _validate_active_g_value(active_g)
+    return [active_g] * n_stacks
+
+
 class _NBeatsBase(pl.LightningModule):
     """Shared training infrastructure for NBeatsNet and NHiTSNet.
 
@@ -343,11 +375,13 @@ class NBeatsNet(_NBeatsBase):
             Default : 'ReLU'.
         frequency : int, optional
             The frequency of the data.  Used only when MASELoss is used as teh loss funtion. Default 1.
-        active_g : bool or str, optional
+        active_g : bool, str, or list, optional
             Controls whether activation is applied after basis expansion.
             False: no activation (paper-faithful). True: activation on both backcast and forecast.
             'backcast': activation on backcast path only. 'forecast': activation on forecast path only.
-            Default : False.
+            Also accepts a list of length ``len(stack_types)`` with an independent
+            per-stack value (e.g. ``[True, True, False]`` to leave the last
+            stack's output unclamped). Default : False.
         sum_losses : bool, optional
             If True, the total loss is defined as forecast_loss + 1/4 Backcast_loss.  This is an experimental feature. Default False.
         kl_weight : float, optional
@@ -413,6 +447,8 @@ class NBeatsNet(_NBeatsBase):
             Tensor containing the forward forecast of the stacks.
         """
 
+        # Fail fast on obviously invalid scalar strings; full per-stack
+        # validation (including list form) runs below once n_stacks is known.
         if isinstance(active_g, str) and active_g not in ("backcast", "forecast"):
             raise ValueError(
                 f"active_g must be True, False, 'backcast', or 'forecast', got '{active_g}'"
@@ -504,6 +540,11 @@ class NBeatsNet(_NBeatsBase):
             self.n_stacks = len(stack_types)
         else:
             raise ValueError("Stack architecture must be specified.")
+
+        # Normalize active_g into a per-stack list; create_stack() reads from
+        # self._active_g_per_stack[stack_idx] so each stack can be configured
+        # independently while self.active_g preserves the original user input.
+        self._active_g_per_stack = _normalize_active_g(active_g, self.n_stacks)
 
         self.stacks = nn.ModuleList()
         for stack_idx, stack_type in enumerate(self.stack_types):
@@ -618,7 +659,7 @@ class NBeatsNet(_NBeatsBase):
                         basis_offset=effective_offset,
                         share_weights=self.share_weights,
                         activation=self.activation,
-                        active_g=self.active_g,
+                        active_g=self._active_g_per_stack[stack_idx],
                         forecast_basis_dim=self.forecast_basis_dim,
                         wavelet_type=self.wavelet_type,
                         backcast_wavelet_type=self.backcast_wavelet_type,
@@ -635,7 +676,7 @@ class NBeatsNet(_NBeatsBase):
                         basis_offset=effective_offset,
                         share_weights=self.share_weights,
                         activation=self.activation,
-                        active_g=self.active_g,
+                        active_g=self._active_g_per_stack[stack_idx],
                         forecast_basis_dim=self.forecast_basis_dim,
                         wavelet_type=self.wavelet_type,
                         backcast_wavelet_type=self.backcast_wavelet_type,
@@ -648,7 +689,7 @@ class NBeatsNet(_NBeatsBase):
                         basis_offset=effective_offset,
                         share_weights=self.share_weights,
                         activation=self.activation,
-                        active_g=self.active_g,
+                        active_g=self._active_g_per_stack[stack_idx],
                         latent_dim=self.latent_dim,
                         forecast_basis_dim=self.forecast_basis_dim,
                         wavelet_type=self.wavelet_type,
@@ -675,7 +716,7 @@ class NBeatsNet(_NBeatsBase):
                         basis_offset=effective_offset,
                         share_weights=self.share_weights,
                         activation=self.activation,
-                        active_g=self.active_g,
+                        active_g=self._active_g_per_stack[stack_idx],
                         latent_dim=self.latent_dim,
                         forecast_basis_dim=self.forecast_basis_dim,
                         wavelet_type=self.wavelet_type,
@@ -698,7 +739,7 @@ class NBeatsNet(_NBeatsBase):
                         effective_td,
                         self.share_weights,
                         self.activation,
-                        self.active_g,
+                        self._active_g_per_stack[stack_idx],
                         self.latent_dim,
                     ]
                     if "AELG" in stack_type:
@@ -726,7 +767,7 @@ class NBeatsNet(_NBeatsBase):
                             effective_offset,
                             self.share_weights,
                             self.activation,
-                            self.active_g,
+                            self._active_g_per_stack[stack_idx],
                             forecast_basis_dim=self.forecast_basis_dim,
                             latent_dim=self.latent_dim,
                             **_wavelet_kwargs,
@@ -740,7 +781,7 @@ class NBeatsNet(_NBeatsBase):
                             effective_offset,
                             self.share_weights,
                             self.activation,
-                            self.active_g,
+                            self._active_g_per_stack[stack_idx],
                             forecast_basis_dim=self.forecast_basis_dim,
                             **_wavelet_kwargs,
                         )
@@ -752,7 +793,7 @@ class NBeatsNet(_NBeatsBase):
                             self.basis_dim,
                             self.share_weights,
                             self.activation,
-                            self.active_g,
+                            self._active_g_per_stack[stack_idx],
                         )
                 else:
                     block = getattr(b, stack_type)(
@@ -762,7 +803,7 @@ class NBeatsNet(_NBeatsBase):
                         effective_td,
                         self.share_weights,
                         self.activation,
-                        self.active_g,
+                        self._active_g_per_stack[stack_idx],
                     )
 
             blocks.append(block)
@@ -860,9 +901,11 @@ class NHiTSNet(_NBeatsBase):
         Activation function name (see ACTIVATIONS). Default ``'ReLU'``.
     frequency : int, optional
         Series frequency; used only with ``MASELoss``. Default 1.
-    active_g : bool or str, optional
+    active_g : bool, str, or list, optional
         Activation on basis-expansion output. False / True / ``'backcast'`` /
-        ``'forecast'``. Default False.
+        ``'forecast'``. Also accepts a list of length ``len(stack_types)`` with
+        an independent per-stack value (e.g. ``[True, True, False]`` to leave
+        the last stack's output unclamped). Default False.
     latent_dim : int, optional
         Latent bottleneck size for AE-family blocks. Default 5.
     latent_gate_fn : str, optional
@@ -939,6 +982,8 @@ class NHiTSNet(_NBeatsBase):
     ):
         if stack_types is None:
             raise ValueError("Stack architecture must be specified.")
+        # Fail fast on obviously invalid scalar strings; full per-stack
+        # validation (including list form) runs below once n_stacks is known.
         if isinstance(active_g, str) and active_g not in ("backcast", "forecast"):
             raise ValueError(
                 f"active_g must be True, False, 'backcast', or 'forecast', got '{active_g}'"
@@ -1058,6 +1103,12 @@ class NHiTSNet(_NBeatsBase):
             self.skip_alpha_param = nn.Parameter(torch.tensor(0.01))
         else:
             self._skip_alpha_learnable = False
+
+        # Normalize active_g into a per-stack list; _create_nhits_stack reads
+        # from self._active_g_per_stack[stack_idx] so each stack can be
+        # configured independently while self.active_g preserves the original
+        # user input.
+        self._active_g_per_stack = _normalize_active_g(active_g, self.n_stacks)
 
         self.stacks = nn.ModuleList()
         for stack_idx, stack_type in enumerate(self.stack_types):
@@ -1193,7 +1244,7 @@ class NHiTSNet(_NBeatsBase):
                         basis_offset=effective_offset,
                         share_weights=self.share_weights,
                         activation=self.activation,
-                        active_g=self.active_g,
+                        active_g=self._active_g_per_stack[stack_idx],
                         forecast_basis_dim=self.forecast_basis_dim,
                         wavelet_type=self.wavelet_type,
                         backcast_wavelet_type=self.backcast_wavelet_type,
@@ -1210,7 +1261,7 @@ class NHiTSNet(_NBeatsBase):
                         basis_offset=effective_offset,
                         share_weights=self.share_weights,
                         activation=self.activation,
-                        active_g=self.active_g,
+                        active_g=self._active_g_per_stack[stack_idx],
                         forecast_basis_dim=self.forecast_basis_dim,
                         wavelet_type=self.wavelet_type,
                         backcast_wavelet_type=self.backcast_wavelet_type,
@@ -1223,7 +1274,7 @@ class NHiTSNet(_NBeatsBase):
                         basis_offset=effective_offset,
                         share_weights=self.share_weights,
                         activation=self.activation,
-                        active_g=self.active_g,
+                        active_g=self._active_g_per_stack[stack_idx],
                         latent_dim=self.latent_dim,
                         forecast_basis_dim=self.forecast_basis_dim,
                         wavelet_type=self.wavelet_type,
@@ -1250,7 +1301,7 @@ class NHiTSNet(_NBeatsBase):
                         basis_offset=effective_offset,
                         share_weights=self.share_weights,
                         activation=self.activation,
-                        active_g=self.active_g,
+                        active_g=self._active_g_per_stack[stack_idx],
                         latent_dim=self.latent_dim,
                         forecast_basis_dim=self.forecast_basis_dim,
                         wavelet_type=self.wavelet_type,
@@ -1273,7 +1324,7 @@ class NHiTSNet(_NBeatsBase):
                         effective_td,
                         self.share_weights,
                         self.activation,
-                        self.active_g,
+                        self._active_g_per_stack[stack_idx],
                         self.latent_dim,
                     ]
                     if "AELG" in stack_type:
@@ -1299,7 +1350,7 @@ class NHiTSNet(_NBeatsBase):
                             effective_offset,
                             self.share_weights,
                             self.activation,
-                            self.active_g,
+                            self._active_g_per_stack[stack_idx],
                             forecast_basis_dim=self.forecast_basis_dim,
                             latent_dim=self.latent_dim,
                             **_wavelet_kwargs,
@@ -1313,7 +1364,7 @@ class NHiTSNet(_NBeatsBase):
                             effective_offset,
                             self.share_weights,
                             self.activation,
-                            self.active_g,
+                            self._active_g_per_stack[stack_idx],
                             forecast_basis_dim=self.forecast_basis_dim,
                             **_wavelet_kwargs,
                         )
@@ -1325,7 +1376,7 @@ class NHiTSNet(_NBeatsBase):
                             self.basis_dim,
                             self.share_weights,
                             self.activation,
-                            self.active_g,
+                            self._active_g_per_stack[stack_idx],
                         )
                 else:
                     block = getattr(b, stack_type)(
@@ -1335,7 +1386,7 @@ class NHiTSNet(_NBeatsBase):
                         effective_td,
                         self.share_weights,
                         self.activation,
-                        self.active_g,
+                        self._active_g_per_stack[stack_idx],
                     )
 
             blocks.append(block)
