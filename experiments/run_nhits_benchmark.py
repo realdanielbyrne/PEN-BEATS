@@ -546,6 +546,7 @@ def load_yaml_configs(yaml_path):
     dataset = yaml_data.get("dataset", None)
     horizons = yaml_data.get("horizons", None)
     experiment_name = yaml_data.get("experiment_name", "yaml_experiment")
+    output_csv = yaml_data.get("output_csv", None)
 
     # --- Parse configs ---
     configs_raw = yaml_data.get("configs", [])
@@ -586,6 +587,7 @@ def load_yaml_configs(yaml_path):
         "dataset": dataset,
         "horizons": horizons,
         "experiment_name": experiment_name,
+        "output_csv": output_csv,
         "skip_horizon_overrides": skip_horizon_overrides,
     }
 
@@ -1650,12 +1652,6 @@ def main():
     if args.gpu is not None:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
 
-    csv_path = args.csv_path or os.path.join(RESULTS_DIR, CSV_FILENAME)
-
-    if args.analyze:
-        analyze_results(csv_path)
-        return
-
     # --- Load configs: from YAML or hardcoded defaults ---
     yaml_data = None
     protocol = None
@@ -1674,6 +1670,25 @@ def main():
         skip_horizon_overrides = yaml_data.get("skip_horizon_overrides", False)
     else:
         all_configs = get_benchmark_configs()
+
+    # Resolve CSV path: CLI --csv-path > YAML output_csv > default CSV_FILENAME.
+    # A YAML-supplied bare filename is joined with RESULTS_DIR; absolute paths
+    # or paths containing a directory component are used as-is.
+    if args.csv_path:
+        csv_path = args.csv_path
+    else:
+        yaml_output_csv = yaml_data.get("output_csv") if yaml_data else None
+        if yaml_output_csv:
+            if os.path.isabs(yaml_output_csv) or os.path.dirname(yaml_output_csv):
+                csv_path = yaml_output_csv
+            else:
+                csv_path = os.path.join(RESULTS_DIR, yaml_output_csv)
+        else:
+            csv_path = os.path.join(RESULTS_DIR, CSV_FILENAME)
+
+    if args.analyze:
+        analyze_results(csv_path)
+        return
 
     # --- Resolve CLI overrides (CLI > YAML > hardcoded defaults) ---
     datasets = args.dataset

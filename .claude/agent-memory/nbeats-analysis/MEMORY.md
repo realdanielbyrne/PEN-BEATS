@@ -1,5 +1,14 @@
 # Persistent Notes
 
+## NHiTS Weather Sliding e6 (2026-04-22) **LATEST**
+
+- See [nhits_weather_sliding_e6.md](nhits_weather_sliding_e6.md).
+- **Universal Weather-NHiTS winner:** `TrendWaveletGenericVAE-agF` (mean rank 3.50/29, 432K-2.17M params).
+- **H=96:** TrendWaveletAELG MSE=0.160 matches paper 0.158. **H=720:** BottleneckGenericAE-agF MSE=0.388 (+12% vs paper).
+- **Protocol-family interaction:** sliding favors structured low-param (TrendWavelet, Bottleneck); paper sampling favors generic high-param. Pick protocol to family.
+- **agF neutral-to-worse** on Weather-NHiTS-sliding — GenericAE-agF sig worse (p=0.04). Confirms prior "agF catastrophic on Weather" in sliding regime too.
+- **Drop:** plain NHiTS-Generic, TrendWaveletGeneric-agF (deterministic sibling), GenericVAE (pure-VAE).
+
 ## Training Dynamics: Unified vs Comprehensive (2026-03-22)
 - See [training_dynamics_findings.md](training_dynamics_findings.md) for details.
 - **Three factors explain UB vs CS gap:** LR warmup (most impactful), patience=20, max_epochs=200. Not just epoch count.

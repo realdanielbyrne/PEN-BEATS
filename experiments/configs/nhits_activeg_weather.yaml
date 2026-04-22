@@ -7,21 +7,15 @@
 # runs ONLY the active_g=forecast variants.
 #
 # Usage:
-#   python experiments/run_nhits_benchmark.py --dataset weather \
-#       --configs Generic-10-agF GenericAELG-10-agF GenericAE-10-agF \
-#               BottleneckGenericAELG-10-agF BottleneckGenericAE-10-agF \
-#               TrendWaveletGeneric-10-agF TrendWaveletGenericAE-10-agF \
-#               TrendWaveletGenericAELG-10-agF TrendWaveletGenericVAE-10-agF \
-#               NHiTS-Generic-agF NHiTS-GenericAELG-agF NHiTS-GenericAE-agF \
-#               NHiTS-TrendWaveletGeneric-agF NHiTS-TrendWaveletGenericAELG-agF \
-#               NHiTS-TrendWaveletGenericVAE-agF
-#
-#   # Or run all configs (baseline + agF) together:
-#   python experiments/run_nhits_benchmark.py --dataset weather
+#   python experiments/run_nhits_benchmark.py --yaml experiments/configs/nhits_activeg_weather.yaml
 #
 #   # Dry-run to verify plan:
-#   python experiments/run_nhits_benchmark.py --dataset weather \
-#       --configs Generic-10-agF TrendWaveletGeneric-10-agF --dry-run
+#   python experiments/run_nhits_benchmark.py \
+#       --yaml experiments/configs/nhits_activeg_weather.yaml --dry-run
+#
+#   # Analyze results
+#   python experiments/run_nhits_benchmark.py --analyze \
+#       --yaml experiments/configs/nhits_activeg_weather.yaml
 # ============================================================
 
 experiment_name: NHiTS-Protocol-Weather-ActiveG
@@ -31,8 +25,10 @@ description: >
   Complements the main NHiTS benchmark by adding active_g=forecast
   variants.
 
+output_csv: nhits/nhits_activeg_weather_results.csv
+
 dataset: weather
-horizons: [96, 192, 336, 720]
+horizons: [96]
 
 # NHiTS evaluation protocol (same as main benchmark)
 protocol:
@@ -42,70 +38,80 @@ protocol:
   include_target: true     # 21 columns (with OT)
   loss: MSELoss
   forecast_multiplier: 5   # L = 5*H
-  batch_size: 256
-
-# Configs: Generic-family + TrendWaveletGeneric-family, all with active_g=forecast
-# Baselines (active_g=false) already exist from nhits_benchmark_weather.yaml
-configs:
-
-  # --- NHiTSNet (3-stack with hierarchical pooling): Generic-family ---
-  - name: NHiTS-Generic-agF
-    model: NHiTSNet
-    stack_types: ['Generic', 'Generic', 'Generic']
-    n_pools_kernel_size: [8, 4, 1]
-    n_freq_downsample: [24, 12, 1]
-    active_g: forecast
-
-  - name: NHiTS-GenericAELG-agF
-    model: NHiTSNet
-    stack_types: ['GenericAELG', 'GenericAELG', 'GenericAELG']
-    n_pools_kernel_size: [8, 4, 1]
-    n_freq_downsample: [24, 12, 1]
-    active_g: forecast
-
-  - name: NHiTS-GenericAE-agF
-    model: NHiTSNet
-    stack_types: ['GenericAE', 'GenericAE', 'GenericAE']
-    n_pools_kernel_size: [8, 4, 1]
-    n_freq_downsample: [24, 12, 1]
-    active_g: forecast
-
-  # --- NHiTSNet (3-stack with hierarchical pooling): TrendWaveletGeneric-family ---
-  - name: NHiTS-TrendWaveletGeneric-agF
-    model: NHiTSNet
-    stack_types: ['TrendWaveletGeneric', 'TrendWaveletGeneric', 'TrendWaveletGeneric']
-    n_pools_kernel_size: [8, 4, 1]
-    n_freq_downsample: [24, 12, 1]
-    active_g: forecast
-
-  - name: NHiTS-TrendWaveletGenericAELG-agF
-    model: NHiTSNet
-    stack_types: ['TrendWaveletGenericAELG', 'TrendWaveletGenericAELG', 'TrendWaveletGenericAELG']
-    n_pools_kernel_size: [8, 4, 1]
-    n_freq_downsample: [24, 12, 1]
-    active_g: forecast
-
-  - name: NHiTS-TrendWaveletGenericVAE-agF
-    model: NHiTSNet
-    stack_types: ['TrendWaveletGenericVAE', 'TrendWaveletGenericVAE', 'TrendWaveletGenericVAE']
-    n_pools_kernel_size: [8, 4, 1]
-    n_freq_downsample: [24, 12, 1]
-    active_g: forecast
+  batch_size: 1024
 
 runs:
-  n_runs: 5
+  n_runs: 3
   base_seed: 1
 
 training:
-  max_epochs: 100
+  max_epochs: 6
   early_stopping: false    # Paper setting (disabled)
-  patience: 25             # Unused when early_stopping=false
+  patience: 5             # Unused when early_stopping=false
   activation: ReLU
-  active_g: forecast       # All configs in this file use active_g=forecast
+  active_g: ['forecast', 'forecast', false]  # Per-stack: activation on forecast path for stacks 1-2, unclamped final stack
   sum_losses: false
+  num_workers: 4
+  
+  #lr_scheduler:
+  #  type: step
+  #  step_size: 8
+  #  gamma: 0.5
+
+  lr_scheduler:
+    type: plateau
+    factor: 0.5
+    patience: 2
+    min_lr: 0.0001
 
 block_params:
   thetas_dim: 5
   latent_dim: 16           # Research-confirmed optimal
   basis_dim: eq_fcast      # Dynamic: set to forecast_length per horizon
+
+# Configs: Generic-family + TrendWaveletGeneric-family, all with active_g=forecast
+# Baselines (active_g=false) already exist from nhits_benchmark_weather.yaml
+configs:
+  - name: NHiTS-Generic
+    model: NHiTSNet
+    stack_types: ['NHiTSGenericRoot', 'NHiTSGenericRoot', 'NHiTSGenericRoot']
+    active_g: ['forecast', 'forecast', false]
+
+  - name: NHiTS-BottleneckGenericAELG-agF
+    model: NHiTSNet
+    stack_types: ['BottleneckGenericAELG', 'BottleneckGenericAELG', 'BottleneckGenericAELG']
+    active_g: ['forecast', 'forecast', false]
+
+  - name: NHiTS-BottleneckGenericAE-agF
+    model: NHiTSNet
+    stack_types: ['BottleneckGenericAE', 'BottleneckGenericAE', 'BottleneckGenericAE']
+    active_g: ['forecast', 'forecast', false]
+
+  - name: NHiTS-GenericAELG-agF
+    model: NHiTSNet
+    stack_types: ['GenericAELG', 'GenericAELG', 'GenericAELG']
+    active_g: ['forecast', 'forecast', false]
+
+  - name: NHiTS-GenericAE-agF
+    model: NHiTSNet
+    stack_types: ['GenericAE', 'GenericAE', 'GenericAE']
+    active_g: ['forecast', 'forecast', false]
+
+  # --- NHiTSNet (3-stack with hierarchical pooling): TrendWaveletGeneric-family ---
+  - name: NHiTS-TrendWaveletGeneric-agF
+    model: NHiTSNet
+    stack_types: ['TrendWaveletGeneric', 'TrendWaveletGeneric', 'TrendWaveletGeneric']
+    active_g: ['forecast', 'forecast', false]
+
+  - name: NHiTS-TrendWaveletGenericAELG-agF
+    model: NHiTSNet
+    stack_types: ['TrendWaveletGenericAELG', 'TrendWaveletGenericAELG', 'TrendWaveletGenericAELG']
+    active_g: ['forecast', 'forecast', false]
+
+  - name: NHiTS-TrendWaveletGenericVAE-agF
+    model: NHiTSNet
+    stack_types: ['TrendWaveletGenericVAE', 'TrendWaveletGenericVAE', 'TrendWaveletGenericVAE']
+    active_g: ['forecast', 'forecast', false]
+
+
 
