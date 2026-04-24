@@ -1,1 +1,0 @@
-model_type,config_name,dataset,horizon,backcast_length,n_stacks,n_blocks_per_stack,run,seed,mse,mae,denorm_mse,denorm_mae,smape,n_params,training_time_seconds,epochs_trained,stopping_reason,best_val_loss,loss_function,active_g,normalize,train_ratio,val_ratio,include_target,stack_types,n_pools_kernel_size,n_freq_downsample,sampling_style,steps_per_epoch,sampling_weights

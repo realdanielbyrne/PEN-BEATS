@@ -221,3 +221,4 @@ requirements/base.txt
 _notebooks/.notebooks/
 exp_status.txt
 SAMPLING_STYLE_PLAN.md
+experiments/results
