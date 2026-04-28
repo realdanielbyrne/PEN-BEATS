@@ -15,7 +15,7 @@
 # only the training protocol differs, so sampling-protocol effects can be
 # isolated by A/B comparison.
 #
-# Total configs: 48
+# Total configs: 53
 # Architecture groups:
 #   A. Paper baselines (NBEATS-G, NBEATS-I+G)
 #   B. TrendWavelet RootBlock (wavelet + basis_dim sweep)
@@ -84,14 +84,16 @@ training:
   
   max_steps: 100000
   max_epochs: 150              # safety cap; early stopping fires first
-  patience: 15                 # must exceed milestone interval (effective 100/10=10); paper uses deterministic schedule
+  patience: 15                 # counts validation checks; with val_check_interval=100, fires at 1500 steps minimum
+  val_check_interval: 100      # validate every 100 steps (10x per Lightning epoch); matches paper's per-batch monitoring
+  min_delta: 0.001             # require 0.1% improvement to reset patience; filters noise-driven false improvements
   n_blocks_per_stack: 1
   share_weights: true
   loss: SMAPELoss
   optimizer: Adam
   learning_rate: 0.001         # paper: 1e-3 Adam default
   forecast_multiplier: 5       # paper ensembles L ∈ {2H..7H}; 5 is middle
-  batch_size: 1024             # paper exact
+  batch_size: 1024             # paper 1024
 
 lr_scheduler:
   type: multistep
@@ -115,7 +117,7 @@ output:
 
 logging:
   wandb:
-    enabled: false
+    enabled: true
     project: nbeats-lightning
   tensorboard: false
 
@@ -169,7 +171,7 @@ configs:
       trend_thetas_dim_cfg: null
       skip_distance_cfg: 0
       active_g_cfg: false
-  
+
   - name: NBEATS-G_10s_agf
     category: paper_baseline
     stacks:
@@ -177,7 +179,7 @@ configs:
       block: Generic
       n: 10
     training:
-      active_g: forecast
+      active_g: [forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, false]
     extra_fields:
       arch_family: paper_baseline
       block_type_primary: Generic
@@ -213,15 +215,15 @@ configs:
       active_g_cfg: false
   
   - name: NBEATS-G_30s_agf
-    category: paper_baseline
+    category: active_g_generic
     stacks:
       type: homogeneous
       block: Generic
       n: 30
     training:
-      active_g: forecast
+      active_g: [forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, false]
     extra_fields:
-      arch_family: paper_baseline
+      arch_family: active_g_generic
       block_type_primary: Generic
       backbone: RootBlock
       stack_pattern: homogeneous
@@ -258,18 +260,18 @@ configs:
       active_g_cfg: false
   
   - name: NBEATS-IG_10s_agf
-    category: paper_baseline
+    category: active_g_generic
     stacks:
       type: prefix_body
       prefix: [Trend, Seasonality]
       body: Generic
       total: 10
     training:
-      active_g: forecast
+        active_g: [false, false, forecast, forecast, forecast, forecast, forecast, forecast, forecast, false]
     block_params:
       trend_thetas_dim: 3
     extra_fields:
-      arch_family: paper_baseline
+      arch_family: active_g_generic
       block_type_primary: Trend+Seasonality+Generic
       backbone: RootBlock
       stack_pattern: prefix_body
@@ -306,18 +308,18 @@ configs:
       active_g_cfg: false
   
   - name: NBEATS-IG_30s_agf
-    category: paper_baseline
+    category: active_g_generic
     stacks:
       type: prefix_body
       prefix: [Trend, Seasonality]
       body: Generic
       total: 30
     training:
-      active_g: "forecast"
+      active_g: [false, false, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, forecast, false]
     block_params:
       trend_thetas_dim: 3
     extra_fields:
-      arch_family: paper_baseline
+      arch_family: active_g_generic
       block_type_primary: Trend+Seasonality+Generic
       backbone: RootBlock
       stack_pattern: prefix_body
@@ -429,7 +431,32 @@ configs:
       trend_thetas_dim_cfg: 3
       skip_distance_cfg: 0
       active_g_cfg: false
-  
+
+  - name: TW_10s_td3_bdeq_coif3
+    category: trendwavelet_rb
+    stacks:
+      type: homogeneous
+      block: TrendWavelet
+      n: 10
+    training:
+      active_g: false
+    block_params:
+      trend_thetas_dim: 3
+      basis_dim: eq_fcast
+      wavelet_type: coif3
+    extra_fields:
+      arch_family: trendwavelet
+      block_type_primary: TrendWavelet
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 10
+      wavelet_family: coif3
+      basis_dim_label: eq_fcast
+      latent_dim_cfg: null
+      trend_thetas_dim_cfg: 3
+      skip_distance_cfg: 0
+      active_g_cfg: false
+
   - name: TW_30s_td3_bdeq_haar
     category: trendwavelet_rb
     stacks:
@@ -524,6 +551,31 @@ configs:
       stack_pattern: homogeneous
       n_stacks: 30
       wavelet_family: sym10
+      basis_dim_label: eq_fcast
+      latent_dim_cfg: null
+      trend_thetas_dim_cfg: 3
+      skip_distance_cfg: 0
+      active_g_cfg: false
+
+  - name: TW_30s_td3_bdeq_coif3
+    category: trendwavelet_rb
+    stacks:
+      type: homogeneous
+      block: TrendWavelet
+      n: 30
+    training:
+      active_g: false
+    block_params:
+      trend_thetas_dim: 3
+      basis_dim: eq_fcast
+      wavelet_type: coif3
+    extra_fields:
+      arch_family: trendwavelet
+      block_type_primary: TrendWavelet
+      backbone: RootBlock
+      stack_pattern: homogeneous
+      n_stacks: 30
+      wavelet_family: coif3
       basis_dim_label: eq_fcast
       latent_dim_cfg: null
       trend_thetas_dim_cfg: 3
@@ -982,6 +1034,30 @@ configs:
       stack_pattern: alternating
       n_stacks: 30
       wavelet_family: sym10
+      basis_dim_label: eq_fcast
+      latent_dim_cfg: null
+      trend_thetas_dim_cfg: 3
+      skip_distance_cfg: 0
+      active_g_cfg: false
+
+  - name: T+Coif3V3_30s_bdeq
+    category: alt_trend_wavelet_rb
+    stacks:
+      type: alternating
+      blocks: [Trend, Coif3WaveletV3]
+      repeats: 15
+    training:
+      active_g: false
+    block_params:
+      trend_thetas_dim: 3
+      basis_dim: eq_fcast
+    extra_fields:
+      arch_family: alt_trend_wavelet_rb
+      block_type_primary: Trend+Coif3WaveletV3
+      backbone: RootBlock
+      stack_pattern: alternating
+      n_stacks: 30
+      wavelet_family: coif3
       basis_dim_label: eq_fcast
       latent_dim_cfg: null
       trend_thetas_dim_cfg: 3

@@ -4,6 +4,27 @@
 
 When choosing between TrendWaveletAELG (unified block) and TrendAELG + WaveletV3AELG (alternating stacks):
 
+### Update from M4 Paper-Sample Sweep (2026-04-27)
+
+53-config × 6-period × 10-run sweep under `sampling_style=nbeats_paper`. Novel-only mean rank (across 6 periods, 53 configs):
+
+| Family group (RootBlock backbone) | Mean rank | Note |
+|---|---|---|
+| **alt T+Wavelet (RB)** `T+<wav>V3_30s_bdeq` | **14.1** | best novel family by ~10 ranks |
+| unified TrendWavelet (RB) `TW_*s_td3_bdeq_<wav>` | 24.3 | wins Monthly only |
+
+**Alternating beats unified TrendWavelet by ~10 mean-rank points on M4 under paper-sample protocol.** Best M4 generalist `T+Sym10V3_30s_bdeq` (mean rank 6.83/53). Default to alternating when ≥15M params is acceptable; reserve unified `TrendWavelet` block for parameter-constrained scenarios where one 0.5–1.5M model has to do everything.
+
+**Sub-1M parameter champion:** `TWAELG_10s_ld32_db3_*` — 0.48–0.85M params, top-5 on Yearly, Daily, Hourly. Cheapest competitive deployment unit on M4.
+
+**AE ≈ AELG at matched M4 configurations.** Per-period mean Δ`(AELG − AE)` within ±0.06 SMAPE; signs flip across wavelets. Pick AELG when latent-dim/parameter count is constrained (its native ld=16 halves AE-ld32 cost with no consistent SMAPE penalty).
+
+**`active_g=forecast` (`agf`) on novel TWAE/TWAELG: helps Yearly + Hourly only**, loses or ties on Q/M/W/D. Same period-specific signal applies to paper baselines (Hourly: every paper backbone wins agf vs ag0 by 0.07–0.15 SMAPE).
+
+See `experiments/analysis/analysis_reports/comprehensive_m4_paper_sample_analysis.md` §6 for the full novel-architecture head-to-head.
+
+---
+
 | Scenario | Recommended | Rationale |
 |----------|-------------|-----------|
 | **Tourism-Yearly** | **TrendWaveletAELG** (or test GAE10) | Confirmed SMAPE=20.864 (10-run); GAE10_no_skip achieves 20.526 (needs head-to-head ≥10 seeds to confirm SOTA) |

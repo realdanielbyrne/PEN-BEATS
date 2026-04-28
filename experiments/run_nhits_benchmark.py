@@ -722,6 +722,15 @@ class ConvergenceTracker(pl.Callback):
             self.train_losses.append(float(v))
 
 
+class LearningRateLogger(pl.Callback):
+    """Logs the learning rate at the start of each training epoch."""
+
+    def on_train_epoch_start(self, trainer, pl_module):
+        lr = trainer.optimizers[0].param_groups[0]["lr"]
+        pl_module.log("lr_epoch", lr, prog_bar=True)
+        print(f"  Epoch {trainer.current_epoch + 1}: lr = {lr:.6f}")
+
+
 # ---------------------------------------------------------------------------
 # CSV Helpers
 # ---------------------------------------------------------------------------
@@ -1330,8 +1339,14 @@ def _run_experiment_body(
         relative_threshold=_div_threshold, consecutive_epochs=_div_epochs
     )
     convergence_tracker = ConvergenceTracker()
+    lr_logger = LearningRateLogger()
 
-    trainer_callbacks = [chk_callback, divergence_detector, convergence_tracker]
+    trainer_callbacks = [
+        chk_callback,
+        divergence_detector,
+        convergence_tracker,
+        lr_logger,
+    ]
     if t_early_stopping:
         trainer_callbacks.insert(1, early_stop_callback)
 

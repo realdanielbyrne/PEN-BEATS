@@ -62,8 +62,10 @@ training:
   active_g: false
   sum_losses: false
   activation: ReLU
-  max_epochs: 200
+  max_epochs: 75               # reduced from 200; sliding window converges in far fewer true epochs
   patience: 20
+  min_delta: 0.001             # require 0.1% improvement to reset patience; prevents noise-driven training extension
+  min_epochs: 10               # don't stop before epoch 10; allow initial convergence past early noise
   n_blocks_per_stack: 1
   share_weights: true
   loss: SMAPELoss

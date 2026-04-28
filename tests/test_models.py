@@ -240,6 +240,40 @@ class TestOptimizerDispatch:
             model.configure_optimizers()
 
 
+class TestPlateauSchedulerConfig:
+    """Verify configure_optimizers wires interval/frequency for plateau."""
+
+    def test_plateau_default_epoch_cadence(self):
+        cfg = {"type": "plateau", "factor": 0.5, "patience": 5}
+        model = _make_model(["Generic"], lr_scheduler_config=cfg)
+        result = model.configure_optimizers()
+        assert isinstance(result, dict)
+        sched = result["lr_scheduler"]
+        assert sched["interval"] == "epoch"
+        assert sched["frequency"] == 1
+        assert sched["monitor"] == "val_loss"
+
+    def test_plateau_step_cadence_forwarded(self):
+        cfg = {
+            "type": "plateau",
+            "factor": 0.75,
+            "patience": 0,
+            "cooldown": 0,
+            "min_lr": 1e-6,
+            "interval": "step",
+            "frequency": 100,
+        }
+        model = _make_model(["Generic"], lr_scheduler_config=cfg)
+        result = model.configure_optimizers()
+        sched = result["lr_scheduler"]
+        assert sched["interval"] == "step"
+        assert sched["frequency"] == 100
+        # ReduceLROnPlateau's hyperparameters reflect the YAML inputs
+        plateau = sched["scheduler"]
+        assert plateau.factor == pytest.approx(0.75)
+        assert plateau.patience == 0
+
+
 # --- Forward pass shape tests ---
 
 

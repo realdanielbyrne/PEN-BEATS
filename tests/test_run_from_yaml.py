@@ -7,7 +7,9 @@ from types import SimpleNamespace
 import pytest
 
 
-_EXPERIMENTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "experiments"))
+_EXPERIMENTS_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "experiments")
+)
 if _EXPERIMENTS_DIR not in sys.path:
     sys.path.insert(0, _EXPERIMENTS_DIR)
 
@@ -85,7 +87,9 @@ def test_run_experiment_forwards_protocol_settings(monkeypatch, tmp_path):
         "hardware": {"worker_id": "yaml-worker-1"},
     }
 
-    ryf.run_experiment(top_level_cfg, cli_overrides={}, dry_run=False, analyze_only=False)
+    ryf.run_experiment(
+        top_level_cfg, cli_overrides={}, dry_run=False, analyze_only=False
+    )
 
     assert captured["load_dataset"] == {
         "dataset_name": "traffic",
@@ -97,7 +101,9 @@ def test_run_experiment_forwards_protocol_settings(monkeypatch, tmp_path):
     assert captured["run_single_experiment"]["val_ratio"] == pytest.approx(0.1)
     assert captured["run_single_experiment"]["loss_override"] == "MSELoss"
     assert captured["run_single_experiment"]["forecast_multiplier"] == 5
-    assert captured["run_single_experiment"]["batch_size"] == 256  # explicit YAML value takes precedence over tuned table
+    assert (
+        captured["run_single_experiment"]["batch_size"] == 256
+    )  # explicit YAML value takes precedence over tuned table
     assert captured["run_single_experiment"]["latent_gate_fn"] == "wavy_sigmoid"
     assert captured["run_single_experiment"]["dataset_name"] == "traffic"
     assert captured["run_single_experiment"]["worker_id"] == "yaml-worker-1"
@@ -111,7 +117,9 @@ def test_claim_job_prevents_duplicate_work_per_pass(monkeypatch, tmp_path):
     active_g_claim_name = rub.build_claim_config_name("activeG_fcast", "TWG_cfg")
 
     assert rub.claim_job(baseline_claim_name, "m4", "Yearly", 0, worker_id="worker-a")
-    assert not rub.claim_job(baseline_claim_name, "m4", "Yearly", 0, worker_id="worker-b")
+    assert not rub.claim_job(
+        baseline_claim_name, "m4", "Yearly", 0, worker_id="worker-b"
+    )
     assert rub.claim_job(active_g_claim_name, "m4", "Yearly", 0, worker_id="worker-c")
 
     assert (claims_dir / "baseline__TWG_cfg__m4__Yearly__run0.claim").exists()
@@ -139,7 +147,9 @@ def test_run_single_experiment_claims_with_pass_aware_identity(monkeypatch):
     monkeypatch.setattr(
         rub,
         "set_seed",
-        lambda seed: pytest.fail("set_seed should not run when claim acquisition fails"),
+        lambda seed: pytest.fail(
+            "set_seed should not run when claim acquisition fails"
+        ),
     )
 
     rub.run_single_experiment(
@@ -204,3 +214,34 @@ def test_load_dataset_forwards_dataset_protocol_kwargs(
         "train_ratio": pytest.approx(0.7),
         "include_target": True,
     }
+
+
+class TestResolveLRSchedulerPlateau:
+    """Verify plateau scheduler resolution forwards interval/frequency."""
+
+    def test_plateau_defaults(self):
+        cfg = {"type": "plateau"}
+        out = ryf.resolve_lr_scheduler(cfg, max_epochs=100)
+        assert out["type"] == "plateau"
+        assert out["interval"] == "epoch"
+        assert out["frequency"] == 1
+        assert out["factor"] == pytest.approx(0.5)
+        assert out["patience"] == 10
+        assert out["monitor"] == "val_loss"
+
+    def test_plateau_step_cadence_forwarded(self):
+        cfg = {
+            "type": "plateau",
+            "factor": 0.75,
+            "patience": 0,
+            "cooldown": 0,
+            "min_lr": 1e-6,
+            "interval": "step",
+            "frequency": 100,
+        }
+        out = ryf.resolve_lr_scheduler(cfg, max_epochs=150)
+        assert out["interval"] == "step"
+        assert out["frequency"] == 100
+        assert out["factor"] == pytest.approx(0.75)
+        assert out["patience"] == 0
+        assert out["min_lr"] == pytest.approx(1e-6)

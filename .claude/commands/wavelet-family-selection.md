@@ -23,6 +23,29 @@ The comprehensive sweep (112 configs x 10 runs, M4 all periods + Tourism + Weath
 
 When Symlet20's filter is compatible with the target length, it remains a strong choice for long-horizon datasets, but db3 is now the recommended first-choice for new experiments.
 
+### Refinement (M4 Paper-Sample Sweep, 2026-04-27)
+
+53 configs × 6 periods × 10 runs under `sampling_style=nbeats_paper`. See `experiments/analysis/analysis_reports/comprehensive_m4_paper_sample_analysis.md`.
+
+| M4 Period | Best wavelet (paper-sample) | Best wavelet (sliding) | Agreement |
+|---|---|---|---|
+| Yearly    | db3 (`TALG+DB3V3ALG_10s_ag0`) | coif2 | family-level (alt-T+W) |
+| Quarterly | n/a (paper baseline wins) | n/a (paper baseline wins) | yes |
+| Monthly   | haar (`TW_30s_td3_bdeq_haar`) | coif2 | weak — both small wins |
+| Weekly    | coif2 (`T+Coif2V3_30s_bdeq`) | db3 | family-level (T+W RB) |
+| Daily     | coif2 (`TAELG+Coif2V3ALG_30s_ag0`) | (paper baseline) | n/a |
+| Hourly    | n/a (paper baseline wins) | n/a (paper baseline wins) | yes |
+
+**Best M4 generalist (paper-sample):** `T+Sym10V3_30s_bdeq` (mean rank 6.83/53, top-3 on 3 periods, top-15 on all 6). Corroborates `T+HaarV3_30s_bd2eq` from the sliding sweep — **haar / sym10 are the universal M4 generalist wavelets**.
+
+**M4 default shortlist (both protocols): haar, db3, coif2, sym10.**
+
+### Coif3 verdict on M4 (2026-04-27)
+
+**Coif3 unlocks NO new per-period SOTA.** Tested on M4 paper-sample sweep across `TW_{10s,30s}_td3_bdeq_coif3` and `T+Coif3V3_30s_bdeq`. Best result: family-internal wins on TW-10s for Monthly (+0.09 vs db3) and Weekly (+0.05 vs db3) — both within 1 std and beaten outright by `TW_30s_td3_bdeq_haar` and `T+Coif2V3_30s_bdeq` at the cross-family level. Coif3's 6 vanishing moments and longer support add no value over coif2 (2 VM) or sym10 on M4 horizons.
+
+**Drop coif3 from default M4 wavelet shortlist.** (Tourism question still open — separate AELG_coif3_eq_bcast_td3_ld16 SOTA finding has not been retested.)
+
 ---
 
 ## Cross-Dataset Performance Rankings (V3AELG Study, 2026-03-07)

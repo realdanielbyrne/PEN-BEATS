@@ -221,4 +221,6 @@ requirements/base.txt
 _notebooks/.notebooks/
 exp_status.txt
 SAMPLING_STYLE_PLAN.md
+
+# experiment artifacts symlinked to data drive
 experiments/results

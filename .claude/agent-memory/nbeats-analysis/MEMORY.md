@@ -1,6 +1,47 @@
 # Persistent Notes
 
-## NHiTS Weather Sliding e6 (2026-04-22) **LATEST**
+## Comprehensive M4 Paper-Sample Sweep — Combined (2026-04-27) **LATEST**
+
+- **Canonical report:** `experiments/analysis/analysis_reports/comprehensive_m4_paper_sample_combined_analysis.md` (supersedes `comprehensive_m4_paper_sample_analysis.md` and `..._sym10_fills_analysis.md` — kept on disk for traceability only).
+- **Merged corpus:** 68 configs × 6 periods × 10 runs = 4,080 raw rows (parent 53 + sym10-fills 15). After strict divergence filter (`diverged=True OR smape>100 OR (best_epoch==0 AND smape>50)`): 4,066 rows, 14 dropped (1 explicit + 10 smape>100 + 3 best_epoch==0). **402/408 cells at n=10**; 6 thin cells all in GenericVAE_3s_sw0 + 2 SMAPE=200 outlier configs. Zero configs have all-zero coverage.
+- **Filter rule MUST be applied uniformly** across leaderboards/mean-rank/sub-1M/novel head-to-head/AE-vs-AELG/agf-vs-ag0/Wilcoxon. The 13 implicit-divergence rows (GenericVAE Hourly cluster + TAE+Sym10V3AE Daily run 5 + TW_10s_td3_bdeq_coif2 Daily run 3) have `diverged=False` in CSV but smape>100 — never trust the CSV diverged flag alone.
+- **Validates early-stopping fix** (`val_check_interval=100`, `min_delta=0.001`) for `sampling_style: nbeats_paper`. best_epoch median=15, mean=23.9, only 7.9% at <=1 (was ~100% pre-fix). 1/3,180 diverged.
+- **Per-period winners (paper-sample, mean of 10):** Yearly TALG+DB3V3ALG_10s_ag0 (13.550), Quarterly NBEATS-IG_10s_ag0 (10.357), Monthly TW_30s_td3_bdeq_haar (13.391), Weekly T+Coif2V3_30s_bdeq (6.735), Daily TAELG+Coif2V3ALG_30s_ag0 (3.036), Hourly NBEATS-IG_30s_agf (8.758). Best paper-faithful Hourly entry: NBEATS-IG_30s_ag0 at rank 4 (`agf` is a repo-novel extension, NOT Oreshkin 2020).
+- **vs paper N-BEATS-G ensemble:** matches paper on Yearly/Daily, crushes Weekly (-25.8%) and Hourly (-25.1%); behind on Quarterly (+1.7%) and Monthly (+3.5%) — likely closes with ensembling 10 seeds.
+- **Coif3 unlocks NO new per-period SOTA.** Wins TW-10s family on Monthly/Weekly only (small margins). Drop coif3 from default wavelet shortlist; use haar/db3/coif2/sym10.
+- **Best M4 generalist:** T+Sym10V3_30s_bdeq (mean rank 6.83/53). Corroborates prior comprehensive_sweep_m4 (haar/sym10 alt-trend-wavelet RootBlock family).
+- **Daily protocol inversion:** paper-sample crowns TAELG+Coif2V3ALG_30s_ag0 (3.036); sliding had NBEATS-G_30s_ag0 (2.588). Protocols expose different architectural strengths — pick one and stay there.
+- **active_g=forecast helps Yearly + Hourly only** on novel TWAE/TWAELG (loses or ties on Q/M/W/D). Same pattern for paper backbones (all 4 win agf on Hourly). Never use agf as a global default; enable on Yearly/Hourly only.
+- YAML duplicate flag: `Generic_10s_sw0` / `Generic_30s_sw0` appear twice in comprehensive_m4_paper_sample.yaml; collapse to one config_name each in CSV.
+
+### Novel-Architecture Head-to-Head (paper-sample, novel-only mean ranks across 6 periods)
+
+| Family group (novel) | n | Mean rank | n_top5 | Note |
+|---|---|---|---|---|
+| **alt T+Wavelet (RB)** `T+<wav>V3_30s_bdeq` | 5 | **14.1** | 7 | best novel family by ~10 ranks |
+| unified TrendWavelet (AE) `TWAE_10s_ld32_*` | 2 | 23.2 | 1 | |
+| alt T+Wavelet (AE) `TAE+<wav>V3AE_*` | 6 | 24.1 | 5 | |
+| unified TrendWavelet (RB) `TW_*s_td3_bdeq_<wav>` | 10 | 24.3 | 2 | wins Monthly only |
+| unified TrendWavelet (AELG) `TWAELG_10s_ld32_db3_*` | 2 | 24.9 | 2 | sub-1M champion |
+| alt T+Wavelet (AELG) `TAELG+<wav>V3ALG_30s` | 5 | 25.7 | 3 | wins Daily |
+| unified TW+Generic (AELG) `TWGAELG_*` | 4 | 30.3 | 2 | |
+| pure GenericAE/AELG `GAE_*`/`GAELG_*` | 4 | ~38 | 0 | drop |
+
+**Key conclusions:**
+1. `T+<wav>V3_30s_bdeq` (alt T+Wavelet on RB) is by far the strongest novel family. Default novel choice when ≥15M params is acceptable.
+2. **AE ≈ AELG at matched configurations.** Per-period mean Δ`(AELG − AE)` within ±0.06 SMAPE; signs flip across wavelets within a period. Backbone-level rank gap (AE 29.0 vs AELG 30.2) is noise driven by AELG's lower latent dim (16 vs 32) and the underperforming TWGAELG group, not an intrinsic disadvantage. **Pick AELG when parameter count is the binding constraint.**
+3. **Alternating beats unified TrendWavelet by ~10 mean-rank points** at the RB level (14.1 vs 24.3). Unified `TrendWavelet` block reserved for parameter-constrained scenarios.
+4. **Pure Generic AE/AELG (`GAE_*`, `GAELG_*`, `GenericAE_*_sw0`, `GenericAELG_*_sw0`, `GenericVAE_3s_sw0`) bottoms out** at mean rank ~38 — the trend/wavelet basis carries the novel wins, not the AE bottleneck. Drop unconditionally.
+5. **Stack-depth stability:** novel wavelet/trend-bias families are stable across 10s↔30s (Δ ±0.1 SMAPE); paper Generic blocks (`NBEATS-G`, `Generic_*_sw0`) collapse at 30 stacks (+2 SMAPE on average). Trend/wavelet inductive bias **stabilizes deep stacking** in addition to improving SMAPE.
+
+### Pareto champions per parameter budget (novel-only)
+
+- **Sub-1M champion:** `TWAELG_10s_ld32_db3_*` (best on Yearly rank 2, Daily rank 6, Hourly rank 5; 0.48–0.85M params).
+- **1–5M champion:** alt-AE `TAE+<wav>V3AE_*_ld32_ag0` (Quarterly rank 2 at 1.16M; Daily rank 4 at 1.31M).
+- **5M+ champion:** alt T+Wavelet RB `T+<wav>V3_30s_bdeq` (Weekly rank 1 at 15.7M; Monthly rank 2 at 16.1M).
+- **Weekly is the one period where parameter count matters:** sub-1M models all sit at rank 36+; ≥1.5M is the floor.
+
+## NHiTS Weather Sliding e6 (2026-04-22)
 
 - See [nhits_weather_sliding_e6.md](nhits_weather_sliding_e6.md).
 - **Universal Weather-NHiTS winner:** `TrendWaveletGenericVAE-agF` (mean rank 3.50/29, 432K-2.17M params).

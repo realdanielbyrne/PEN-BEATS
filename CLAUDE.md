@@ -203,6 +203,59 @@ The `create_stack` method selects hidden layer width by block type:
 4. Add the import to `src/lightningnbeats/data/__init__.py`.
 5. In `experiments/run_unified_benchmark.py`: extend `load_dataset()` and add the dataset choice to the CLI `--dataset` argument. Create a YAML config in `experiments/configs/` to drive experiments via `run_from_yaml.py`.
 
+## Empirical Defaults from M4 Sweeps
+
+These are recommended starting points for new M4 experiments. Drawn from two complementary sweeps; full evidence in `experiments/analysis/analysis_reports/`.
+
+### Best per-period configs (M4)
+
+| Period | Paper-sample protocol (`comprehensive_m4_paper_sample`) | Sliding protocol (`comprehensive_sweep_m4`) |
+|---|---|---|
+| Yearly    | `TALG+DB3V3ALG_10s_ag0` (1.04M, SMAPE 13.550) | `TW_10s_td3_bdeq_coif2` (2.1M, 13.499) |
+| Quarterly | `NBEATS-IG_10s_ag0` (19.6M, 10.357)           | `NBEATS-IG_10s_ag0` (19.6M, 10.126) |
+| Monthly   | `TW_30s_td3_bdeq_haar` (6.8M, 13.391)         | `TW_30s_td3_bd2eq_coif2` (7.1M, 13.279) |
+| Weekly    | `T+Coif2V3_30s_bdeq` (15.8M, 6.735)           | `T+Db3V3_30s_bdeq` (15.8M, 6.671) |
+| Daily     | `TAELG+Coif2V3ALG_30s_ag0` (3.7M, 3.036)      | `NBEATS-G_30s_ag0` (26.0M, 2.588) |
+| Hourly    | `NBEATS-IG_30s_agf` (43.6M, 8.758)            | `NBEATS-IG_30s_agf` (43.6M, 8.587) |
+
+Different protocols crown different per-period winners. Pick one protocol per study; do not mix `nbeats_paper` and `sliding` for absolute SMAPE comparisons.
+
+### Best M4 generalist (haar/sym10 alt-Trend+Wavelet RootBlock family)
+
+- `T+Sym10V3_30s_bdeq` — paper-sample, mean rank 6.83/53
+- `T+HaarV3_30s_bd2eq` — sliding, mean rank 12.7/112
+
+### Sub-1M parameter champion (M4)
+
+`TWAELG_10s_ld32_db3_*` — 0.48–0.85M params, top-5 on Yearly, Daily, Hourly.
+
+### Defaults for new M4 experiments
+
+- **Wavelet shortlist:** haar, db3, coif2, sym10. Coif3 produces no per-period SOTA — drop from default M4 sweeps.
+- **`active_g`:** default `False` (paper-faithful). `active_g=forecast` (`agf`) helps on **Yearly + Hourly only** for novel TWAE/TWAELG and on **Hourly** for paper backbones; loses or ties elsewhere. Never use as a global default.
+- **Stack architecture:** when ≥15M params is acceptable, prefer alternating `T+<wav>V3` (RootBlock) over unified `TW`/`TWAE`/`TWAELG` — alternating beats unified by ~10 mean-rank points. Reserve unified for sub-1.5M parameter targets.
+- **AE vs AELG:** equivalent at matched configurations. Pick AELG when latent-dim/parameter count is the binding constraint (its native `ld=16` halves AE-`ld=32` cost with no consistent SMAPE penalty).
+- **Stack depth:** novel wavelet/trend-bias families are stable across 10s↔30s; paper Generic blocks (`NBEATS-G`, `Generic_*`) collapse at 30 stacks (+2 SMAPE) and should be capped at 10 stacks. NBEATS-IG is the stable paper baseline at any depth.
+- **`basis_dim`:** `bdeq` (`basis_dim=forecast_length`) is the M4 default. `bd2eq` is statistically harmful on Daily/Quarterly under sliding (Wilcoxon p=0.003 pooled).
+- **Drop:** all `BNG*` / `BNAE*` / `BNAELG*` (BottleneckGeneric family — universally worst on M4); `GAE_*` / `GAELG_*` / `GenericAE_*_sw0` / `GenericAELG_*_sw0` / `GenericVAE_3s_sw0` (pure Generic AE/AELG bottoms out at mean rank ~38); all `_sd5` skip variants (never help on M4); all `*_coif3` variants on M4 (no per-period SOTA).
+
+### Early-stopping settings for `sampling_style: nbeats_paper`
+
+The paper-sample protocol requires sub-epoch validation to avoid `best_epoch=0/1` collapse:
+
+```yaml
+training:
+  val_check_interval: 100   # validate every 100 steps (≈10 checks per Lightning epoch)
+  min_delta: 0.001          # require 0.1% improvement to reset patience
+  patience: 20              # in val-check units (= 200 raw steps minimum before stop can fire)
+```
+
+Without these, paper-sample early-stopping fires on the first (warmup-corrupted) validation check.
+
+### Convention: `agf` vs `ag0`
+
+`active_g` is a repository extension to N-BEATS, not part of Oreshkin et al. 2020. Configs labelled `*_ag0` (`active_g=False`) reproduce the published architecture. Configs labelled `*_agf` (`active_g=forecast`) apply a novel repo extension on top of the paper backbone — they share the architecture but are not paper-faithful in the strict sense. When reporting "paper baseline" SMAPE, only `*_ag0` results count.
+
 ## CI/CD
 
 GitHub Actions workflow (`.github/workflows/python-publish.yml`) publishes to PyPI on GitHub release using `pypa/gh-action-pypi-publish`. No tests or linting run in CI.

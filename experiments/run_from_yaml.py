@@ -610,11 +610,16 @@ def resolve_lr_scheduler(lr_scheduler_cfg, max_epochs: int):
         lr_scheduler:
           type: plateau
           factor: 0.5      # LR multiplier on trigger
-          patience: 10     # epochs with no improvement before reducing
+          patience: 10     # checks (in interval units) with no improvement before reducing
           min_lr: 0.00001  # LR floor
           mode: min        # "min" for val_loss, "max" for accuracy metrics
-          cooldown: 0      # epochs to wait after reduction before monitoring resumes
+          cooldown: 0      # checks to wait after reduction before monitoring resumes
           monitor: val_loss
+          interval: epoch  # "epoch" (default) or "step" — Lightning step cadence
+          frequency: 1     # number of intervals between scheduler.step calls
+                           # set interval=step + frequency=val_check_interval to step
+                           # the scheduler exactly once per validation check under
+                           # nbeats_paper sampling.
 
     Expected YAML structure for MultiStepLR (paper-faithful)::
 
@@ -640,7 +645,7 @@ def resolve_lr_scheduler(lr_scheduler_cfg, max_epochs: int):
     sched_type = str(lr_scheduler_cfg.get("type", "cosine")).lower()
 
     if sched_type == "plateau":
-        return {
+        plateau_dict = {
             "type": "plateau",
             "factor": float(lr_scheduler_cfg.get("factor", 0.5)),
             "patience": int(lr_scheduler_cfg.get("patience", 10)),
@@ -650,7 +655,10 @@ def resolve_lr_scheduler(lr_scheduler_cfg, max_epochs: int):
             "mode": str(lr_scheduler_cfg.get("mode", "min")),
             "cooldown": int(lr_scheduler_cfg.get("cooldown", 0)),
             "monitor": str(lr_scheduler_cfg.get("monitor", "val_loss")),
+            "interval": str(lr_scheduler_cfg.get("interval", "epoch")),
+            "frequency": int(lr_scheduler_cfg.get("frequency", 1)),
         }
+        return plateau_dict
 
     if sched_type == "multistep":
         gamma = float(lr_scheduler_cfg.get("gamma", 0.5))
@@ -918,6 +926,8 @@ def run_single_config(
         worker_id=str(hardware_cfg.get("worker_id", "") or ""),
         basis_dim=_resolve_basis_dim(block_params.get("basis_dim", BASIS_DIM), dataset),
         forecast_basis_dim=block_params.get("forecast_basis_dim"),
+        basis_offset=block_params.get("basis_offset", 0),
+        stack_basis_offsets=block_params.get("stack_basis_offsets", None),
         extra_row=extra_row if extra_row else None,
         csv_columns=csv_columns,
         tb_enabled=bool(logging_cfg.get("tensorboard", False)),
@@ -949,6 +959,9 @@ def run_single_config(
             protocol.get("acknowledge_epoch_semantics", False)
         ),
         max_steps=training.get("max_steps"),
+        val_check_interval=training.get("val_check_interval"),
+        min_delta=float(training.get("min_delta", 0.0)),
+        min_epochs=int(training.get("min_epochs", 0)),
     )
 
 

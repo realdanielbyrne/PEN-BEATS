@@ -265,11 +265,18 @@ ReduceLROnPlateau (recommended when using early stopping):
 lr_scheduler:
   type: plateau
   factor: 0.5              # Multiply LR by this on trigger (default 0.5)
-  patience: 10             # Epochs with no val_loss improvement before reducing (default 10)
+  patience: 10             # Checks (in interval units) with no val_loss improvement before reducing (default 10)
   min_lr: 0.00001          # LR floor (default 1e-5); also accepts eta_min as alias
   mode: min                # "min" for val_loss; "max" for accuracy-style metrics
-  cooldown: 0              # Epochs to wait after a reduction before resuming (default 0)
+  cooldown: 0              # Checks to wait after a reduction before resuming (default 0)
   monitor: val_loss        # Metric to watch (default "val_loss")
+  interval: epoch          # "epoch" (default) or "step" — Lightning step cadence
+  frequency: 1             # Number of intervals between scheduler.step calls (default 1)
+                           # Under nbeats_paper sampling, set interval=step and
+                           # frequency=val_check_interval to step the scheduler
+                           # exactly once per validation check; this matches the
+                           # signal that drives EarlyStopping and is essential
+                           # when runs early-stop in only a few Lightning epochs.
 ```
 
 StepLR (fixed-interval decay):

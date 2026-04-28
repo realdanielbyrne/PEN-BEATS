@@ -741,6 +741,15 @@ class ConvergenceTracker(pl.Callback):
             self.train_losses.append(float(v))
 
 
+class LearningRateLogger(pl.Callback):
+    """Logs the learning rate at the start of each training epoch."""
+
+    def on_train_epoch_start(self, trainer, pl_module):
+        lr = trainer.optimizers[0].param_groups[0]["lr"]
+        pl_module.log("lr_epoch", lr, prog_bar=True)
+        print(f"  Epoch {trainer.current_epoch + 1}: lr = {lr:.6f}")
+
+
 # ---------------------------------------------------------------------------
 # CSV Helpers
 # ---------------------------------------------------------------------------
@@ -962,6 +971,9 @@ def run_single_experiment(
     lh_multiplier=None,  # required when sampling_style="nbeats_paper"; Lh = lh_multiplier * H
     acknowledge_epoch_semantics=False,  # opt-in for max_epochs under paper sampling
     max_steps=None,  # paper-faithful total gradient-step budget; overrides max_epochs when set
+    val_check_interval=None,  # int (steps) for nbeats_paper; None = every epoch
+    min_delta=0.0,  # minimum improvement to reset EarlyStopping patience
+    min_epochs=0,  # minimum epochs before EarlyStopping can fire
 ):
     """Run a single training + evaluation experiment and save results to CSV."""
 
@@ -1184,6 +1196,7 @@ def run_single_experiment(
             patience=patience,
             mode="min",
             verbose=False,
+            min_delta=min_delta,
         )
 
         wandb_group = f"unified/{period}"
@@ -1221,12 +1234,15 @@ def run_single_experiment(
             consecutive_epochs=3,
         )
         convergence_tracker = ConvergenceTracker()
+        lr_logger = LearningRateLogger()
 
         trainer = pl.Trainer(
             accelerator=accelerator,
             devices=1,
             max_epochs=max_epochs,
+            min_epochs=min_epochs if min_epochs > 0 else None,
             max_steps=max_steps if max_steps is not None else -1,
+            val_check_interval=val_check_interval if val_check_interval is not None else 1.0,
             precision=precision,
             gradient_clip_val=1.0,
             callbacks=[
@@ -1234,6 +1250,7 @@ def run_single_experiment(
                 early_stop_callback,
                 divergence_detector,
                 convergence_tracker,
+                lr_logger,
             ],
             logger=exp_loggers,
             enable_progress_bar=True,

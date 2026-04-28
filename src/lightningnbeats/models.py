@@ -165,6 +165,7 @@ class _NBeatsBase(pl.LightningModule):
                 min_lr = float(cfg.get("min_lr", cfg.get("eta_min", 1e-5)))
                 mode = str(cfg.get("mode", "min"))
                 cooldown = int(cfg.get("cooldown", 0))
+                frequency = int(cfg.get("frequency", 1))
                 scheduler = ReduceLROnPlateau(
                     optimizer,
                     mode=mode,
@@ -179,6 +180,7 @@ class _NBeatsBase(pl.LightningModule):
                         "scheduler": scheduler,
                         "monitor": monitor,
                         "interval": interval,
+                        "frequency": frequency,
                     },
                 }
             elif sched_type == "step":
@@ -236,7 +238,8 @@ class _NBeatsBase(pl.LightningModule):
 
         self.log("train_loss", loss, prog_bar=True)
         lr = self.trainer.optimizers[0].param_groups[0]["lr"]
-        self.log("lr", lr, prog_bar=True)
+        self.log("lr", lr, prog_bar=False)
+        self.log("lr_1e3", lr * 1000, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
