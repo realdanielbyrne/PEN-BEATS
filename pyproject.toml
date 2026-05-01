@@ -39,6 +39,9 @@ dependencies = [
 ]
 dynamic = ["readme"]
 
+[project.optional-dependencies]
+xpu = ["intel-extension-for-pytorch"]
+
 [project.urls]
 "Homepage"="https://github.com/realdanielbyrne/N-BEATS-Lightning"
 

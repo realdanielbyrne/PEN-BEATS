@@ -589,6 +589,9 @@ def resolve_accelerator(accelerator_override):
         if torch.cuda.is_available():
             accelerator = "cuda"
             device = torch.device("cuda")
+        elif hasattr(torch, "xpu") and torch.xpu.is_available():
+            accelerator = "xpu"
+            device = torch.device("xpu")
         elif torch.backends.mps.is_available():
             accelerator = "mps"
             device = torch.device("mps")
@@ -597,7 +600,7 @@ def resolve_accelerator(accelerator_override):
             device = torch.device("cpu")
     else:
         accelerator = accelerator_override
-        device = torch.device(accelerator if accelerator != "cuda" else "cuda")
+        device = torch.device(accelerator)
     return accelerator, device
 
 
@@ -1407,6 +1410,8 @@ def run_single_experiment(
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            torch.xpu.empty_cache()
     finally:
         release_claim(claim_config_name, effective_dataset_name, period, run_idx)
 
@@ -1418,14 +1423,17 @@ def run_single_experiment(
 
 def resolve_n_gpus(args):
     """Determine number of GPUs to use for parallel execution."""
-    if args.accelerator not in ("auto", "cuda"):
-        return 0
-    if not torch.cuda.is_available():
-        return 0
-    available = torch.cuda.device_count()
-    if args.n_gpus is not None:
-        return min(args.n_gpus, available)
-    return available
+    if args.accelerator in ("auto", "cuda") and torch.cuda.is_available():
+        available = torch.cuda.device_count()
+        if args.n_gpus is not None:
+            return min(args.n_gpus, available)
+        return available
+    if args.accelerator in ("auto", "xpu") and hasattr(torch, "xpu") and torch.xpu.is_available():
+        available = torch.xpu.device_count()
+        if args.n_gpus is not None:
+            return min(args.n_gpus, available)
+        return available
+    return 0
 
 
 def _build_job_list(periods, n_runs, dataset_name, batch_size_override):
@@ -1456,8 +1464,11 @@ def _build_job_list(periods, n_runs, dataset_name, batch_size_override):
 
 def _gpu_worker(gpu_id, job_queue, shutdown_event, worker_args):
     """Worker process: pins to GPU gpu_id, pulls jobs from shared queue."""
-    # Pin to specific GPU before any CUDA context is created
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+    # Pin to specific device before any GPU context is created
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        os.environ["ONEAPI_DEVICE_SELECTOR"] = f"level_zero:{gpu_id}"
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     # Ignore signals in worker — main process handles shutdown via event
     signal.signal(signal.SIGINT, signal.SIG_IGN)
@@ -1466,7 +1477,7 @@ def _gpu_worker(gpu_id, job_queue, shutdown_event, worker_args):
     torch.set_float32_matmul_precision("medium")
 
     prefix = f"[GPU {gpu_id}]"
-    print(f"{prefix} Worker started (CUDA_VISIBLE_DEVICES={gpu_id}).")
+    print(f"{prefix} Worker started (device={gpu_id}).")
 
     # Cache datasets per period to avoid redundant loading
     dataset_cache = {}

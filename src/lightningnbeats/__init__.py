@@ -10,11 +10,13 @@ from .constants import DEPRECATED_BLOCKS, get_deprecated_block_message
 def get_best_accelerator() -> str:
     """Detect the best available accelerator for PyTorch.
 
-    Returns 'cuda' if a CUDA GPU is available, 'mps' if Apple Metal
-    Performance Shaders is available (Apple Silicon), otherwise 'cpu'.
+    Returns 'cuda' for NVIDIA GPUs, 'xpu' for Intel Arc (PyTorch 2.4+),
+    'mps' for Apple Silicon, or 'cpu' as fallback.
     """
     if torch.cuda.is_available():
         return "cuda"
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        return "xpu"
     if torch.backends.mps.is_available():
         return "mps"
     return "cpu"

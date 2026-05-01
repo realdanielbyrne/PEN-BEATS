@@ -1735,7 +1735,7 @@ Examples:
     )
     parser.add_argument(
         "--accelerator",
-        choices=["auto", "cuda", "mps", "cpu"],
+        choices=["auto", "cuda", "xpu", "mps", "cpu"],
         default=None,
         help="Override accelerator (default: from YAML or 'auto').",
     )
