@@ -10,9 +10,16 @@ lightning_logs/
 .vscode/
 logs/
 *.npz
-# experiment artifacts (contains local paths)
+# experiment artifacts: track CSVs/logs/configs, exclude large run artifacts
+# (large dirs are kept on /mnt/data and reachable via per-subdir symlinks)
 experiments/results/experiment_log.txt
-experiments/results/**/ensemble_predictions/*.npz
+experiments/results/.claims/
+experiments/results/**/*.lock
+experiments/results/lightning_logs
+experiments/results/predictions
+experiments/results/m4/predictions
+experiments/results/m4/ensemble_predictions
+experiments/results/milk/predictions
 
 
 # Documentations
@@ -222,5 +229,3 @@ _notebooks/.notebooks/
 exp_status.txt
 SAMPLING_STYLE_PLAN.md
 
-# experiment artifacts symlinked to data drive
-experiments/results
