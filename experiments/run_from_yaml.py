@@ -1408,6 +1408,8 @@ def _run_successive_halving(
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            torch.xpu.empty_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -1671,6 +1673,8 @@ def run_experiment(
                 gc.collect()
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
+                if hasattr(torch, "xpu") and torch.xpu.is_available():
+                    torch.xpu.empty_cache()
 
         # ── Per-dataset post-analysis ────────────────────────────────────
         if do_analysis and not dry_run and not analyze_only:

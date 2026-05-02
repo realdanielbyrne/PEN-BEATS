@@ -73,6 +73,16 @@ else:
 
 import numpy as np
 import torch
+
+# Intel XPU: import IPEX before lightning so its tuned XPU kernels override
+# the native PyTorch XPU kernels. This emits a one-time C++ kernel-override
+# warning at startup; it indicates IPEX kernels are active (faster on Arc).
+try:
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        import intel_extension_for_pytorch as _ipex  # noqa: F401
+except ImportError:
+    pass
+
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 from lightning.pytorch import loggers as pl_loggers
@@ -1239,13 +1249,25 @@ def run_single_experiment(
         convergence_tracker = ConvergenceTracker()
         lr_logger = LearningRateLogger()
 
+        # Lightning 2.6.x _choose_strategy hardcodes device="cpu" for any
+        # accelerator that isn't CUDA/MPS, breaking custom XPU accelerators.
+        # Passing an explicit SingleDeviceStrategy bypasses that code path.
+        if accelerator == "xpu":
+            from lightning.pytorch.strategies import SingleDeviceStrategy
+            _xpu_strategy = SingleDeviceStrategy(device=device)
+        else:
+            _xpu_strategy = "auto"
+
         trainer = pl.Trainer(
             accelerator=accelerator,
+            strategy=_xpu_strategy,
             devices=1,
             max_epochs=max_epochs,
             min_epochs=min_epochs if min_epochs > 0 else None,
             max_steps=max_steps if max_steps is not None else -1,
-            val_check_interval=val_check_interval if val_check_interval is not None else 1.0,
+            val_check_interval=(
+                val_check_interval if val_check_interval is not None else 1.0
+            ),
             precision=precision,
             gradient_clip_val=1.0,
             callbacks=[
@@ -1428,7 +1450,11 @@ def resolve_n_gpus(args):
         if args.n_gpus is not None:
             return min(args.n_gpus, available)
         return available
-    if args.accelerator in ("auto", "xpu") and hasattr(torch, "xpu") and torch.xpu.is_available():
+    if (
+        args.accelerator in ("auto", "xpu")
+        and hasattr(torch, "xpu")
+        and torch.xpu.is_available()
+    ):
         available = torch.xpu.device_count()
         if args.n_gpus is not None:
             return min(args.n_gpus, available)
@@ -1526,7 +1552,11 @@ def _gpu_worker(gpu_id, job_queue, shutdown_event, worker_args):
             max_epochs=worker_args["max_epochs"],
             patience=worker_args["patience"],
             batch_size=job["batch_size"],
-            accelerator_override="cuda",
+            accelerator_override=(
+                "xpu"
+                if hasattr(torch, "xpu") and torch.xpu.is_available()
+                else "cuda"
+            ),
             forecast_multiplier=worker_args["forecast_multiplier"],
             num_workers=worker_args["num_workers"],
             wandb_enabled=worker_args["wandb_enabled"],
@@ -1926,7 +1956,7 @@ def main():
     parser.add_argument(
         "--accelerator",
         default="auto",
-        choices=["auto", "cuda", "mps", "cpu"],
+        choices=["auto", "cuda", "xpu", "mps", "cpu"],
         help="Accelerator (default: auto)",
     )
     parser.add_argument(
