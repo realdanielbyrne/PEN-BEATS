@@ -75,8 +75,8 @@ training:
 lr_scheduler:
   type: plateau
   factor: 0.75
-  patience: 1
-  cooldown: 0
+  patience: 2
+  cooldown: 1
   min_lr: 1.0e-06
   mode: min
   monitor: val_loss
@@ -110,7 +110,7 @@ logging:
   tensorboard: false
 hardware:
   accelerator: auto
-  num_workers: 1
+  num_workers: 2
   pin_memory: true
 analysis:
   enabled: true
