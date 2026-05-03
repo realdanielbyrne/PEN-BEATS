@@ -516,7 +516,7 @@ configs:
       tiered: ascend
 
 runs:
-  n_runs: 5
+  n_runs: 10
   base_seed: 42
   seed_mode: random
 
@@ -533,7 +533,7 @@ logging:
 
 hardware:
   accelerator: auto
-  num_workers: 2
+  num_workers: 0
   pin_memory: true
 
 analysis:

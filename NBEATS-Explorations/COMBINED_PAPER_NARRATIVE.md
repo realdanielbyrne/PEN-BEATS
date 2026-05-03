@@ -69,18 +69,18 @@ That plants the flag without requiring evidence, positions you for follow-up, an
 
 ### Tier B — Strong Supporting (Methods + Results)
 
-4. **Alternating Trend+Wavelet stack composition.** Beats unified blocks and pure Generic. Best M4 generalist: `T+Sym10V3_30s_bdeq` (mean rank 9.17/68, top-3 on 3 periods). This is the key architecture design insight.
+1. **Alternating Trend+Wavelet stack composition.** Beats unified blocks and pure Generic. Best M4 generalist: `T+Sym10V3_30s_bdeq` (mean rank 9.17/68, top-3 on 3 periods). This is the key architecture design insight.
 
-5. **Overparameterization diagnosis.** Quantifies the failure mode: 40–50% divergence for 30-stack Generic on Milk (156 observations) vs. 1.7% for AELG variants. Connects to the established redundancy/pruning literature (LeCun 1990, Frankle & Carbin 2019). The numbers are damning and memorable.
+2. **Overparameterization diagnosis.** Quantifies the failure mode: 40–50% divergence for 30-stack Generic on Milk (156 observations) vs. 1.7% for AELG variants. Connects to the established redundancy/pruning literature (LeCun 1990, Frankle & Carbin 2019). The numbers are damning and memorable.
 
-6. **Paper-faithful training protocol fixes.** `val_check_interval=100`, `min_delta=0.001`, `patience=20` in `nbeats_paper` sampling mode are required to prevent `best_epoch=0/1` collapse. This is both a reproducibility contribution and evidence that prior comparisons may be unreliable.
+3. **Paper-faithful training protocol fixes.** `val_check_interval=100`, `min_delta=0.001`, `patience=20` in `nbeats_paper` sampling mode are required to prevent `best_epoch=0/1` collapse. This is both a reproducibility contribution and evidence that prior comparisons may be unreliable.
 
 ### Tier C — Appendix
 
-7. **`active_g=forecast`.** Dataset-specific convergence stabilizer. Hourly-only on M4. Must be explicitly labelled as a repo extension, not paper-faithful.
-8. **Tiered basis offsets.** Strong Hourly result, but Yearly falsification is pending. Do not elevate to main results until that experiment lands.
-9. **VAE backbone, BottleneckGeneric, skip connections, `sum_losses`.** Appendix or future work.
-10. **V1/V2 wavelets.** One paragraph: "ill-conditioning motivated the SVD orthogonalization of V3." No more.
+1. **`active_g=forecast`.** Dataset-specific convergence stabilizer. Hourly-only on M4. Must be explicitly labelled as a repo extension, not paper-faithful.
+2. **Tiered basis offsets.** Strong Hourly result, but Yearly falsification is pending. Do not elevate to main results until that experiment lands.
+3. **VAE backbone, BottleneckGeneric, skip connections, `sum_losses`.** Appendix or future work.
+4. **V1/V2 wavelets.** One paragraph: "ill-conditioning motivated the SVD orthogonalization of V3." No more.
 
 ---
 
@@ -161,6 +161,7 @@ This is the most compelling single table in the paper.
 ### Figure 1 — Architecture Schematic
 
 Side-by-side:
+
 - Oreshkin's 4-FC RootBlock → polynomial/Fourier head
 - AERootBlockLG → TrendWavelet head (encoder → gate → decoder → additive trend+wavelet basis)
 
@@ -195,6 +196,7 @@ Message: the Pareto frontier bends sharply at ~1M; above that, adding parameters
 ## Appendix Content (Definitive List)
 
 **Include:**
+
 - Full M4 6-period tables (all 112 configs, both protocols)
 - Generic collapse full data (Milk, all backbone types)
 - Scheduler robustness: plateau vs. multistep (tiered-offset paperlr results)
@@ -206,11 +208,13 @@ Message: the Pareto frontier bends sharply at ~1M; above that, adding parameters
 - `sum_losses` ablation
 
 **Move to future work (not appendix):**
+
 - NHiTS port and pooling-window pilots
 - VAE root block and KL-weight studies
 - Meta-learning / cross-series transfer
 
 **Drop entirely (no mention):**
+
 - V1/V2 wavelets except one sentence: "ill-conditioning of non-orthogonal bases motivated the SVD construction in V3"
 - `_sd5` skip variants on M4
 - All `BNG*`/`BNAE*` BottleneckGeneric families

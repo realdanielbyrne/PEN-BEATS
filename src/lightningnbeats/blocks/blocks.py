@@ -6,7 +6,6 @@ import numpy as np
 import pywt
 from pywt import Wavelet as PyWavelet  # type: ignore[attr-defined]
 
-
 LATENT_GATE_FNS = {"sigmoid", "wavy_sigmoid", "wavelet_sigmoid"}
 
 
@@ -880,7 +879,7 @@ class AutoEncoderAE(AERootBlock):
         """AutoEncoder block with an AE backbone.
 
         Args:
-            units (int): The number of inoput and output units
+            units (int): The number of input and output units
             backcast_length (int): The length of the historical data.
             forecast_length (int): The length of the forecast_length horizon.
             thetas_dim (int): Unused. Kept for API compatibility with other block types.
