@@ -71,6 +71,7 @@ periods:
   - Monthly
   - Weekly
   - Daily
+  - Hourly
 
 protocol:
   sampling_style: nbeats_paper

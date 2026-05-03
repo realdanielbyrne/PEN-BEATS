@@ -207,37 +207,43 @@ The `create_stack` method selects hidden layer width by block type:
 
 These are recommended starting points for new M4 experiments. Drawn from two complementary sweeps; full evidence in `experiments/analysis/analysis_reports/`.
 
-### Best per-period configs (M4)
+### Best per-period configs (M4) — refreshed 2026-05-03
 
-| Period | Paper-sample protocol (`comprehensive_m4_paper_sample`) | Sliding protocol (`comprehensive_sweep_m4`) |
+| Period | Paper-sample best (LR) | Sliding best |
 |---|---|---|
-| Yearly    | `TALG+DB3V3ALG_10s_ag0` (1.04M, SMAPE 13.550) | `TW_10s_td3_bdeq_coif2` (2.1M, 13.499) |
-| Quarterly | `NBEATS-IG_10s_ag0` (19.6M, 10.357)           | `NBEATS-IG_10s_ag0` (19.6M, 10.126) |
-| Monthly   | `TW_30s_td3_bdeq_haar` (6.8M, 13.391)         | `TW_30s_td3_bd2eq_coif2` (7.1M, 13.279) |
-| Weekly    | `T+Coif2V3_30s_bdeq` (15.8M, 6.735)           | `T+Db3V3_30s_bdeq` (15.8M, 6.671) |
-| Daily     | `TAELG+Coif2V3ALG_30s_ag0` (3.7M, 3.036)      | `NBEATS-G_30s_ag0` (26.0M, 2.588) |
-| Hourly    | `NBEATS-IG_30s_agf` (43.6M, 8.758)            | `NBEATS-IG_30s_agf` (43.6M, 8.587) |
+| Yearly    | `T+Coif2V3_30s_bdeq` plateau (15.2M, 13.542) — sub-1M: `TWAE_10s_ld32_ag0` plateau (0.48M, 13.546) | `TW_10s_td3_bdeq_coif2` (2.1M, 13.499) |
+| Quarterly | `NBEATS-IG_10s_ag0` plateau (19.6M, **10.313**) | `NBEATS-IG_10s_ag0` (19.6M, 10.127) |
+| Monthly   | `TW_30s_td3_bdeq_sym10` plateau (6.8M, **13.240**) | `TW_30s_td3_bd2eq_coif2` (7.1M, 13.279) |
+| Weekly    | `T+Coif2V3_30s_bdeq` step_paper (15.8M, 6.735)¹ | `T+Db3V3_30s_bdeq` (15.8M, 6.671) |
+| Daily     | `T+Sym10V3_10s_tiered_ag0` plateau (5.25M, **3.012**) — Pareto: `TAELG+Sym10V3AELG_10s_tiered` plateau (1.14M, 3.013) | `NBEATS-G_30s_ag0` (26.0M, 2.588) |
+| Hourly    | `NBEATS-IG_30s_agf` step_paper (43.6M, 8.758) | `NBEATS-IG_30s_agf` (43.6M, 8.587) |
+
+¹ Single-seed plateau-tuning validation (`p3_recommended`: patience=3, factor=0.5, cooldown=1) hit 6.559 SMAPE on Weekly tiered T+Sym10V3 — n=10 confirmation pending. If it holds, Weekly default flips to plateau + tiered.
 
 Different protocols crown different per-period winners. Pick one protocol per study; do not mix `nbeats_paper` and `sliding` for absolute SMAPE comparisons.
 
-### Best M4 generalist (haar/sym10 alt-Trend+Wavelet RootBlock family)
+### Best M4 generalists
 
-- `T+Sym10V3_30s_bdeq` — paper-sample, mean rank 6.83/53
-- `T+HaarV3_30s_bd2eq` — sliding, mean rank 12.7/112
+- **Paper-sample, all-6-period coverage (CROWN):** `T+Sym10V3_10s_tiered_ag0` (mean rank **13.33/108**). 5.07–6.06M params, top-11 on every M4 period (Daily #1, Hourly #5, Quarterly #6, Yearly #11, Weekly #16, Monthly #41). Hourly cell uses plateau LR + descend tiering direction (canonicalized from `T+Sym10V3_10s_bdEQ_descend` in `m4_hourly_sym10_tiered_offset_results.csv`); the other 5 periods use the all-periods CSVs with `tiered=ascend`.
+- **Paper-sample, paper-faithful alternative:** `NBEATS-IG_30s_ag0` (mean rank 16.0/68). 38.13–43.58M params. Use when reproducing Oreshkin et al. 2020 numbers or when zero divergence is required.
+- **Sliding:** `T+HaarV3_30s_bd2eq` (mean rank 12.67/112) — unrivaled cross-period generalist; 16.25M params. Smaller alternative: `TALG+HaarV3ALG_30s_ag0` (3.66M, rank 21.0).
 
 ### Sub-1M parameter champion (M4)
 
-`TWAELG_10s_ld32_db3_*` — 0.48–0.85M params, top-5 on Yearly, Daily, Hourly.
+`TWAELG_10s_ld32_db3_*` — 0.48–0.85M params, top-5 on Yearly, Daily, Hourly. On Daily, `TWGAELG_10s_ld16_db3_ag0` (0.52M, 3.051) is best parameter efficiency anywhere on M4.
 
 ### Defaults for new M4 experiments
 
+- **LR scheduler:** plateau (ReduceLROnPlateau) is the paper-sample default for Quarterly / Monthly / Daily — strictly beats step_paper by Δ−0.03 to −0.20 SMAPE (n=18–52 matched pairs). Keep step_paper for Yearly (neutral) and Weekly (until plateau-cell `p3_recommended` validates to n=10). Cosine-warmup is the sliding default. See [`m4_overall_leaderboard_2026-05-03.md`](experiments/analysis/analysis_reports/m4_overall_leaderboard_2026-05-03.md) §4.1.
+- **Sampling protocol:** sliding wins absolute SMAPE on long-horizon periods (Daily H=14, Hourly H=48 — gaps of −0.42 / −0.17 vs paper-sample). Paper-sample wins or ties on short horizons (Y/M). Pick one protocol per study; for paper-faithful comparison to Oreshkin et al. 2020, use paper-sample with plateau LR.
 - **Wavelet shortlist:** haar, db3, coif2, sym10. Coif3 produces no per-period SOTA — drop from default M4 sweeps.
-- **`active_g`:** default `False` (paper-faithful). `active_g=forecast` (`agf`) helps on **Yearly + Hourly only** for novel TWAE/TWAELG and on **Hourly** for paper backbones; loses or ties elsewhere. Never use as a global default.
-- **Stack architecture:** when ≥15M params is acceptable, prefer alternating `T+<wav>V3` (RootBlock) over unified `TW`/`TWAE`/`TWAELG` — alternating beats unified by ~10 mean-rank points. Reserve unified for sub-1.5M parameter targets.
-- **AE vs AELG:** equivalent at matched configurations. Pick AELG when latent-dim/parameter count is the binding constraint (its native `ld=16` halves AE-`ld=32` cost with no consistent SMAPE penalty).
-- **Stack depth:** novel wavelet/trend-bias families are stable across 10s↔30s; paper Generic blocks (`NBEATS-G`, `Generic_*`) collapse at 30 stacks (+2 SMAPE) and should be capped at 10 stacks. NBEATS-IG is the stable paper baseline at any depth.
+- **`active_g`:** default `False` (paper-faithful). `active_g=forecast` (`agf`) helps on **Hourly only** as a robust default; loses or ties elsewhere. Never use as a global default.
+- **Stack architecture:** when ≥15M params is acceptable, prefer alternating `T+<wav>V3` (RootBlock) over unified `TW`/`TWAE`/`TWAELG` on Weekly; on Monthly, plateau LR has reversed this — `TW_30s_td3_bdeq_sym10` plateau (13.240) is now the leader. Reserve unified for sub-1.5M parameter targets.
+- **AE vs AELG:** equivalent at matched configurations on 5/6 periods (Daily exception: RB beats AELG by 0.17 SMAPE). Pick AELG when latent-dim/parameter count is the binding constraint (its native `ld=16` halves AE-`ld=32` cost with no consistent SMAPE penalty). **VAE family is strictly unusable on M4** — pure VAE configs collapse to 55–68 SMAPE on Q/M/W/D.
+- **Stack depth:** novel wavelet/trend-bias families are stable across 10s↔30s; paper Generic blocks (`NBEATS-G`, `Generic_*`) collapse at 30 stacks on Quarterly/Weekly/Monthly (+2 SMAPE, bimodal collapse, std 7.4–9.5) and should be capped at 10 stacks there. NBEATS-IG is the stable paper baseline at any depth.
 - **`basis_dim`:** `bdeq` (`basis_dim=forecast_length`) is the M4 default. `bd2eq` is statistically harmful on Daily/Quarterly under sliding (Wilcoxon p=0.003 pooled).
-- **Drop:** all `BNG*` / `BNAE*` / `BNAELG*` (BottleneckGeneric family — universally worst on M4); `GAE_*` / `GAELG_*` / `GenericAE_*_sw0` / `GenericAELG_*_sw0` / `GenericVAE_3s_sw0` (pure Generic AE/AELG bottoms out at mean rank ~38); all `_sd5` skip variants (never help on M4); all `*_coif3` variants on M4 (no per-period SOTA).
+- **Tiered basis-offset scope:** keep tiered offset for **Daily only** in production defaults (decisive win — 8/10 paper-sample Daily top-10 are tiered, Cliff's d 0.54–0.78). The earlier "tiered helps Monthly" claim is **retracted** — under matched plateau LR, non-tiered `TW_30s_td3_bdeq_sym10` (13.240) beats tiered `T+DB3V3_30s_tiered_agf` (13.344). Yearly/Quarterly tiered improvements are within seed noise. Hourly tiered does NOT beat the paper baseline. Weekly tiered is provisional pending p3_recommended n=10.
+- **Drop:** all `BNG*` / `BNAE*` / `BNAELG*` (BottleneckGeneric family — universally worst on M4); pure `GenericVAE_*` and all VAE configs (5–10× SMAPE worse on M4); `GAE_*` / `GAELG_*` / `GenericAE_*_sw0` / `GenericAELG_*_sw0` (pure Generic AE/AELG bottoms out at mean rank ~38); all `_sd5` skip variants (never help on M4); all `*_coif3` variants on M4 (no per-period SOTA); `_30s_agf` tiered configs at `_10s` depth (run-to-run divergence outliers); step_paper LR on Q/M/D (use plateau instead).
 
 ### Early-stopping settings for `sampling_style: nbeats_paper`
 
