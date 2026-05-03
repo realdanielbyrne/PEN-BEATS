@@ -23,31 +23,63 @@ description: >
 dataset: m4
 periods:
   - Yearly
+  - Quarterly
+  - Monthly
+  - Weekly
+  - Daily
+  - Hourly
 
 
-# Global training defaults
+# Paper-sampling protocol — matched to comprehensive_m4_paper_sample_plateau.yaml
+protocol:
+  sampling_style: nbeats_paper
+  steps_per_epoch: 1000
+  sampling_weights: uniform
+  lh_multiplier:
+    Yearly: 1.5
+    Quarterly: 1.5
+    Monthly: 10
+    Weekly: 10
+    Daily: 10
+    Hourly: 10
+# Global training defaults — matched to comprehensive_m4_paper_sample_plateau.yaml
 training:
   sum_losses: false
   activation: ReLU
   n_blocks_per_stack: 1
   share_weights: true
-  max_epochs: 100
+  max_steps: 100000
+  max_epochs: 150
   patience: 15
+  val_check_interval: 100
+  min_delta: 0.001
+  loss: SMAPELoss
+  optimizer: Adam
+  learning_rate: 0.001
+  forecast_multiplier: 5
+  batch_size: 1024
+
+hardware:
+  num_workers: 2
 
 block_params:
   basis_dim: 128
 
-# ReduceLROnPlateau scheduler with early stopping integration
+# ReduceLROnPlateau scheduler — matched to comprehensive_m4_paper_sample_plateau.yaml
+# Step-cadence (every 100 steps) so plateau triggers track val_check_interval and
+# get sufficient firing opportunities under nbeats_paper sampling. factor=0.75 with
+# patience=2 + cooldown=1 yields ~3-6 actual drops per run (cumulative decay
+# 0.75^4 ~= 0.32) without collapsing LR to min_lr mid-run.
 lr_scheduler:
   type: plateau
-  factor: 0.5
-  patience: 10
-  min_lr: 0.00001
-  mode: min
+  factor: 0.75
+  patience: 1
   cooldown: 0
+  min_lr: 1.0e-06
+  mode: min
   monitor: val_loss
-  interval: epoch
-  frequency: 1
+  interval: step
+  frequency: 100
 
 # Extra CSV columns for tracking
 extra_csv_columns:
