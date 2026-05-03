@@ -6,10 +6,10 @@
 
 ## Executive Summary
 
-- **Cascade hypothesis generalises only partially.** Tiered offset is a clear win on Daily (11/11 configs improve, 4 statistically significant) and a moderate win on Yearly/Quarterly/Monthly (avg delta -0.02 to -0.10 SMAPE). It is **a clear loss on Weekly** (only 2/11 configs improve, avg delta +0.13). The "helps novel wavelet/trend-bias blocks, hurts legacy" Hourly pattern is not visible because no legacy Generic/IG configs were re-run with tiering — selectivity cannot be retested at this perimeter.
+- **Cascade hypothesis generalises only partially.** Tiered offset is a clear win on Daily (11/11 configs improve, 4 statistically significant) and a moderate win on Yearly/Quarterly/Monthly (avg delta -0.02 to -0.10 SMAPE). It is **a clear loss on Weekly** (only 2/11 configs improve, avg delta +0.13). The Hourly "helps novel wavelet/trend-bias blocks, hurts legacy" selectivity story cannot be retested at this perimeter — and is not retestable in principle: tiered offset varies wavelet `basis_dim` per stack, which has no analogue in legacy Generic/IG/AE blocks. Falsification has to come from within-wavelet contrasts (haar single-level vs sym10/db3/coif2 multi-level) or direction symmetry, not from a legacy/novel split.
 - **Three (soft) new per-period bests in the leaderboard, all within noise of prior SOTA.** Daily: `T+Sym10V3_10s_tiered_ag0` 3.012 (vs prior 3.036, p=0.31); Quarterly: `T+Sym10V3_30s_tiered_agf` 10.356 (vs prior 10.357, p=0.73); Monthly: `T+DB3V3_30s_tiered_agf` 13.344 (vs prior 13.391, p=0.62). None reach Wilcoxon/MWU significance against the prior leader, but the same direction holds across many tiered configs in those periods, so the population-level effect is real.
 - **Daily is unambiguous — 9 of the top 10 paper-sample Daily entries are now tiered.** The pre-tiered Daily SOTA `TAELG+Coif2V3ALG_30s_ag0` (3.036) drops to rank #9; tiered T+Sym10V3 / T+DB3V3 / TAE+ / TAELG+ variants occupy ranks 1–8. Effect is consistent across stack depth and AE/AELG backbone (Cliff's delta 0.54–0.78).
-- **Weekly should drop tiered from defaults.** Best tiered Weekly entry (`T+DB3V3_30s_tiered_agf`, 6.910) is significantly worse than non-tiered SOTA `T+Coif2V3_30s_bdeq` (6.735, p=0.045). Tiered T+DB3V3_30s_ag0 is a substantial regression (+5.94%). Weekly horizon (H=13) is the only period where uniform `bdeq` dominates the offset cascade.
+- **Weekly should drop tiered from defaults — *pending* a stepLR rerun (currently in flight).** Best tiered Weekly entry (`T+DB3V3_30s_tiered_agf`, 6.910) is significantly worse than non-tiered SOTA `T+Coif2V3_30s_bdeq` (6.735, p=0.045) under the plateauLR scheduler used in this sweep. Weekly horizon (H=13) is the shortest in M4 and may be sensitive to plateauLR's patience window collapsing before the cascade differentiates — the paper stepLR rerun (in progress) will arbitrate whether the Weekly regression is a real cascade reversal or a scheduler artefact. Until then, treat the Weekly conclusion as scheduler-confounded.
 - **Tiered offset belongs in an appendix ablation, not the main paper results.** It does not unlock a Tier-A new-result claim — the SMAPE gains are within paper-sample variance (typical config std 0.05–0.30 SMAPE) and are protocol-bound (Hourly cascade does not survive when `descend` is in scope; ascend≈descend on Hourly). It supports the multi-resolution DWT thesis qualitatively (different stacks specialise on different basis-dim scales) but the empirical evidence is too period-specific to lead with.
 
 ---
@@ -76,9 +76,9 @@ All three families behave similarly per period — there is **no AE/AELG vs RB s
 | Daily (H=14) | ascend only | mean Δ=−0.05, 4/11 sig | **YES — strongest replication** |
 | Hourly (H=48) | ascend ≈ descend | Δ=−0.15 vs flat-bdeq | yes, but cascade direction does not matter |
 
-**Selectivity (memory's "helps novel, doesn't help legacy") cannot be tested here** — the all-periods sweep only re-ran T+Wavelet / TAE+ / TAELG+ wavelet families. No NBEATS-G / NBEATS-IG / GenericAE was re-run with tiering. Selectivity remains an open empirical claim.
+**Selectivity vs legacy blocks is not testable in principle.** Tiered offset varies wavelet `basis_dim` per stack — there is no analogous parameter on Generic / NBEATS-IG / GenericAE blocks (they have no wavelet basis, just a linear projection or thetas-bottleneck). The original "helps novel, doesn't help legacy" framing in the Hourly memory should be reread as "applies to wavelet blocks only, by construction" rather than as a falsifiable selectivity claim. Empirical falsification of the cascade story has to come from **within-wavelet contrasts** (haar single-level vs sym10/db3/coif2 multi-level) or **direction symmetry** (ascend vs descend), both of which are testable.
 
-**Mechanism reading:** the cascade hypothesis (low-frequency basis at depth-1, increasingly high-frequency at depth-N) survives on Daily and Hourly (long-horizon, multi-frequency content) but **does not generalise to Weekly (H=13)**. Weekly's narrow effective frequency band makes a uniform `bdeq=H` regulariser locally optimal, and forcing per-stack basis-dim variation hurts. Yearly/Quarterly are noise-bound because absolute SMAPE differences are small relative to seed std.
+**Mechanism reading:** the cascade hypothesis (low-frequency basis at depth-1, increasingly high-frequency at depth-N) survives on Daily and Hourly (long-horizon, multi-frequency content). The Weekly (H=13) regression is **provisional** — Weekly was trained under plateauLR which may collapse its patience window before the cascade has time to differentiate at the shortest M4 horizon; a paper stepLR rerun is in progress and will determine whether Weekly is a genuine cascade reversal or a scheduler artefact. If stepLR also regresses, the "narrow effective frequency band, uniform `bdeq=H` is locally optimal" reading stands; if stepLR matches or improves over uniform, Weekly is consistent with the other periods. Yearly/Quarterly are noise-bound because absolute SMAPE differences are small relative to seed std.
 
 ## 4. Leaderboard impact
 
@@ -132,12 +132,14 @@ From `memory/project_tiered_offset_open_questions.md` (4 follow-ups):
 | **Tiered 30s** | **Answered.** 30s tiered configs are present and competitive: Q/M/W per-period leaders are all 30s_agf; Daily SOTA is 10s_ag0 — depth × period interaction is real. 30s tiered sweep is no longer the highest-priority follow-up. |
 | **Yearly falsification test** | **Answered, mixed.** Yearly tiered has 7/11 configs improving (avg Δ=−0.02) but only 1 reaches significance. Tiered Yearly leader (T+Sym10V3_10s_tiered_ag0, 13.578) does **not** beat prior SOTA TALG+DB3V3ALG_10s_ag0 (13.550). Yearly does not falsify the cascade hypothesis but does not strongly support it either — Yearly is a noise-bound period. |
 
-**New highest-priority follow-up** (in order):
+**New highest-priority follow-up** (in order). Note: a "tiered on legacy Generic/IG blocks" selectivity test was considered and **rejected** — those blocks have no wavelet basis to tier, so the experiment cannot be set up. Falsification must use within-wavelet contrasts or direction symmetry instead.
 
-1. **Selectivity test on Daily.** Re-run `NBEATS-G_10s_ag0`, `NBEATS-IG_10s_ag0`, and a generic-AE config (`GAE_10s_*` or `GenericAE_*`) with tiered ascend on Daily. Hypothesis: if tiering helps generic blocks too, the cascade explanation collapses and we are just regularising. If selectivity holds (helps T+/TAE+, no-op on Generic/IG), the cascade story survives.
-2. **Weekly ablation.** Single Weekly run with descend instead of ascend for T+DB3V3_30s. If descend matches non-tiered, the issue is offset magnitude, not direction; if descend recovers, Weekly preference for *uniform* basis-dim is confirmed.
-3. **Tiered on TWAE_ld32_sym10** on Daily and Hourly (carries the prior TWAE ld32 question forward).
-4. **Drop tiered on Weekly from any production / appendix recommendation.** It is significantly worse than the non-tiered T+Coif2V3 SOTA.
+1. **Within-wavelet selectivity on Daily.** If the cascade story is real, multi-level families (sym10, db3, coif2) should benefit from tiering more than haar (which is single-level on short H per the WaveletV3 short-target rule). Step 1: re-analyse the existing `tiered_offset_m4_allperiods_results.csv` per wavelet family — but the present sweep only ran sym10 / db3, so step 2 is the confirmatory experiment: run `T+HaarV3_10s_tiered_ag0` head-to-head against `T+Sym10V3_10s_tiered_ag0` and `T+DB3V3_10s_tiered_ag0` on Daily. If haar gains as much as the multi-level families, the cascade story collapses to "non-uniform `basis_dim` regularises".
+2. **Direction-agnosticism on Daily.** Hourly already showed ascend ≈ descend (p=0.79). If Daily also shows direction-irrelevance, the frequency-band cascade interpretation is unnecessary. Run `T+Sym10V3_10s_tiered_descend` on Daily and compare to `T+Sym10V3_10s_tiered_ag0` (ascend).
+3. **NHiTS analogue.** `n_freq_downsample`-per-stack is the closest legacy parallel — multi-rate hierarchical decomposition. If tiering `n_freq_downsample` in NHiTS gives a similar Daily/Hourly improvement, "non-uniform per-stack frequency parameter" is the unifying mechanism rather than wavelet specifics.
+4. **Weekly direction ablation — wait for stepLR rerun first.** A paper stepLR rerun of the tiered Weekly configs is currently in flight; if Weekly recovers under stepLR, the "Weekly regresses" finding is a plateauLR patience-window artefact and the descend ablation is unnecessary. If Weekly still regresses under stepLR, then run a single descend ablation for `T+DB3V3_30s` to discriminate offset-magnitude vs direction.
+5. **Tiered on TWAE_ld32_sym10** on Daily and Hourly (carries the prior TWAE ld32 question forward).
+6. **Drop tiered on Weekly from any production / appendix recommendation — *only if* the stepLR rerun also regresses.** Current plateauLR result is significantly worse than non-tiered T+Coif2V3 SOTA, but plateauLR's short patience window may be the confound at H=13. Reassess after stepLR rerun lands.
 
 ## 6. Place in NeurIPS paper narrative
 
@@ -145,7 +147,7 @@ The paper has a twin Tier-A thesis: **(A) multi-resolution DWT** + **(B) paramet
 
 - **Supports thesis A (multi-resolution DWT) qualitatively.** Per-stack basis-dim tiering is exactly the operational form of "different stacks resolve different frequency bands". The Daily result (8/10 leaderboard slots, Cliff d 0.54–0.78) is the strongest single-period demonstration in the paper-sample regime that letting basis dimensionality vary by depth does real work. Worth **one figure / one table** in an appendix.
 - **Neutral on thesis B (parameter efficiency).** Tiered configs have the same parameter count as their bdeq baselines (within ~1% — the per-stack basis_dim variation marginally changes the projection layers). They do not win on params/SMAPE Pareto.
-- **Risks the headline if put in main results.** (i) Weekly is significantly *worse* with tiering, breaking any "tiering is universally beneficial" claim; (ii) the new Daily SOTA is not significant against the prior TAELG+Coif2V3 leader (p=0.31); (iii) the Hourly cascade direction (ascend) ties descend, so the original frequency-band-cascade interpretation is incomplete.
+- **Risks the headline if put in main results.** (i) Weekly is significantly *worse* with tiering under plateauLR — but a paper stepLR rerun is in flight and may flip this conclusion (plateauLR patience may collapse at H=13); (ii) the new Daily SOTA is not significant against the prior TAELG+Coif2V3 leader (p=0.31); (iii) the Hourly cascade direction (ascend) ties descend, so the original frequency-band-cascade interpretation is incomplete.
 - **Recommended placement:** Appendix ablation entitled "Per-stack basis-dim cascade as a regulariser". Lead bullet: *"Letting `basis_dim` vary by stack depth (`ascend` 6 → 18 across 10 stacks for H=14 Daily) recovers a 0.04 SMAPE improvement over uniform `bdeq` and dominates the Daily top-10. The effect does not generalise to Weekly (H=13), where uniform `bdeq` is significantly better."*. Cross-reference from main results only when explaining Daily numbers.
 
 ---
@@ -153,8 +155,9 @@ The paper has a twin Tier-A thesis: **(A) multi-resolution DWT** + **(B) paramet
 ## Recommended next experiments
 
 ```yaml
-# Highest priority: selectivity test for cascade hypothesis
-experiment_name: tiered_selectivity_daily
+# Highest priority: within-wavelet selectivity test (haar single-level vs multi-level families)
+# Plus direction-agnosticism control (ascend vs descend)
+experiment_name: tiered_within_wavelet_daily
 dataset: m4
 periods: [Daily]
 training:
@@ -164,12 +167,21 @@ training:
   patience: 20
   max_epochs: 200
 configs:
-  - {builtin: NBEATS-G,  stacks: 10, tiered: ascend}     # legacy generic
-  - {builtin: NBEATS-IG, stacks: 10, tiered: ascend}     # legacy interpretable
-  - {builtin: GenericAE_10s, latent_dim: 32, tiered: ascend}
-  - {builtin: T+DB3V3_10s,  active_g: false, tiered: ascend}  # positive control
+  # Within-wavelet selectivity (haar = single-level on short H, others multi-level)
+  - {builtin: T+HaarV3_10s,   active_g: false, tiered: ascend}   # single-level control
+  - {builtin: T+DB3V3_10s,    active_g: false, tiered: ascend}   # multi-level
+  - {builtin: T+Sym10V3_10s,  active_g: false, tiered: ascend}   # multi-level long support
+  - {builtin: T+Coif2V3_10s,  active_g: false, tiered: ascend}   # multi-level coiflet
+  # Direction control (ties on Hourly; test on Daily)
+  - {builtin: T+Sym10V3_10s,  active_g: false, tiered: descend}
+  - {builtin: T+DB3V3_10s,    active_g: false, tiered: descend}
 n_runs: 10
 ```
 
-If the legacy NBEATS-G / IG configs *also* improve under tiering on Daily, the cascade hypothesis is reduced to "non-uniform `basis_dim` regularises" and the Hourly memory note should be edited accordingly. If they show no effect while T+DB3V3 still improves, selectivity holds and the multi-resolution story is reinforced.
+Predicted outcomes and what they mean:
+
+- If **haar gains as much as sym10/db3/coif2** → cascade story collapses to "non-uniform `basis_dim` regularises wavelet stacks"; update the Hourly memory note and downgrade the cascade framing in the paper.
+- If **haar gains noticeably less** → multi-resolution DWT thesis is reinforced; the cascade story is the right interpretation for multi-level families.
+- If **ascend ≈ descend on Daily** (matches Hourly) → direction is irrelevant; non-uniformity alone is the active ingredient. Combined with the haar result, this is the cleanest falsifier set.
+- If **descend regresses while ascend improves** → there is a real low-→high frequency depth ordering and the cascade story is direction-specific.
 
