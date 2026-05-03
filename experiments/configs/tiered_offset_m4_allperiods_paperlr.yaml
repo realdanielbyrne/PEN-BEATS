@@ -60,11 +60,7 @@ description: >
 
 dataset: m4
 periods:
-  - Yearly
-  - Quarterly
-  - Monthly
   - Weekly
-  - Daily
 
 protocol:
   sampling_style: nbeats_paper
