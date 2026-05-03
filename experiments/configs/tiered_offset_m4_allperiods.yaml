@@ -105,8 +105,8 @@ training:
 
 lr_scheduler:
   type: plateau
-  factor: 0.75
-  patience: 2
+  factor: 0.5
+  patience: 3
   cooldown: 1
   min_lr: 1.0e-06
   mode: min
@@ -542,13 +542,13 @@ output:
 
 logging:
   wandb:
-    enabled: true
+    enabled: false
     project: nbeats-lightning
   tensorboard: false
 
 hardware:
   accelerator: auto
-  num_workers: 0
+  num_workers: 2
   pin_memory: true
 
 analysis:
