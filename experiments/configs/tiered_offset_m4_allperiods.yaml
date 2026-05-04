@@ -262,31 +262,6 @@ configs:
       active_g_cfg: false
       tiered: ascend
 
-  - name: T+Sym10V3_30s_tiered_agf
-    category: tiered_rb_sym10_30s
-    stacks:
-      type: alternating
-      blocks: [Trend, Symlet10WaveletV3]
-      repeats: 15
-    training:
-      active_g: forecast
-    block_params:
-      basis_dim: eq_fcast
-      trend_thetas_dim: 3
-      stack_basis_offsets: [0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0, 8, 0, 16, 0, 16, 0, 16, 0, 24, 0, 24, 0, 24, 0, 32, 0, 32, 0, 32]
-    extra_fields:
-      arch_family: alt_trend_wavelet_rb
-      block_type_primary: Trend+Symlet10WaveletV3
-      backbone: RootBlock
-      stack_pattern: alternating
-      n_stacks: 30
-      wavelet_family: sym10
-      basis_dim_label: eq_fcast
-      latent_dim_cfg: null
-      trend_thetas_dim_cfg: 3
-      active_g_cfg: forecast
-      tiered: ascend
-
   - name: TAE+Sym10V3AE_30s_tiered
     category: tiered_ae_sym10_30s
     stacks:
@@ -360,31 +335,6 @@ configs:
       active_g_cfg: false
       tiered: ascend
 
-  - name: T+DB3V3_10s_tiered_agf
-    category: tiered_rb_db3_10s
-    stacks:
-      type: alternating
-      blocks: [Trend, DB3WaveletV3]
-      repeats: 5
-    training:
-      active_g: forecast
-    block_params:
-      basis_dim: eq_fcast
-      trend_thetas_dim: 3
-      stack_basis_offsets: [0, 0, 0, 8, 0, 16, 0, 24, 0, 32]
-    extra_fields:
-      arch_family: alt_trend_wavelet_rb
-      block_type_primary: Trend+DB3WaveletV3
-      backbone: RootBlock
-      stack_pattern: alternating
-      n_stacks: 10
-      wavelet_family: db3
-      basis_dim_label: eq_fcast
-      latent_dim_cfg: null
-      trend_thetas_dim_cfg: 3
-      active_g_cfg: forecast
-      tiered: ascend
-
   - name: TAE+DB3V3AE_10s_tiered
     category: tiered_ae_db3_10s
     stacks:
@@ -456,31 +406,6 @@ configs:
       latent_dim_cfg: null
       trend_thetas_dim_cfg: 3
       active_g_cfg: false
-      tiered: ascend
-
-  - name: T+DB3V3_30s_tiered_agf
-    category: tiered_rb_db3_30s
-    stacks:
-      type: alternating
-      blocks: [Trend, DB3WaveletV3]
-      repeats: 15
-    training:
-      active_g: forecast
-    block_params:
-      basis_dim: eq_fcast
-      trend_thetas_dim: 3
-      stack_basis_offsets: [0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0, 8, 0, 16, 0, 16, 0, 16, 0, 24, 0, 24, 0, 24, 0, 32, 0, 32, 0, 32]
-    extra_fields:
-      arch_family: alt_trend_wavelet_rb
-      block_type_primary: Trend+DB3WaveletV3
-      backbone: RootBlock
-      stack_pattern: alternating
-      n_stacks: 30
-      wavelet_family: db3
-      basis_dim_label: eq_fcast
-      latent_dim_cfg: null
-      trend_thetas_dim_cfg: 3
-      active_g_cfg: forecast
       tiered: ascend
 
   - name: TAE+DB3V3AE_30s_tiered
