@@ -196,6 +196,8 @@ Top-10 spread = 0.026 SMAPE — within-seed-noise tie. Sub-0.6M `TWGAELG_10s_ld1
 
 Hourly is the agf-dominated period: the top 3 are all `*_agf`. Best paper-faithful entry: `NBEATS-IG_30s_ag0` at rank 4 (+0.147 SMAPE behind the agf winner). The 0.85M-param sub-1M `TWAELG_10s_ld32_db3_agf` lands at rank 5, only +0.165 SMAPE behind the 43.6M-param agf winner — best parameter efficiency on Hourly.
 
+**Tiered-offset Hourly follow-up (added 2026-05-04).** A targeted Hourly tiered-offset sweep (sym10 only, plateau vs step_paper LR × ascend/descend × 4 backbones, n=10/cell) is now available in `m4_hourly_sym10_tiered_offset_analysis_2026-05-04.md`. Best tiered Hourly cell is `T+Sym10V3_10s_bdEQ_descend` plateau at SMAPE 8.9224 ± 0.1132 — **+0.164 SMAPE behind the rank-1 paper-sample SOTA** (`NBEATS-IG_30s_agf` 8.758) listed above and **+0.335 behind the sliding-protocol SOTA** (`NBEATS-IG_30s_agf` 8.587). Hourly tiered does **not** beat the paper baseline under either protocol. Three findings refine §3.6/§8 on Hourly: (1) **LR is backbone-asymmetric for Hourly tiered configs** — alternating `T+Sym10V3` / `TAE+Sym10V3AE` prefer plateau LR (Δ −0.168 SMAPE, p=0.026); unified `TWAE_10s_td3_sym10_ld16` prefers step_paper LR (Δ +0.196, p=0.004); unified `TW_10s_td3_sym10` is LR-insensitive; (2) **tiered direction (ascend vs descend) is noise on Hourly** (all p > 0.10) — choose by parameter count, not direction; (3) **generalist crown unaffected** — `T+Sym10V3_10s_tiered_ag0` (mean rank 13.33/108 in `m4_overall_leaderboard_2026-05-03.md`) uses the 8.922 plateau-descend cell as its Hourly slot, and the `_paperlr` file does not move it.
+
 ---
 
 ## 4. Generalist Mean-Rank Leaderboard (top-20)

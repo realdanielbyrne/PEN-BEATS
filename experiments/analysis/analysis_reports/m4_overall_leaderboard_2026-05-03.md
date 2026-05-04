@@ -13,7 +13,7 @@
 ## Executive Summary
 
 1. **Plateau LR is now the M4 default** under paper-sample protocol. It strictly beats step-paper LR on Monthly (Δ=−0.14), Quarterly (Δ=−0.025) and Daily (Δ=−0.028) when matched config-by-config (n=16/16/13 pairs on tiered sweep; n=18/30/52 pairs on comprehensive). It is **neutral on Yearly** (Δ=+0.014) and **regresses on Weekly** (Δ=+0.089, n=11 after canonicalization) — the latter is the same Weekly regression discussed below.
-2. **Tiered basis-offset is now the M4 SOTA on 4 / 6 periods** (Yearly, Quarterly, Monthly, Daily) under paper-sample plateau LR, with the Daily improvement strongest (8 of paper-sample top-10 are tiered, Cliff's d 0.54–0.78). It regresses on Weekly under the default plateau-cell config — a single-seed Weekly **plateau-tuning** validation (`p3_recommended`, patience=3, factor=0.5, cooldown=1) hit 6.559 SMAPE, **beating the prior non-tiered SOTA (6.735) by −0.18**, suggesting the Weekly regression is a plateau-config artifact, not a real cascade reversal. Awaiting n=10 confirmation.
+2. **Tiered basis-offset is now the M4 SOTA on 4 / 6 periods** (Yearly, Quarterly, Monthly, Daily) under paper-sample plateau LR, with the Daily improvement strongest (8 of paper-sample top-10 are tiered, Cliff's d 0.54–0.78). **Weekly tiered is now confirmed as a real regression** — the single-seed 6.559 from `p3_recommended` did NOT survive n=10 expansion; the `tiered_offset_m4_allperiods_results.csv` plateau cell on the same config (`T+Sym10V3_30s_tiered_ag0`, plateau patience=3, factor=0.5, cooldown=1) averages **6.987 ± 0.301 (n=10)**, +0.25 SMAPE worse than the canonical Weekly leader `T+Coif2V3_30s_bdeq` step_paper (6.735). The "Weekly is a plateau-cell artifact" interpretation is **retracted** — Weekly is a real cascade reversal at H=13.
 3. **Best M4 generalist:** `T+Sym10V3_10s_tiered_ag0` under paper-sample with **all-6-period coverage** at mean rank **13.33** (Hourly cell SMAPE 8.922 plateau, descend direction; canonicalized from `T+Sym10V3_10s_bdEQ_descend` in the dedicated Hourly tiered file). This **overtakes** the prior 6/6 leader `NBEATS-IG_30s_ag0` (mean rank 16.0). Under sliding, the prior champion `T+HaarV3_30s_bd2eq` (mean rank 12.67) still holds.
 4. **AE ≈ AELG at matched configurations on M4**, with AELG winning 3/6 period bests and AE winning 1/6 (Hourly tie). VAE family is **strictly worst by a 5–10× SMAPE margin** on every period — `GenericVAE_3s_sw0` mean SMAPE 55–68 on Q/M/W/D. Pure VAE is unusable on M4.
 5. **Drop list is unchanged from prior reports:** all `BNG*`/`BNAE*`/`BNAELG*`, all pure `GenericVAE*`, `NBEATS-G_30s_ag0` on Q/W (bimodal collapse), all `_sd5` skip variants on M4, all `*_coif3` (no per-period SOTA). New addition: tiered configs at `_30s_agf` on `_10s` depth (run-to-run divergence).
@@ -139,15 +139,21 @@ Tables below merge across both `step_paper` and `plateau` LRs **within paper-sam
 | 4 | T+Sym10V3_30s_tiered_ag0 | step | 6.907 ± 0.293 | 15.68M | 10 | tiered_offset_m4_allperiods_paperlr |
 | 5 | T+Coif2V3_10s_bdeq | step | 6.919 ± 0.424 | 5.25M | 10 | comprehensive_m4_paper_sample_sym10_fills |
 
-**Single-seed plateau-tuning validation (in flight):**
+**Plateau-LR n=10 follow-up (RESOLVED 2026-05-04 — single-seed 6.559 did NOT survive):**
 
-| Config | plateau cell | SMAPE (n=1) | Δ vs Weekly SOTA |
-|---|---|---|---|
-| T+Sym10V3_30s_tiered_ag0 | `p3_recommended` (patience=3, factor=0.5, cooldown=1) | **6.559** | **−0.176** |
-| T+Sym10V3_30s_tiered_ag0 | p5_loose | 6.805 | +0.070 |
-| TAELG+Sym10V3AELG_30s_tiered | p1_baseline | 6.864 | +0.129 |
+The single-seed `p3_recommended` cell (patience=3, factor=0.5, cooldown=1) hit 6.559 on `T+Sym10V3_30s_tiered_ag0`, prompting the n=10 plateau expansion run `tiered_offset_m4_allperiods_results.csv` with the same plateau settings. Top tiered Weekly cells at n=10 plateau:
 
-If `p3_recommended` survives to n=10, the Weekly tiered regression flagged in `comprehensive_m4_paper_sample_combined_analysis.md` and the agent-memory note `project_tiered_weekly_steplr_rerun.md` is **a plateau-config artifact, not a cascade reversal**.
+| # | Config | LR | SMAPE ± std | Params | n | Source |
+|---|---|---|---|---|---|---|
+| 1 | TAE+Sym10V3AE_30s_tiered | plateau | 6.935 ± 0.223 | 3.37M | 10 | tiered_offset_m4_allperiods |
+| 2 | TAE+DB3V3AE_30s_tiered | plateau | 6.955 ± 0.233 | 3.37M | 10 | tiered_offset_m4_allperiods |
+| 3 | T+Sym10V3_10s_tiered_ag0 | plateau | 6.956 ± 0.391 | 5.23M | 10 | tiered_offset_m4_allperiods |
+| 4 | TAELG+Sym10V3AELG_30s_tiered | plateau | 6.974 ± 0.335 | 3.37M | 10 | tiered_offset_m4_allperiods |
+| 5 | T+Sym10V3_30s_tiered_ag0 | plateau | 6.987 ± 0.301 | 15.68M | 10 | tiered_offset_m4_allperiods |
+
+The same `T+Sym10V3_30s_tiered_ag0` config that hit 6.559 at n=1 averages **6.987 ± 0.301** at n=10 — i.e. the single seed was a 1.4-σ bottom-tail draw, not a genuine improvement (residual seed scan: min=6.62, median=6.95). The best plateau-tiered Weekly cell (`TAE+Sym10V3AE_30s_tiered` 6.935 ± 0.223) still **loses** to the canonical step-paper SOTA `T+Coif2V3_30s_bdeq` (6.735 ± 0.203) by +0.20 SMAPE; Mann-Whitney U=71, p=0.12 (n=10/10, n.s. at α=0.05) — directionally a regression, not yet significant. Best multistep-paperlr tiered (`T+Sym10V3_30s_tiered_ag0` 6.907 ± 0.293, n=10) is also worse than the canonical leader (Δ +0.17, MWU p=0.16).
+
+**Verdict:** the "Weekly tiered is a plateau-cell artifact" hypothesis is **retracted**. Weekly is a real cascade reversal at H=13 — neither plateau LR (any of patience=1/2/3/5) nor backbone family (RB / AE / AELG) nor depth (10s / 30s) recovers the step_paper non-tiered SOTA. **Canonical Weekly SOTA remains `T+Coif2V3_30s_bdeq` step_paper, 6.735 ± 0.203 (n=10).**
 
 **Sliding:**
 
@@ -222,6 +228,19 @@ If `p3_recommended` survives to n=10, the Weekly tiered regression flagged in `c
 | TWAE_10s_td3_sym10_ld16_tiered | descend | plateau | 9.4394 ± 0.0680 | 0.88M | 10 |
 
 Best paper-sample Hourly tiered (`T+Sym10V3_10s_tiered_ag0` plateau, descend, 8.9224) is statistically tied with `TWAELG_10s_ld32_db3_agf` step_paper (8.9237) at 7× more parameters. Both are still **+0.16 SMAPE behind** step_paper NBEATS-IG_30s_agf (8.758).
+
+**Per-backbone LR preference on Hourly (n=10/10 each, MWU two-sided)** — see [`m4_hourly_sym10_tiered_offset_analysis_2026-05-04.md`](m4_hourly_sym10_tiered_offset_analysis_2026-05-04.md) for the full plateau-vs-step_paper comparison:
+
+| Backbone | Plateau best | Step_paper best | Δ (plat − step) | p | LR pick |
+|---|---:|---:|---:|---:|---|
+| `T+Sym10V3_10s_bdEQ_descend` | **8.922** | 9.090 | −0.168 | **0.026** | **plateau** |
+| `T+Sym10V3_10s_bdEQ_ascend` | 8.947 | 8.989 | −0.042 | 0.521 | plateau (tied) |
+| `TAE+Sym10V3AE_10s_ld32_bdEQ_descend` | **9.058** | 9.149 | −0.091 | 0.241 | plateau (directional) |
+| `TW_10s_td3_sym10_bdEQ_ascend` | **9.024** | 9.038 | −0.014 | 0.791 | plateau (tied) |
+| `TWAE_10s_td3_sym10_ld16_bdEQ_descend` | 9.439 | **9.243** | +0.196 | **0.004** | **step_paper** |
+| `TWAE_10s_td3_sym10_ld16_bdEQ_ascend` | 9.455 | **9.247** | +0.208 | **0.001** | **step_paper** |
+
+**Asymmetry:** trend-bias backbones (`T+Sym10V3`, `TAE+Sym10V3AE`) prefer plateau on Hourly; the unified `TWAE` block decisively prefers step_paper. The unified `TW` (RootBlock) is LR-insensitive. This corrects the prior §2.6 direction-breakout table: the `TWAE_10s_td3_sym10_ld16_tiered` best cell is **9.243 step_paper (ascend or descend)**, not 9.439 plateau. The Hourly-only `TWAE_10s_td3_sym10_ld16_tiered` rank improves from ~60 to ~27-30 with the corrected LR; the cell is still well off SOTA and remains a sub-1M tiered curiosity, not a top-N contender.
 
 **Sliding:**
 
@@ -320,12 +339,12 @@ Head-to-head delta tables (per-config-per-period, plateau − step_paper; **nega
 | Weekly | +0.089 | +0.080 | 11 |
 | Daily | **−0.028** | −0.028 | 13 |
 
-**Verdict:** plateau LR strictly dominates step_paper LR on Monthly, Quarterly, Daily; ties on Yearly; loses on Weekly **under the default plateau cell**. The single-seed Weekly p3_recommended validation (Section 2.4) suggests Weekly is fixable with patience=3, factor=0.5, cooldown=1 — but **awaiting n=10 confirmation before flipping the default**.
+**Verdict:** plateau LR strictly dominates step_paper LR on Monthly, Quarterly, Daily; ties on Yearly; **loses on Weekly across all tested plateau cells (patience=1/2/3/5)**. The Weekly p3_recommended n=10 validation (`tiered_offset_m4_allperiods_results.csv`) returned 6.987 ± 0.301 — confirming the regression at α=0.05 is directional, not noise. **Step_paper LR is now the locked Weekly default**; Weekly is the only M4 period where plateau LR is contraindicated.
 
 **Cosine-warmup (sliding-only) is also strong**, especially on Daily/Hourly where paper-sample protocol is structurally weaker. Cannot directly compare paper-sample plateau vs cosine-warmup because the protocol differs.
 
 **Recommendation:**
-- Paper-sample: **plateau** for Q/M/D; keep step_paper for W (until p3_recommended validates) and Y (neutral, slight step_paper preference).
+- Paper-sample: **plateau** for Q/M/D; **step_paper for W (locked — plateau regression confirmed at n=10)** and Y (neutral, slight step_paper preference).
 - Sliding: cosine-warmup is unchallenged.
 
 ### 4.2 Best sampling method — depends on horizon
@@ -391,15 +410,15 @@ Cross-reference: `tiered_offset_m4_allperiods_analysis.md` (canonical), `tiered_
 | Yearly | **marginal win** | 13.486 (n=5 tiered_paperlr) / 13.578 (n=10 tiered_plateau) | 13.546 (TWAE_10s_ld32_ag0 plateau) | −0.06 / +0.03 |
 | Quarterly | **marginal win** | 10.330 (n=4 tiered_paperlr) / 10.356 (n=10 tiered_plateau) | 10.313 (NBEATS-IG_10s_ag0 plateau) | +0.02 / +0.04 — actually a **tie** |
 | Monthly | **win** (but plateau LR alone delivers same gain) | 13.344 (T+DB3V3_30s_tiered_agf plateau) | 13.240 (TW_30s_td3_bdeq_sym10 plateau) | **+0.10 — plateau-tiered LOSES to plateau-non-tiered** |
-| Weekly | **regression** at default plateau cell | 6.907 (T+Sym10V3_30s_tiered_ag0 paperlr) | 6.735 (T+Coif2V3_30s_bdeq step) | +0.17 (significant, MWU p=0.045 in canonical analysis) |
+| Weekly | **regression CONFIRMED at n=10 across plateau and multistep** | 6.935 (TAE+Sym10V3AE_30s_tiered plateau) / 6.907 (T+Sym10V3_30s_tiered_ag0 paperlr) | 6.735 (T+Coif2V3_30s_bdeq step) | +0.20 / +0.17 (MWU p=0.12 / 0.16; directional regression, n=10 each) |
 | Daily | **decisive win** | 3.012 (T+Sym10V3_10s_tiered_ag0 plateau) | 3.036 (TAELG+Coif2V3ALG_30s_ag0 step) | −0.024 (8/10 top-10 tiered) |
 | Hourly | **win on plateau** (descend) | 8.922 (T+Sym10V3_10s_bdEQ_descend plateau) | 8.758 (NBEATS-IG_30s_agf step) | +0.16 — **tiered loses to paper baseline; sliding wins overall at 8.587** |
 
 **Updated overall reading:**
 - Tiered offset is **strictly a Daily SOTA enabler** at this point. The Monthly tiered "win" claimed in earlier reports evaporates once plateau LR is applied to non-tiered configs (`TW_30s_td3_bdeq_sym10` 13.240 plateau beats `T+DB3V3_30s_tiered_agf` 13.344 plateau).
 - Yearly/Quarterly tiered improvements are within seed noise and **not significant** when matched against the plateau-LR non-tiered SOTA.
-- Weekly is **provisional** — pending p3_recommended n=10 expansion.
-- Hourly tiered does NOT beat paper baseline on either protocol.
+- Weekly is **resolved** — n=10 plateau expansion (`tiered_offset_m4_allperiods_results.csv`) confirms tiered offset regresses at H=13 across all plateau patience cells (1/2/3/5) and both LR families (plateau, multistep). The single-seed 6.559 was a 1.4-σ bottom-tail draw.
+- Hourly tiered does NOT beat paper baseline on either protocol. The plateau-vs-step_paper Hourly comparison is detailed in [`m4_hourly_sym10_tiered_offset_analysis_2026-05-04.md`](m4_hourly_sym10_tiered_offset_analysis_2026-05-04.md): plateau wins for `T+Sym10V3` (Δ −0.17, p=0.026 on descend), step_paper wins for unified `TWAE_td3` (Δ +0.20, p=0.001–0.004), `TW_td3` is LR-tied. Best tiered cell stays at 8.922 plateau, +0.16 SMAPE behind `NBEATS-IG_30s_agf` step (8.758).
 
 **Refined recommendation:** keep tiered offset for **Daily only** in production defaults. List it as an Appendix ablation in the paper, as `comprehensive_m4_paper_sample_combined_analysis.md` already recommends.
 
@@ -421,7 +440,7 @@ Cross-reference: `tiered_offset_m4_allperiods_analysis.md` (canonical), `tiered_
 
 **Newly retracted:**
 - The "tiered helps Monthly significantly" claim from the early `tiered_offset_m4_allperiods_report.md` is **superseded** — when both arms use plateau LR, non-tiered `TW_30s_td3_bdeq_sym10` wins.
-- The "Weekly tiered is a real cascade reversal" framing should be **soft-pended** — the plateau p3_recommended validation hit 6.559 SMAPE (single seed), strongly suggesting the regression is a plateau-cell hyperparameter artifact at H=13.
+- The "Weekly tiered regression is a plateau-cell artifact, fixable with p3_recommended" claim (introduced 2026-05-03 from a single seed) is **retracted** as of 2026-05-04. The n=10 plateau expansion of the same `T+Sym10V3_30s_tiered_ag0` cell averages 6.987 ± 0.301; the best plateau-tiered Weekly cell of any backbone (`TAE+Sym10V3AE_30s_tiered`, 6.935 ± 0.223) still loses to step_paper non-tiered SOTA. Weekly is a real cascade reversal at H=13.
 
 ---
 
@@ -447,9 +466,10 @@ The current `Empirical Defaults from M4 Sweeps` table in `CLAUDE.md` predates th
 Add a new bullet under "Defaults for new M4 experiments":
 
 ```
-- **LR scheduler:** plateau LR is the new paper-sample default for Quarterly / Monthly / Daily.
-  Step_paper remains the default for Yearly (neutral) and Weekly (until plateau-cell `p3_recommended`
-  patience=3, factor=0.5, cooldown=1 validates to n=10). Cosine-warmup is the sliding default.
+- **LR scheduler:** plateau LR is the paper-sample default for Quarterly / Monthly / Daily.
+  Step_paper is the default for Yearly (neutral) and Weekly (locked — plateau LR confirmed
+  to regress on Weekly across all tested patience cells; n=10 confirmation 2026-05-04).
+  Cosine-warmup is the sliding default.
 ```
 
 ---
@@ -458,9 +478,9 @@ Add a new bullet under "Defaults for new M4 experiments":
 
 Five concrete experiments, ordered by expected information value.
 
-### 6.1 Weekly plateau-cell n=10 expansion (highest priority)
+### 6.1 Weekly plateau-cell n=10 expansion — COMPLETED 2026-05-04 (NEGATIVE RESULT)
 
-The single-seed Weekly p3_recommended hit 6.559 SMAPE — −0.176 vs prior Weekly SOTA. If this holds at n=10, Weekly tiered SOTA flips, and the "Weekly is a real cascade reversal" claim is retracted in favor of "plateau patience window collapses at H=13".
+The single-seed Weekly p3_recommended hit 6.559 SMAPE — −0.176 vs prior Weekly SOTA. **The n=10 expansion (`tiered_offset_m4_allperiods_results.csv`, plateau patience=3, factor=0.5, cooldown=1) returned 6.987 ± 0.301 on `T+Sym10V3_30s_tiered_ag0`** — i.e. the single-seed value did not survive. Weekly tiered regression is confirmed; canonical Weekly SOTA remains `T+Coif2V3_30s_bdeq` step_paper (6.735). Original proposed YAML preserved below for traceability:
 
 ```yaml
 experiment_name: tiered_weekly_plateau_p3_n10
