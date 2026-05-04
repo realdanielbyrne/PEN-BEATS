@@ -107,7 +107,7 @@ training:
 lr_scheduler:
   type: plateau
   factor: 0.75
-  patience: 2
+  patience: 5
   cooldown: 1
   min_lr: 1.0e-07
   mode: min
