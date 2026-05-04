@@ -235,6 +235,15 @@ Yearly, Quarterly, and Weekly have **very tight IQRs** (< 0.2 SMAPE) punctuated 
 
 ## 4. Cross-Period Analysis
 
+> **Cross-protocol note (added 2026-05-04 — paper-sample tiered Hourly results).** The numbers and rankings in this section are **sliding-protocol only** and remain authoritative for the sliding regime. A separate paper-sample tiered-offset Hourly study (`m4_hourly_sym10_tiered_offset_analysis_2026-05-04.md`, n=10/cell, 160 rows, plateau vs step_paper LR × ascend/descend × 4 backbones) has since landed. Its best Hourly tiered sym10 cell (`T+Sym10V3_10s_bdEQ_descend` plateau, SMAPE 8.9224 ± 0.1132) is **+0.335 SMAPE behind the sliding-protocol Hourly winner reported below** (`NBEATS-IG_30s_agf` 8.587). It does **not displace any sliding-protocol Hourly leader in §3.6 or §4.1**. Cross-protocol takeaways from that report worth flagging here:
+>
+> 1. **LR preference is backbone-asymmetric under paper-sample.** Alternating `T+Sym10V3` / `TAE+Sym10V3AE` Hourly tiered cells prefer plateau LR (Δ −0.168, p=0.026); unified `TWAE_td3_sym10_ld16` Hourly tiered cells prefer step_paper LR (Δ +0.196, p=0.004); unified `TW_td3_sym10` (no AE bottleneck) is LR-insensitive. This sliding-protocol report uses cosine-warmup uniformly; the asymmetry is a paper-sample finding only.
+> 2. **Tiered direction (ascend vs descend) is noise on Hourly under paper-sample** (all p > 0.10).
+> 3. **Hourly tiered does NOT beat the Hourly paper baseline** under either protocol (sliding `NBEATS-IG_30s_agf` 8.587 vs best paper-sample tiered 8.922; paper-sample `NBEATS-IG_30s_agf` 8.758 vs best paper-sample tiered 8.922).
+> 4. **Generalist standing.** The combined paper-sample crown `T+Sym10V3_10s_tiered_ag0` (mean rank 13.33/108) uses the 8.922 plateau-descend Hourly cell as its Hourly slot. That generalist sits in the paper-sample leaderboard (`m4_overall_leaderboard_2026-05-03.md`), not in this sliding sweep, where `T+HaarV3_30s_bd2eq` remains the cross-period generalist (mean rank 12.7/112).
+>
+> See `m4_hourly_sym10_tiered_offset_analysis_2026-05-04.md` for full evidence and `m4_overall_leaderboard_2026-05-03.md` for the consolidated cross-protocol ranking.
+
 ### 4.1 Cross-Period Rank Grid (22 top-quartile-on-3+-periods keep candidates)
 
 | Config | Yearly | Quarterly | Monthly | Weekly | Daily | Hourly | Q1 count | Mean rank |
@@ -753,6 +762,7 @@ ld32 dominates on Monthly/Weekly/Daily/Hourly; ld16 marginally wins Yearly and Q
 
 10. **Confirm skip connections hurt** with 20 seeds at d=3 on GAELG at 30 stacks (not covered here).
 11. **Hourly `forecast_multiplier` sensitivity:** try `fm=3` (L=144) and `fm=7` (L=336) to confirm L=5H is the sweet spot.
+12. **Closed (negative result) — Hourly tiered-offset paper-sample sweep (sym10).** Resolved 2026-05-04 by `m4_hourly_sym10_tiered_offset_analysis_2026-05-04.md`: best tiered Hourly cell (`T+Sym10V3_10s_bdEQ_descend` plateau, 8.922) trails sliding `NBEATS-IG_30s_agf` (8.587) by +0.335 and paper-sample `NBEATS-IG_30s_agf` step (8.758) by +0.164. Tiered offset on Hourly does not produce a new SOTA under either protocol; tiered scope is now restricted to **Daily only** in the production defaults.
 
 ### 10.4 YAML config suggestions
 
