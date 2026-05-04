@@ -534,7 +534,7 @@ logging:
 
 hardware:
   accelerator: auto
-  num_workers: 0
+  num_workers: 2
   pin_memory: true
 
 analysis:

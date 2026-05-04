@@ -74,9 +74,9 @@ training:
   batch_size: 1024
 lr_scheduler:
   type: plateau
-  factor: 0.75
-  patience: 1
-  cooldown: 0
+  factor: 0.5
+  patience: 3
+  cooldown: 1
   min_lr: 1.0e-06
   mode: min
   monitor: val_loss

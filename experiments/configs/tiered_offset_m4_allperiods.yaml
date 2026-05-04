@@ -86,7 +86,7 @@ protocol:
     Monthly: 10
     Weekly: 10
     Daily: 10
-
+    Hourly: 10
 training:
   active_g: false
   sum_losses: false
@@ -106,10 +106,10 @@ training:
 
 lr_scheduler:
   type: plateau
-  factor: 0.5
-  patience: 3
+  factor: 0.75
+  patience: 2
   cooldown: 1
-  min_lr: 1.0e-06
+  min_lr: 1.0e-07
   mode: min
   monitor: val_loss
   interval: step
