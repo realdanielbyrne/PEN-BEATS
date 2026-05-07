@@ -2,7 +2,7 @@ PWD /Users/danielbyrne/GitHub/N-BEATS-Lightning/NBEATS-Explorations/Formatting_I
 INPUT /usr/local/texlive/2026/texmf.cnf
 INPUT /usr/local/texlive/2026/texmf-dist/web2c/texmf.cnf
 INPUT /usr/local/texlive/2026/texmf-var/web2c/pdftex/pdflatex.fmt
-INPUT neurips_2026.tex
+INPUT /Users/danielbyrne/GitHub/N-BEATS-Lightning/NBEATS-Explorations/Formatting_Instructions_For_NeurIPS_2026/neurips_2026.tex
 OUTPUT neurips_2026.log
 INPUT /usr/local/texlive/2026/texmf-dist/tex/latex/base/article.cls
 INPUT /usr/local/texlive/2026/texmf-dist/tex/latex/base/article.cls
