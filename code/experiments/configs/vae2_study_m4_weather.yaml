@@ -1,0 +1,260 @@
+﻿# ============================================================
+# VAE2 Block Study  M4 Yearly & Weather-96
+# Successive Halving across VAE2-family architectures
+#
+# Goal: Assess general performance of VAE2-derived block types
+# across two contrasting datasets: M4 Yearly (short horizon,
+# stationary) and Weather-96 (multivariate). Includes a GenericVAE baseline
+# (known strong on Traffic) for direct comparison with GenericVAE2.
+#
+#
+# Successive halving
+# -------------------
+# Round 1 : 10 epochs, n_runs=3, keep 50% => ~9 configs survive
+# Round 2 : 20 epochs, n_runs=3, keep 50% => ~4-5 configs survive
+# Round 3 : 50 epochs, n_runs=3, top_k=3  => final winners
+#
+# Two passes: baseline (active_g=false) and activeG_fcast (active_g=forecast)
+# active_g meaningfully affects Generic/VAE2/VAE-class blocks;
+# Trend/Seasonality/Wavelet basis-expansion blocks are unaffected.
+#
+# Usage:
+#   python experiments/run_from_yaml.py experiments/configs/vae2_study_m4_weather.yaml
+#   python experiments/run_from_yaml.py experiments/configs/vae2_study_m4_weather.yaml --dry-run
+#   python experiments/run_from_yaml.py experiments/configs/vae2_study_m4_weather.yaml --dataset m4 --periods Yearly
+#   python experiments/run_from_yaml.py experiments/configs/vae2_study_m4_weather.yaml --dataset weather --periods Weather-96
+#   python experiments/run_from_yaml.py experiments/configs/vae2_study_m4_weather.yaml --analyze-only
+# ============================================================
+
+experiment_name: vae2_study
+category: vae2_study
+description: >
+  VAE2 vs VAE1 vs AELG, in regular and reversed configurations.
+
+output:
+  csv_filename: vae2_study_results.csv
+
+dataset: [m4, weather]
+periods:
+  - Yearly
+  - Weather-96
+
+runs:
+  n_runs: 3
+  base_seed: 42
+
+training:
+  max_epochs: 100
+  patience: 10
+  learning_rate: 0.001
+  loss: SMAPELoss
+  optimizer: Adam
+  n_blocks_per_stack: 1
+  share_weights: true
+  sum_losses: false
+  activation: ReLU  
+
+block_params:
+  thetas_dim: 3
+  trend_thetas_dim: 3
+  latent_dim: [8, 16, 32]
+  basis_dim: 128
+
+lr_scheduler:
+  warmup_epochs: 15
+  eta_min: 0.000001
+
+search:
+  enabled: true
+  rounds:
+    - {max_epochs: 15,  n_runs: 3, keep_fraction: 0.67,  top_k: null}
+    - {max_epochs: 25,  n_runs: 3, keep_fraction: 0.34,  top_k: null}
+    - {max_epochs: 100, n_runs: 3, top_k: 3}
+
+passes:
+  - name: baseline
+    training:
+      active_g: false
+  - name: activeG_fcast
+    training:
+      active_g: forecast
+
+extra_csv_columns:
+  - search_round
+  - block_type
+  - backbone_family
+  - wavelet_family
+  - category_label
+  - latent_dim
+
+configs:
+
+  # generic
+  - name: GenericVAE2
+    category: generic
+    stacks: {type: homogeneous, block: GenericVAE2, n: 5}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: GenericVAE2, backbone_family: VAE2, wavelet_family: '', category_label: generic}
+  
+  - name: GenericVAE
+    category: generic
+    stacks: {type: homogeneous, block: GenericVAE, n: 5}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: GenericVAE, backbone_family: VAE1, wavelet_family: '', category_label: generic}
+
+  - name: GenericAELG
+    category: generic
+    stacks: {type: homogeneous, block: GenericAELG, n: 5}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: GenericAELG, backbone_family: AELG, wavelet_family: '', category_label: generic}
+
+  # trend seasonality generic 
+  - name: TrendVAE2+SeasonalityVAE2+GenericVAE2
+    category: trend_seasonality_generic
+    stacks: {type: alternating, blocks: [TrendVAE2, SeasonalityVAE2, GenericVAE2], repeats: 2}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: SeasonalityVAE2, category_label: trend_seasonality_generic}
+
+  - name: TrendVAE+SeasonalityVAE+GenericVAE
+    category: trend_seasonality_generic
+    stacks: {type: alternating, blocks: [TrendVAE, SeasonalityVAE, GenericVAE], repeats: 2}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE, backbone_family: VAE1, wavelet_family: SeasonalityVAE, category_label: trend_seasonality_generic}
+
+  - name: TrendAELG+SeasonalityAELG+GenericAELG
+    category: trend_seasonality_generic
+    stacks: {type: alternating, blocks: [TrendAELG, SeasonalityAELG, GenericAELG], repeats: 2}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendAELG, backbone_family: AELG, wavelet_family: SeasonalityAELG, category_label: trend_seasonality_generic}
+
+  # generic seasonality trend
+  - name: GenericVAE2+SeasonalityVAE2+TrendVAE2
+    category: generic_seasonality_trend
+    stacks: {type: alternating, blocks: [GenericVAE2, SeasonalityVAE2, TrendVAE2], repeats: 2}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: SeasonalityVAE2, category_label: generic_seasonality_trend}
+
+  - name: GenericVAE+SeasonalityVAE+TrendVAE
+    category: generic_seasonality_trend
+    stacks: {type: alternating, blocks: [GenericVAE, SeasonalityVAE, TrendVAE], repeats: 2}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE, backbone_family: VAE, wavelet_family: SeasonalityVAE, category_label: generic_seasonality_trend}
+
+  - name: GenericAELG+SeasonalityAELG+TrendAELG
+    category: generic_seasonality_trend
+    stacks: {type: alternating, blocks: [GenericAELG, SeasonalityAELG, TrendAELG], repeats: 2}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendAELG, backbone_family: AELG, wavelet_family: SeasonalityAELG, category_label: generic_seasonality_trend}
+
+  # trend_generic
+  - name: TrendVAE2+GenericVAE2
+    category: trend_generic
+    stacks: {type: alternating, blocks: [TrendVAE2, GenericVAE2], repeats: 3}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: GenericVAE2, category_label: trend_generic}
+
+  - name: TrendVAE+GenericVAE
+    category: trend_generic
+    stacks: {type: alternating, blocks: [TrendVAE, GenericVAE], repeats: 3}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE, backbone_family: VAE, wavelet_family: GenericVAE1, category_label: trend_generic}
+
+  - name: TrendAELG+GenericAELG
+    category: trend_generic
+    stacks: {type: alternating, blocks: [TrendAELG, GenericAELG], repeats: 3}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendAELG, backbone_family: AELG, wavelet_family: GenericAELG, category_label: trend_generic}
+
+  # generic_trend
+  - name: GenericVAE2+TrendVAE2
+    category: generic_trend
+    stacks: {type: alternating, blocks: [GenericVAE2, TrendVAE2], repeats: 3}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: GenericVAE2, category_label: generic_trend}
+
+  - name: GenericVAE+TrendVAE
+    category: generic_trend
+    stacks: {type: alternating, blocks: [GenericVAE, TrendVAE], repeats: 3 }
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE, backbone_family: VAE, wavelet_family: GenericVAE, category_label: generic_trend}
+
+  - name: GenericAELG+TrendAELG
+    category: generic_trend
+    stacks: {type: alternating, blocks: [GenericAELG, TrendAELG], repeats: 3}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendAELG, backbone_family: AELG, wavelet_family: GenericAELG, category_label: generic_trend}
+
+  # trend_wavelet
+  - name: TrendVAE2+DB4V3VAE2
+    category: trend_wavelet
+    stacks: {type: alternating, blocks: [TrendVAE2, DB4WaveletV3VAE2], repeats: 3}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: DB4VAE2, category_label: trend_wavelet}
+
+  - name: TrendVAE+DB4V3VAE
+    category: trend_wavelet
+    stacks: {type: alternating, blocks: [TrendVAE, DB4WaveletV3VAE], repeats: 3}  
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE, backbone_family: VAE, wavelet_family: DB4VAE, category_label: trend_wavelet}
+
+  - name: TrendAELG+DB4WaveletV3AELG
+    category: trend_wavelet
+    stacks: {type: alternating, blocks: [TrendAELG, DB4WaveletV3AELG], repeats: 3}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendAELG, backbone_family: AELG, wavelet_family: DB4AELG, category_label: trend_wavelet}
+
+  # wavelet_trend
+  - name: DB4V3VAE2+TrendVAE2
+    category: wavelet_trend
+    stacks: {type: alternating, blocks: [DB4WaveletV3VAE2, TrendVAE2], repeats: 3}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: DB4VAE2, category_label: wavelet_trend}
+
+  - name: DB4V3VAE+TrendVAE
+    category: wavelet_trend
+    stacks: {type: alternating, blocks: [DB4WaveletV3VAE, TrendVAE], repeats: 3}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE, backbone_family: VAE, wavelet_family: DB4VAE, category_label: wavelet_trend}
+
+  - name: DB4V3AELG+TrendAELG
+    category: wavelet_trend
+    stacks: {type: alternating, blocks: [DB4WaveletV3AELG, TrendAELG], repeats: 3}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendAELG, backbone_family: AELG, wavelet_family: DB4AELG, category_label: wavelet_trend}
+
+  # trend wavelet generic 
+  - name: TrendVAE2+Coif2V3VAE2+GenericVAE2
+    category: trend_wavelet_generic
+    stacks: {type: alternating, blocks: [TrendVAE2, Coif2WaveletV3VAE2, GenericVAE2], repeats: 2}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Coif2VAE2, category_label: trend_wavelet_generic}
+
+  - name: TrendVAE+Coif2V3VAE+GenericVAE
+    category: trend_wavelet_generic
+    stacks: {type: alternating, blocks: [TrendVAE, Coif2WaveletV3VAE, GenericVAE], repeats: 2}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE, backbone_family: VAE, wavelet_family: Coif2VAE, category_label: trend_wavelet_generic}
+
+
+  # generic wavelet trend
+  - name: GenericVAE2+Coif2V3VAE2+TrendVAE2
+    category: generic_wavelet_trend
+    stacks: {type: alternating, blocks: [GenericVAE2, Coif2WaveletV3VAE2, TrendVAE2], repeats: 2}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE2, backbone_family: VAE2, wavelet_family: Coif2VAE2, category_label: generic_wavelet_trend}
+
+  - name: GenericVAE+Coif2V3VAE+TrendVAE
+    category: generic_wavelet_trend
+    stacks: {type: alternating, blocks: [GenericVAE, Coif2WaveletV3VAE, TrendVAE], repeats: 1}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendVAE, backbone_family: VAE, wavelet_family: Coif2VAE, category_label: generic_wavelet_trend}
+
+  - name: GenericAELG+Coif2V3AELG+TrendAELG
+    category: generic_wavelet_trend
+    stacks: {type: alternating, blocks: [GenericAELG, Coif2WaveletV3AELG, TrendAELG], repeats: 1}
+    training: {n_blocks_per_stack: 1, share_weights: true}
+    extra_fields: {block_type: TrendAELG, backbone_family: AELG, wavelet_family: Coif2AELG, category_label: generic_wavelet_trend}
+
+hardware:
+  accelerator: auto
+  num_workers: 0
