@@ -3,7 +3,7 @@ requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lightningnbeats"
+name = "nbeats_anon"
 version = "0.0.0"
 description = "Anonymous code accompanying the NeurIPS 2026 submission. PyTorch Lightning implementation of N-BEATS extended with wavelet basis expansion, autoencoder blocks, and learned-gate variants."
 requires-python = ">=3.12,<3.15"

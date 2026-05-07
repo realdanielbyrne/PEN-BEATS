@@ -1,9 +1,17 @@
-\begin{thebibliography}{11}
+\begin{thebibliography}{15}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
   \providecommand{\doi}[1]{doi: #1}\else
   \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Allal et~al.(2025)Allal, Lozhkov, Bakouch, Bl{\'a}zquez, Tunstall,
+  Piqueres, Marafioti, Zakka, von Werra, and Wolf]{allal2025smollm2}
+Loubna~Ben Allal, Anton Lozhkov, Elie Bakouch, Gabriel~Mart{\'\i}n
+  Bl{\'a}zquez, Lewis Tunstall, Agust{\'\i}n Piqueres, Andres Marafioti, Cyril
+  Zakka, Leandro von Werra, and Thomas Wolf.
+\newblock {SmolLM2}: When smol goes big -- data-centric training of a small
+  language model, 2025.
 
 \bibitem[Challu et~al.(2023)Challu, Olivares, Oreshkin, Ramirez,
   Mergenthaler-Canseco, and Dubrawski]{challu2023nhits}
@@ -28,6 +36,19 @@ Iman Deznabi and Madalina Fiterau.
 \newblock In \emph{Proceedings of the Conference on Health, Inference, and
   Learning ({CHIL})}, 2023.
 
+\bibitem[Gao et~al.(2024)Gao, Tow, Abbasi, Biderman, Black, DiPofi, Foster,
+  Golding, Hsu, Le~Noac'h, Li, McDonell, Muennighoff, Ociepa, Phang, Reynolds,
+  Schoelkopf, Skowron, Sutawika, Tang, Thite, Wang, Wang, and
+  Zou]{eval-harness}
+Leo Gao, Jonathan Tow, Baber Abbasi, Stella Biderman, Sid Black, Anthony
+  DiPofi, Charles Foster, Laurence Golding, Jeffrey Hsu, Alain Le~Noac'h,
+  Haonan Li, Kyle McDonell, Niklas Muennighoff, Chris Ociepa, Jason Phang,
+  Laria Reynolds, Hailey Schoelkopf, Aviya Skowron, Lintang Sutawika, Eric
+  Tang, Anish Thite, Ben Wang, Kevin Wang, and Andy Zou.
+\newblock A framework for few-shot language model evaluation.
+\newblock \url{https://github.com/EleutherAI/lm-evaluation-harness}, 2024.
+\newblock Version 0.4.11.
+
 \bibitem[Hinton and Salakhutdinov(2006)]{hinton2006reducing}
 Geoffrey~E. Hinton and Ruslan~R. Salakhutdinov.
 \newblock Reducing the dimensionality of data with neural networks.
@@ -50,6 +71,10 @@ Stephane~G. Mallat.
   Intelligence}, 11\penalty0 (7):\penalty0 674--693, 1989.
 \newblock \doi{10.1109/34.192463}.
 
+\bibitem[{Meta AI}(2024)]{llama32}
+{Meta AI}.
+\newblock The {Llama 3} herd of models, 2024.
+
 \bibitem[Oreshkin et~al.(2020)Oreshkin, Carpov, Chapados, and
   Bengio]{oreshkin2020nbeats}
 Boris~N. Oreshkin, Dmitri Carpov, Nicolas Chapados, and Yoshua Bengio.
@@ -58,6 +83,13 @@ Boris~N. Oreshkin, Dmitri Carpov, Nicolas Chapados, and Yoshua Bengio.
 \newblock In \emph{International Conference on Learning Representations
   (ICLR)}, 2020.
 \newblock URL \url{https://openreview.net/forum?id=r1ecqn4YwB}.
+
+\bibitem[Penedo et~al.(2024)Penedo, Kydl{\'\i}{\v{c}}ek, Allal, Lozhkov,
+  Mitchell, Raffel, von Werra, and Wolf]{penedo2024fineweb}
+Guilherme Penedo, Hynek Kydl{\'\i}{\v{c}}ek, Loubna~Ben Allal, Anton Lozhkov,
+  Margaret Mitchell, Colin Raffel, Leandro von Werra, and Thomas Wolf.
+\newblock The {FineWeb} datasets: Decanting the web for the finest text data at
+  scale, 2024.
 
 \bibitem[Pramanick et~al.(2024)Pramanick, Singhal, et~al.]{pramanick2024fusion}
 Niraj Pramanick, Vibha Singhal, et~al.

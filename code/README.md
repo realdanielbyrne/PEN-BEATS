@@ -1,155 +1,86 @@
 # Anonymous Code Supplement — Wavelets and Autoencoders are All You Need
 
 This is the anonymized code archive accompanying the NeurIPS 2026 submission
-*Wavelets and Autoencoders are All You Need*. It contains the
-`lightningnbeats` package (model + block implementations), the YAML-driven
-experiment launcher, the YAML configurations for every experiment cited in
-the paper, the convergence-tracking analysis script, and the pytest test
-suite.
+*Wavelets and Autoencoders are All You Need*. It contains two independent
+Python packages, each with its own dependency set, experiment launcher,
+configurations, and pytest suite. The split keeps the time-series
+environment free of HuggingFace `transformers` and vice versa.
 
-## Repository layout
+## Layout
 
-```
+```text
 code/
-├── pyproject.toml                           Package metadata (anonymized)
-├── requirements.txt                         Pip-installable dependencies
-├── src/lightningnbeats/                     Library: blocks, models, loaders, losses
-│   ├── blocks/blocks.py                     All block implementations
-│   ├── models.py                            NBeatsNet + NHiTSNet
-│   ├── loaders.py                           Lightning DataModules
-│   ├── losses.py                            sMAPE / MAPE / MASE / ND
-│   ├── constants.py                         Block / activation / optimizer registries
-│   └── data/                                Dataset loaders + bundled small datasets
-├── experiments/
-│   ├── run_from_yaml.py                     Unified YAML-driven launcher (recommended)
-│   ├── run_unified_benchmark.py             Underlying benchmark harness
-│   ├── tools/                               MetaForecaster + LLM commentary helpers
-│   ├── configs/                             All YAML configs cited in the paper
-│   └── analysis/scripts/m4_overall_leaderboard.py   Cross-period leaderboard builder
-└── tests/                                   Pytest suite
+├── README.md                  This file
+├── nbeats/                    Time-series forecasting package
+│   ├── pyproject.toml         nbeats_anon metadata (anonymized)
+│   ├── requirements.txt       Pip-installable dependencies (forecasting only)
+│   ├── conftest.py            Adds src/ to sys.path for pytest
+│   ├── README.md              Detailed install / data / experiment guide
+│   ├── src/nbeats_anon/       Library: blocks, models, loaders, losses
+│   ├── experiments/           run_from_yaml.py + all paper YAML configs
+│   └── tests/                 Pytest suite for the forecasting package
+└── pellm/                     Transformer experiments package
+    ├── pyproject.toml         pellm metadata (anonymized)
+    ├── README.md              Detailed install / data / experiment guide
+    ├── pellm/                 Library: PE-Llama, custom attention/MLP layers
+    ├── scripts/               finetune.py, run_from_yaml.py, eval scripts
+    │   └── experiments/       YAML configs for transformer experiments
+    ├── tests/                 Pytest suite for the transformer package
+    ├── docs/                  PELLM design notes
+    └── evals/                 Pre-computed lm-eval-harness results
 ```
+
+## Which package covers which paper section
+
+| Paper section / table | Package |
+| --- | --- |
+| Sections 3–4, Appendix B (M4, Tourism, Traffic, Weather, Milk, NHiTS) | `nbeats/` |
+| Section on parameter-efficient Llama (PELLM) | `pellm/` |
 
 ## Installation
 
-Python 3.12 ≤ x < 3.15. PyTorch ≥ 2.1 (CUDA, Apple MPS, or CPU).
+The two packages are installed independently into separate virtual
+environments. Each subdirectory contains its own README with the full set
+of commands, data-access notes, smoke tests, and reproduction recipes.
+
+### Forecasting (`nbeats/`)
+
+Python 3.12–3.14, PyTorch ≥ 2.1.
 
 ```bash
-cd code
-python -m venv .venv && source .venv/bin/activate  # or your preferred env
+cd nbeats
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
+pytest tests/ -v        # validate install
 ```
 
-## Datasets
+Full instructions, the M4 data download recipe, and the YAML-driven
+experiment commands are in [`nbeats/README.md`](nbeats/README.md).
 
-Small datasets used in the paper (Tourism, Milk, the bundled univariate
-demonstration series) are included under `src/lightningnbeats/data/`.
-Traffic and Weather are downloaded automatically from Hugging Face on first
-use and cached in `~/.cache/lightningnbeats/`.
+### Transformer (`pellm/`)
 
-The M4 raw series (≈ 250 MB) are **not** bundled, to keep this archive under
-the 100 MB NeurIPS supplementary limit. To run any M4 experiment, download
-the official M4 competition data from the M4 organisers (Makridakis et al.,
-2020) and place the files at:
-
-```
-src/lightningnbeats/data/M4/
-├── M4-info.csv
-├── Train/{Yearly,Quarterly,Monthly,Weekly,Daily,Hourly}-train.csv
-└── Test/{Yearly,Quarterly,Monthly,Weekly,Daily,Hourly}-test.csv
-```
-
-(File names and the column layout are exactly those of the original
-competition release.)
-
-## Running experiments
-
-All paper experiments are driven by `run_from_yaml.py` and a YAML config.
-Run from inside `code/` so the relative `experiments/configs/...` and
-`experiments/results/...` paths resolve correctly.
+Python ≥ 3.10, PyTorch ≥ 2.1, Transformers ≥ 4.40.
 
 ```bash
-# Smoke test (Milk dataset, 1 run, 2 epochs — does not need M4 data)
-python experiments/run_from_yaml.py experiments/configs/milk_convergence.yaml \
-    --max-epochs 2 --n-runs 1
-
-# Quick check of an M4 config (needs M4 data installed; 1 run, few epochs)
-python experiments/run_from_yaml.py experiments/configs/nbeats_g.yaml \
-    --periods Yearly --max-epochs 5 --n-runs 1
-
-# Full reproduction of paper-sample results (long; multi-day on a single GPU)
-python experiments/run_from_yaml.py experiments/configs/comprehensive_m4_paper_sample.yaml
-python experiments/run_from_yaml.py experiments/configs/comprehensive_m4_paper_sample_plateau.yaml
-python experiments/run_from_yaml.py experiments/configs/tiered_offset_m4_allperiods.yaml
-python experiments/run_from_yaml.py experiments/configs/m4_hourly_sym10_tiered_offset.yaml
-
-# Sliding-window protocol
-python experiments/run_from_yaml.py experiments/configs/comprehensive_sweep_m4.yaml
+cd pellm
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[experiments]"
+pytest tests/ -v        # validate install
 ```
 
-Useful flags for `run_from_yaml.py`:
-
-| Flag | Effect |
-| --- | --- |
-| `--dry-run` | Print the resolved config plan without training |
-| `--analyze-only` | Re-run post-hoc analysis on existing results CSV |
-| `--n-runs N` | Override seed budget |
-| `--max-epochs N` | Override epoch budget |
-| `--periods Yearly Monthly` | Restrict to selected M4 periods |
-| `--dataset {m4,tourism,traffic,weather,milk}` | Override dataset |
-| `--wandb` | Enable W&B logging (requires `pip install wandb`) |
-
-Resumability is built in: re-running the same config after an interrupt skips
-already-completed `(config, dataset, period, seed)` rows.
-
-## Config index for the experiments cited in the paper
-
-| Cited section / table | Config file |
-| --- | --- |
-| Section 4.1 (M4 paper-sample) | `comprehensive_m4_paper_sample.yaml` |
-| Section 4.1 (M4 paper-sample, plateau LR) | `comprehensive_m4_paper_sample_plateau.yaml` |
-| Section 4.1 (M4 sliding sweep) | `comprehensive_sweep_m4.yaml` |
-| Section 4.1 / Appendix B (tiered offset) | `tiered_offset_m4_allperiods.yaml`, `tiered_offset_m4_allperiods_paperlr.yaml` |
-| Section 4.1 (M4-Hourly tiered) | `m4_hourly_sym10_tiered_offset.yaml`, `m4_hourly_sym10_tiered_offset_paperlr.yaml` |
-| Table 5 (Tourism) | `omnibus_benchmark_tourism.yaml`, `comprehensive_sweep_tourism.yaml` |
-| Table 5 (Traffic) | `comprehensive_sweep_traffic.yaml` |
-| Table 5 (Weather) | `comprehensive_sweep_weather.yaml` |
-| Table 5 (Milk) | `unified_benchmark_milk.yaml`, `milk_convergence.yaml` |
-| Section 4.4 (NHiTS transferability) | `nhits_benchmark_weather.yaml`, `nhits_novel_ae_weather.yaml` |
-| Appendix B.9 (cross-period leaderboard) | `experiments/analysis/scripts/m4_overall_leaderboard.py` |
-
-A complete schema for the YAML format is in
-`experiments/configs/schema.md`.
-
-## Reproducing leaderboard tables
-
-After running the relevant configs, regenerate the per-period leaderboard
-with:
-
-```bash
-python experiments/analysis/scripts/m4_overall_leaderboard.py
-```
-
-This consumes the result CSVs under `experiments/results/m4/` and writes a
-leaderboard markdown file mirroring the structure of Appendix B.
-
-## Tests
-
-```bash
-pytest tests/
-pytest tests/test_blocks.py -k "TestAllBlocksOutputShapes"
-```
-
-Tests cover block output shapes, model construction, datamodule splits, and
-the YAML launcher's stack-spec parsing.
+Full instructions, the Hugging Face / Llama 3.2 access steps, and the
+PELLM experiment commands are in [`pellm/README.md`](pellm/README.md).
 
 ## Notes for reviewers
 
-- The package version in `pyproject.toml` is set to `0.0.0` for anonymization;
-  the pre-anonymization release version is intentionally not disclosed.
 - All author, institutional, repository-URL, and email metadata have been
-  scrubbed. If any oversight remains, please flag it via the OpenReview
-  comment system.
+  scrubbed across both packages. If any oversight remains, please flag it
+  via the OpenReview comment system.
 - Hardware: every experiment in the paper was run on a single consumer GPU
-  (16–24 GB VRAM) or Apple Silicon (MPS). Compact configurations
-  (sub-1M parameter blocks) train comfortably on CPU.
+  (16–24 GB VRAM) or Apple Silicon (MPS). Sub-1M-parameter forecasting
+  configurations also train comfortably on CPU.
+- Archive size: well below the 100 MB NeurIPS supplementary limit. Heavy
+  artefacts (raw experiment logs, training notebooks, model checkpoints,
+  M4 raw CSVs) are not bundled; the per-package READMEs document how to
+  download or regenerate them.

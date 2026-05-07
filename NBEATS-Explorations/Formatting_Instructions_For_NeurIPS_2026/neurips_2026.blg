@@ -3,44 +3,47 @@ Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: neurips_2026.aux
 The style file: plainnat.bst
 Database file #1: references.bib
-You've used 11 entries,
+Warning--entry type for "eval-harness" isn't style-file defined
+--line 134 of file references.bib
+You've used 15 entries,
             2773 wiz_defined-function locations,
-            666 strings with 7352 characters,
-and the built_in function-call counts, 5425 in all, are:
-= -- 472
-> -- 334
-< -- 5
-+ -- 113
-- -- 102
-* -- 449
-:= -- 836
-add.period$ -- 40
-call.type$ -- 11
-change.case$ -- 65
-chr.to.int$ -- 11
-cite$ -- 22
-duplicate$ -- 245
-empty$ -- 443
-format.name$ -- 117
-if$ -- 1134
+            680 strings with 8520 characters,
+and the built_in function-call counts, 8572 in all, are:
+= -- 692
+> -- 731
+< -- 6
++ -- 246
+- -- 231
+* -- 756
+:= -- 1360
+add.period$ -- 50
+call.type$ -- 15
+change.case$ -- 120
+chr.to.int$ -- 15
+cite$ -- 30
+duplicate$ -- 308
+empty$ -- 574
+format.name$ -- 250
+if$ -- 1746
 int.to.chr$ -- 1
 int.to.str$ -- 1
 missing$ -- 11
-newline$ -- 70
-num.names$ -- 44
-pop$ -- 138
+newline$ -- 88
+num.names$ -- 60
+pop$ -- 264
 preamble$ -- 1
-purify$ -- 55
+purify$ -- 106
 quote$ -- 0
-skip$ -- 187
+skip$ -- 280
 stack$ -- 0
-substring$ -- 171
-swap$ -- 26
+substring$ -- 179
+swap$ -- 30
 text.length$ -- 1
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 116
+type$ -- 160
 warning$ -- 0
-while$ -- 45
+while$ -- 57
 width$ -- 0
-write$ -- 159
+write$ -- 203
+(There was 1 warning)
