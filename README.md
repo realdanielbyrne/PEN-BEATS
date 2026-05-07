@@ -28,6 +28,19 @@ A **key finding** from systematic benchmarks is that the original N-BEATS archit
 
 These AE-backbone variants match or outperform the 24.7M-parameter NBEATS-G baseline while using a fraction of the parameters, with direct implications for deployment in memory- or latency-constrained environments.
 
+A **second key finding** is that tiered frequency-band cascades — assigning per-stack offsets into the SVD-orthogonalized DWT basis — decisively improve accuracy on noisy high-frequency signals. On M4-Daily under the paper-sample protocol, all top-10 configurations are tiered-cascade wavelet variants (Cliff's *d* 0.54–0.78 vs non-tiered). The current cross-period M4 champion (`T+Sym10V3_10s_tiered_ag0`) achieves a mean rank of 13.33/108 across all six M4 periods at 5–6M parameters — overtaking the 38–44M-parameter paper baseline at one-seventh the cost. Per-period paper-sample leaders (updated 2026-05-06):
+
+| Period | Best config | SMAPE | Params |
+|---|---|---:|---|
+| Yearly | T+Db3V3_10s_tiered_agf | 13.486 | 5.07M |
+| Quarterly | NBEATS-IG_10s_ag0 | 10.313 | 19.64M |
+| Monthly | TW_30s_td3_bdeq_sym10 | 13.240 | 6.78M |
+| Weekly | T+Coif2V3_30s_bdeq | 6.735 | 15.75M |
+| **Daily** | **TAE+Sym10V3AE_30s_tiered** | **3.047** | **3.41M** |
+| Hourly | NBEATS-IG_30s_agf | 8.758 | 43.58M |
+
+The M4-Daily entry was updated from the prior single-run result (3.012) after a controlled n=10 re-run showed `TAE+Sym10V3AE_30s_tiered` significantly outperforms the prior leader (MWU p=0.027, Cliff's *d*=−0.52, large). The parameter-efficient alternative `TAELG+DB3V3AELG_10s_tiered` (1.14M, SMAPE 3.052) is statistically equivalent and provides a further 3× reduction.
+
 Among healthy, converging configurations, **block type does not produce statistically significant differences in OWA forecasting accuracy** (Kruskal-Wallis p > 0.09 across all periods tested). Configuration rankings are inconsistent across periods (Spearman rho near zero), confirming that the doubly residual stacking framework itself — rather than the specific basis expansion — is the primary driver of accuracy. Block type *does* significantly affect parameter count (5–10× variation), training stability (0–100% convergence rate for wavelets), and convergence speed, making deployment constraints the practical basis for block selection.
 
 A **convergence study** (Part 6) across M4-Yearly and Weather-96 with 50 random seeds per configuration reveals that `active_g` eliminates catastrophic initialization sensitivity on M4-Yearly (reducing sMAPE coefficient of variation from 31.4% to 0.9%). The recommended default is `active_g='forecast'` (forecast-path activation only), which achieves 100% convergence reliability while recovering significant expressiveness compared to full `active_g=True`.

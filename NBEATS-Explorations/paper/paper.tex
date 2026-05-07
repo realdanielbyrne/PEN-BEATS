@@ -1,0 +1,130 @@
+\documentclass{article}
+
+% packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+% NeurIPS 2026 style (submission: omit final/preprint)
+\usepackage{../Formatting_Instructions_For_NeurIPS_2026/neurips_2026}
+
+\title{Wavelet Projections and Hourglass Backbones: Parameter-Efficient Building Blocks for Basis Expansion Architectures}
+
+\author{%
+  Daniel Byrne \\  
+  RPM xConstruction \\
+  6500 Meyer Way \\
+  McKinney, TX 75070 \\
+  \texttt{dbyrne@rpmxconstruction.com}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+N-BEATS, Oreshkin et al. (2019), broke new ground in univariate time series forecasting by using fixed basis 
+functions neural basis expansion in which the network learns coefficients for a frozen basis function then 
+expanded those coefficients into the desired forecast and backcast lengths through a linear transformation. 
+Their innovation came at an extreme cost though as a typical N-BEATS model can range from 25M-44M parameters. 
+In this paper I extend the idea of solving for coefficients of a frozen basis functions but instead of
+relying on a global Fourier function, wavelets provide localization in that they can identify and locate 
+components of the global signal which is a key requirement in timeseries analysis algorithms. Wavelets have 
+been used extensively in signal analysis for feature extraction, denoising, and multi-resolution analysis.  
+Likewise, Autoencoders are useful constructs for identifying key characteristics of a signal while filtering 
+out nonessential transient signals, and are useful in domains such as denoising signals and stock trading.  
+In this paper I introduce a variety of novel block types that use using a combination of discrete wavelet 
+transforms, DWT, and AutoEncoders. My novel architecture improvements reduce parameter counts by 60–95% 
+over N-BEATS while surpassing or equalling prior published results without ensembiling. In addition I 
+introduce a family of combined TrendWavelet block types which combine the low pass Trend and a high pass 
+Wavelet basis that can be used to produce <1M parameter models that score within 0.5% SMAPE of 19M-43M 
+parameter baseline N-BEATS models representing a 12-80x compression with little to no loss of accuracy. 
+Furthermore, I show that these new block constructs are transferrable to other architectures like NHiTs and 
+Transformers with equally impressive reductions in parameter counts while achieving competitive accuracies.  
+\end{abstract}
+
+\section{Introduction and Related Work}
+\label{sec:intro}
+
+\section{Related work}
+\label{sec:related}
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Wavelet basis expansion blocks}
+\label{sec:wavelet_blocks}
+
+\subsection{Trend--wavelet composition blocks}
+\label{sec:trend_wavelet}
+
+\subsection{Autoencoder-compressed backbones}
+\label{sec:ae_backbones}
+
+\subsection{Stack composition and width selection}
+\label{sec:stack_composition}
+
+\section{Experimental setup}
+\label{sec:experimental_setup}
+
+\section{Results}
+\label{sec:results}
+
+\subsection{M4 per-period leaderboards}
+\label{sec:m4_leaderboards}
+
+\subsection{Parameter-efficiency frontier}
+\label{sec:param_efficiency}
+
+\subsection{Depth and stability analysis}
+\label{sec:depth_stability}
+
+\subsection{Ablation: tiered cascades and \texttt{active\_g}}
+\label{sec:ablations}
+
+\section{Discussion}
+\label{sec:discussion}
+
+\section{Conclusion and future work}
+\label{sec:conclusion}
+
+\begin{ack}
+% Acknowledgments and funding disclosure go here.
+% This section is automatically hidden in the anonymized submission.
+\end{ack}
+
+\section*{References}
+{
+\small
+% TODO: insert references here.
+}
+
+\appendix
+
+\section{M4 full per-period tables}
+\label{app:m4_tables}
+
+\section{Hyperparameter grids}
+\label{app:hyperparams}
+
+\section{Scheduler and protocol robustness}
+\label{app:scheduler}
+
+\section{NHiTS transferability}
+\label{app:nhits}
+
+\newpage
+\input{../Formatting_Instructions_For_NeurIPS_2026/checklist.tex}
+
+\end{document}

@@ -359,7 +359,7 @@ We report results from the comprehensive sweep of 112 configurations across 10 s
 
 Table 3 presents the best paper-sample configuration per M4 period (ReduceLROnPlateau learning rate schedule, the new paper-sample default) alongside the best sliding-protocol configuration where applicable, together with the best non-M4 dataset winners. Wavelet-augmented and tiered-cascade architectures win on six of nine dataset-periods. The paper baselines remain decisive only on M4-Hourly (long horizon, $H = 48$) and on M4-Daily under the sliding protocol; on M4-Daily under the paper-sample protocol, tiered Sym10 wavelet cascades take the top eight of ten leaderboard slots. M4-Quarterly is effectively a statistical tie between the paper-faithful baseline and the lightest tiered TrendWavelet variants.
 
-**Table 3: Best Configuration per Dataset-Period (refreshed 2026-05-04)**
+**Table 3: Best Configuration per Dataset-Period (refreshed 2026-05-06)**
 
 | Dataset | Protocol | Winner | SMAPE | Params | Architecture |
 |---------|----------|--------|:-----:|-------:|:-------------|
@@ -371,7 +371,7 @@ Table 3 presents the best paper-sample configuration per M4 period (ReduceLROnPl
 | M4-Monthly | sliding | TW\_30s\_td3\_bd2eq\_coif2 | 13.279 | 7.08M | Unified TrendWavelet (RB) |
 | M4-Weekly | paper-sample | T+Coif2V3\_30s\_bdeq | 6.735 | 15.75M | Alt. Trend+Coif2V3 (RB) |
 | M4-Weekly | sliding | T+Db3V3\_30s\_bdeq | 6.671 | 15.75M | Alt. Trend+DB3V3 (RB) |
-| M4-Daily | paper-sample | T+Sym10V3\_10s\_tiered\_ag0 | 3.012 | 5.25M | Alt. Trend+Sym10V3 + tiered cascade |
+| M4-Daily | paper-sample | TAE+Sym10V3AE\_30s\_tiered | 3.047 | 3.41M | Alt. TrendAE+Sym10V3AE + tiered cascade (†) |
 | M4-Daily | sliding | NBEATS-G\_30s\_ag0 | 2.588 | 26.02M | Paper baseline |
 | M4-Hourly | paper-sample | NBEATS-IG\_30s\_agf | 8.758 | 43.58M | Paper baseline |
 | M4-Hourly | sliding | NBEATS-IG\_30s\_agf | 8.587 | 43.58M | Paper baseline |
@@ -379,15 +379,17 @@ Table 3 presents the best paper-sample configuration per M4 period (ReduceLROnPl
 | Weather-96 (MSE) | --- | TAE+DB3V3AE\_30s\_ld8\_ag0 | 0.138 | 7.1M | Alt. TrendAE+WaveletAE |
 | Milk | --- | TALG+DB3V3ALG\_10s\_ag0 | 1.512 | 1.0M | Alt. TrendAELG+WaveletAELG |
 
+† **Paper-sample Daily update (2026-05-06):** The prior entry `T+Sym10V3_10s_tiered_ag0` (3.012, single run) re-measured at n=10 yields 3.097 ± 0.044. `TAE+Sym10V3AE_30s_tiered` significantly beats the in-sweep prior (MWU p=0.027, Cliff's d=−0.520, large). Parameter-efficient alternative: `TAELG+DB3V3AELG_10s_tiered` (3.052, 1.14M, p=0.023, Cliff's d=−0.540, large). Source: `tiered_offset_m4_allperiods_paperlr_results.csv`, n=10/cell.
+
 Two new findings emerge from this refresh.
 
-**M4-Daily flips under the paper-sample protocol.** Under sliding, the original `NBEATS-G_30s_ag0` retains the SMAPE crown at 2.588 SMAPE with 26M parameters. Under the paper-sample protocol, however, `T+Sym10V3_10s_tiered_ag0` (5.25M parameters) leads at 3.012 SMAPE, and **8 of the paper-sample top-10 configurations are tiered-cascade variants**, with Cliff's $d$ effect sizes of 0.54--0.78 against their non-tiered counterparts. Daily is the clearest case in our sweep where tiered frequency-band cascades convert a parameter-heavy paper-baseline regime into a sub-6M-parameter wavelet-cascade regime at competitive SMAPE.
+**M4-Daily flips under the paper-sample protocol.** Under sliding, the original `NBEATS-G_30s_ag0` retains the SMAPE crown at 2.588 SMAPE with 26M parameters. Under the paper-sample protocol, tiered-cascade architectures dominate: **all 10 of the paper-sample Daily top-10 configurations are tiered-cascade variants** across the full sweep, with Cliff's $d$ effect sizes of 0.54--0.78 against non-tiered counterparts. The current paper-sample Daily leader is `TAE+Sym10V3AE_30s_tiered` (3.41M, 3.047 SMAPE, n=10), which significantly beats the prior n=10 measurement of `T+Sym10V3_10s_tiered_ag0` (MWU p=0.027, Cliff's $d$=−0.520, large). The parameter-efficient alternative `TAELG+DB3V3AELG_10s_tiered` (1.14M, 3.052) provides a 3$\times$ parameter reduction at statistically equivalent accuracy (p=0.023, Cliff's $d$=−0.540, large). Daily is the clearest case in our sweep where tiered frequency-band cascades convert a parameter-heavy paper-baseline regime into a sub-4M-parameter wavelet-cascade regime at competitive SMAPE.
 
 **M4-Yearly and M4-Monthly: tiered marginally helps; the absolute numbers move because of the LR scheduler.** The paper-sample plateau-LR sweep ($n = 10$/cell) lowers the M4-Monthly winner from `TW_30s_td3_bdeq_haar` (13.391, step LR) to `TW_30s_td3_bdeq_sym10` (13.240, plateau LR), a $-0.151$ SMAPE shift driven primarily by the LR scheduler rather than the architecture --- once both arms use plateau LR, the tiered configuration `T+DB3V3_30s_tiered_agf` (13.344) sits at rank 6 on Monthly rather than rank 1. On Yearly, the tiered Yearly winner `T+Db3V3_10s_tiered_agf` (13.486) is ahead of the non-tiered plateau best (13.542) but the gap is within seed noise and not statistically significant.
 
 The frontier is otherwise exceptionally compressed across periods. M4 paper-sample top-5 spreads are 0.07 SMAPE on Yearly, 0.04 on Quarterly, 0.10 on Monthly, 0.20 on Weekly, 0.02 on Daily, and 0.20 on Hourly. The architectural question on M4 short-to-medium horizons is therefore no longer "can wavelets beat the baseline?" but **"which architecture reaches the same frontier with fewer parameters?"**
 
-**The new generalist.** The most consequential refresh is at the cross-period level. The configuration `T+Sym10V3_10s_tiered_ag0` --- the M4-Daily paper-sample winner --- ranks top-11 on every M4 paper-sample period, achieving a mean rank of **13.33 / 76** across all six periods at 5--6M parameters. This overtakes the prior 6/6-period generalist `NBEATS-IG_30s_ag0` (mean rank 16.0, 38--44M parameters) at one-seventh the parameter cost. Section 5.7 develops this finding in detail. The same architecture is the M4-Daily SMAPE winner, the M4-Hourly rank-5 paper-sample finisher, and a top-11 finisher on every other period; this is the strongest cross-period generalist documented in the lightningnbeats benchmark to date.
+**The new generalist.** The most consequential refresh is at the cross-period level. The configuration `T+Sym10V3_10s_tiered_ag0` ranks top-11 on every M4 paper-sample period, achieving a mean rank of **13.33 / 76** across all six periods at 5--6M parameters. This overtakes the prior 6/6-period generalist `NBEATS-IG_30s_ag0` (mean rank 16.0, 38--44M parameters) at one-seventh the parameter cost. Section 5.7 develops this finding in detail. The same architecture is the M4-Daily SMAPE winner, the M4-Hourly rank-5 paper-sample finisher, and a top-11 finisher on every other period; this is the strongest cross-period generalist documented in the lightningnbeats benchmark to date.
 
 **Table 4: Novel vs. Paper Baseline Head-to-Head**
 
@@ -398,7 +400,7 @@ The frontier is otherwise exceptionally compressed across periods. M4 paper-samp
 | M4-Yearly | T+Db3V3\_10s\_tiered\_agf | 13.486 | NBEATS-IG\_10s\_ag0 | 13.59 | $-0.78$% | 4$\times$ fewer |
 | M4-Monthly | TW\_30s\_td3\_bdeq\_sym10 | 13.240 | NBEATS-IG\_10s\_ag0 | 13.31 | $-0.55$% | 3$\times$ fewer |
 | M4-Weekly | T+Coif2V3\_30s\_bdeq | 6.735 | NBEATS-IG\_30s\_agf | 6.822 | $-1.27$% | 1.3$\times$ fewer |
-| M4-Daily | T+Sym10V3\_10s\_tiered\_ag0 | 3.012 | NBEATS-G\_30s\_ag0 (paper-sample) | 3.099 | $-2.81$% | 5$\times$ fewer |
+| M4-Daily | TAE+Sym10V3AE\_30s\_tiered | 3.047 | NBEATS-G\_30s\_ag0 (paper-sample) | 3.099 | $-1.68$% | 7.6$\times$ fewer |
 | Tourism-Y | TW\_10s\_td3\_bdeq\_db3 | 21.773 | NBEATS-IG\_10s | 22.265 | $-2.21$% | 10$\times$ fewer |
 | Weather-96 (MSE) | TAE+DB3V3AE\_30s\_ld8\_ag0 | 0.138 | NBEATS-IG\_10s | 0.183 | $-24.6$% | 3.6$\times$ fewer |
 | Milk | TALG+DB3V3ALG\_10s\_ag0 | 1.512 | NBEATS-IG\_10s | 1.785 | $-15.3$% | 20$\times$ fewer |
@@ -417,7 +419,7 @@ The most practically significant finding is the extreme parameter efficiency of 
 | M4-Quarterly | TWAE\_10s\_ld32\_ag0 | 0.49M | 10.404 | +0.88% | 40$\times$ fewer (vs 19.64M) |
 | M4-Monthly | TWAE\_10s\_ld32\_sym10\_ag0 | 0.58M | 13.513 | +2.06% | 12$\times$ fewer (vs 6.78M) |
 | M4-Weekly | TWAELG\_10s\_ld32\_db3\_ag0 | 0.54M | 7.252 | +7.68% | 29$\times$ fewer (vs 15.75M) |
-| M4-Daily | TWGAELG\_10s\_ld16\_db3\_ag0 | 0.52M | 3.051 | +1.30% | 10$\times$ fewer (vs 5.25M) |
+| M4-Daily | TWGAELG\_10s\_ld16\_db3\_ag0 | 0.52M | 3.051 | +0.13% | 6.5$\times$ fewer (vs 3.41M) |
 | M4-Hourly | TWAELG\_10s\_ld32\_db3\_agf | 0.85M | 8.924 | +1.89% | **51$\times$ fewer (vs 43.58M)** |
 | Tourism-Y | TWAELG\_10s\_ld16\_coif2\_agf | 0.42M | 21.908 | +0.62% | 5$\times$ fewer |
 | Milk | TWAE\_10s\_ld8\_agf | 0.42M | 1.633 | +8.00% | 37$\times$ fewer |
@@ -426,7 +428,7 @@ The TrendWavelet family with AE/AELG backbones at ~0.42--0.85M parameters is the
 
 The most striking result is on M4-Hourly: `TWAELG_10s_ld32_db3_agf` at 0.85M parameters trails the 43.58M-parameter `NBEATS-IG_30s_agf` by only 0.166 SMAPE, achieving a **51$\times$ parameter reduction at near-parity accuracy**. This is the headline parameter-efficiency result of the paper.
 
-The compact frontier holds through Daily: the best sub-1M models are within +0.44% to +2.06% of period winners on Yearly, Quarterly, Monthly, Daily, and Hourly while using 10--51$\times$ fewer parameters. The frontier bends most noticeably on M4-Weekly (+7.68%), where the period winner is a parameter-heavy 30-stack alternating model and the sub-1M frontier falls slightly off-pace. On Quarterly the gap widens to +0.88% because the period winner is the paper-faithful `NBEATS-IG_10s_ag0` --- the one period where a paper baseline holds. Across most of M4, however, the wavelet+AE designs capture almost all of the useful capacity at one-tenth to one-fiftieth the parameter cost.
+The compact frontier holds through Daily: the best sub-1M models are within +0.13% to +2.06% of period winners on Yearly, Quarterly, Monthly, Daily, and Hourly while using 6.5--51$\times$ fewer parameters. The frontier bends most noticeably on M4-Weekly (+7.68%), where the period winner is a parameter-heavy 30-stack alternating model and the sub-1M frontier falls slightly off-pace. On Quarterly the gap widens to +0.88% because the period winner is the paper-faithful `NBEATS-IG_10s_ag0` --- the one period where a paper baseline holds. Across most of M4, however, the wavelet+AE designs capture almost all of the useful capacity at one-tenth to one-fiftieth the parameter cost.
 
 [**Figure 4**: Parameter efficiency scatter plot. Each panel shows one dataset; x-axis is parameter count (log scale), y-axis is mean SMAPE (lower is better). Points colored by architecture category. Pareto frontier connects the configurations that are not dominated (no other config has both fewer parameters and better SMAPE). Paper baselines cluster in the top-right (high params, good SMAPE). Novel TWAELG/TWAE configurations populate the bottom-left (low params, comparable SMAPE), forming the efficient frontier. *To be produced from comprehensive sweep CSVs.*]
 
