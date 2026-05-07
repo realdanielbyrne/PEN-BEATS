@@ -1,49 +1,48 @@
 This is BibTeX, Version 0.99e (TeX Live 2026)
 Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: neurips_2026.aux
-The style file: plainnat.bst
-Database file #1: references.bib
-Warning--entry type for "eval-harness" isn't style-file defined
---line 134 of file references.bib
-You've used 15 entries,
-            2773 wiz_defined-function locations,
-            680 strings with 8520 characters,
-and the built_in function-call counts, 8572 in all, are:
-= -- 692
-> -- 731
-< -- 6
-+ -- 246
-- -- 231
-* -- 756
-:= -- 1360
-add.period$ -- 50
-call.type$ -- 15
-change.case$ -- 120
-chr.to.int$ -- 15
-cite$ -- 30
-duplicate$ -- 308
-empty$ -- 574
-format.name$ -- 250
-if$ -- 1746
-int.to.chr$ -- 1
-int.to.str$ -- 1
-missing$ -- 11
-newline$ -- 88
-num.names$ -- 60
-pop$ -- 264
-preamble$ -- 1
-purify$ -- 106
+I found no \citation commands---while reading file neurips_2026.aux
+I found no \bibdata command---while reading file neurips_2026.aux
+I found no \bibstyle command---while reading file neurips_2026.aux
+You've used 0 entries,
+            0 wiz_defined-function locations,
+            83 strings with 498 characters,
+and the built_in function-call counts, 0 in all, are:
+= -- 0
+> -- 0
+< -- 0
++ -- 0
+- -- 0
+* -- 0
+:= -- 0
+add.period$ -- 0
+call.type$ -- 0
+change.case$ -- 0
+chr.to.int$ -- 0
+cite$ -- 0
+duplicate$ -- 0
+empty$ -- 0
+format.name$ -- 0
+if$ -- 0
+int.to.chr$ -- 0
+int.to.str$ -- 0
+missing$ -- 0
+newline$ -- 0
+num.names$ -- 0
+pop$ -- 0
+preamble$ -- 0
+purify$ -- 0
 quote$ -- 0
-skip$ -- 280
+skip$ -- 0
 stack$ -- 0
-substring$ -- 179
-swap$ -- 30
-text.length$ -- 1
+substring$ -- 0
+swap$ -- 0
+text.length$ -- 0
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 160
+type$ -- 0
 warning$ -- 0
-while$ -- 57
+while$ -- 0
 width$ -- 0
-write$ -- 203
-(There was 1 warning)
+write$ -- 0
+(There were 3 error messages)

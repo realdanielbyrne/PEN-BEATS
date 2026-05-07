@@ -706,11 +706,407 @@ All experiments reported in this paper were run on a single workstation: 2$\time
 \section{Configuration list}
 \label{app:configs}
 
+This appendix enumerates the YAML configs that drive every sweep cited in the paper. All files live under \texttt{experiments/configs/}; verbatim YAML and run scripts ship with the submission.
+
+\subsection{M4 sweeps}
+\label{app:configs:m4}
+
+\begin{table}[h]
+\centering
+\small
+\caption{M4 sweep configurations. Sliding $\equiv$ \texttt{nbeats\_sliding} sampling with cosine-warmup LR; paper-sample $\equiv$ \texttt{nbeats\_paper} iteration-based protocol of Appendix~\ref{app:protocols} with either MultiStepLR (faithful) or ReduceLROnPlateau.}
+\label{tab:configs_m4}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Config file & Protocol & Cell count \\
+\midrule
+\texttt{comprehensive\_sweep\_m4.yaml}                  & sliding (cosine-warmup)  & 112 configs $\times$ 6 periods $\times$ 10 seeds \\
+\texttt{comprehensive\_m4\_paper\_sample.yaml}          & paper-sample (step)      & 53 configs $\times$ 6 periods $\times$ 10 seeds \\
+\texttt{comprehensive\_m4\_paper\_sample\_plateau.yaml} & paper-sample (plateau)   & 53 configs $\times$ 6 periods $\times$ 10 seeds \\
+\texttt{comprehensive\_m4\_paper\_sample\_sym10\_fills.yaml} & paper-sample (step)  & sym10 fill-ins for the 53-cell subset \\
+\texttt{tiered\_offset\_m4\_allperiods.yaml}            & paper-sample (plateau)   & 16 tiered configs $\times$ 5 periods (Y/Q/M/W/D) $\times$ 10 seeds \\
+\texttt{tiered\_offset\_m4\_allperiods\_paperlr.yaml}   & paper-sample (step)      & matching MultiStepLR variant \\
+\texttt{m4\_hourly\_sym10\_tiered\_offset.yaml}         & paper-sample (plateau)   & 8 Hourly tiered configs $\times$ 10 seeds \\
+\texttt{m4\_hourly\_sym10\_tiered\_offset\_paperlr.yaml}& paper-sample (step)      & Hourly MultiStepLR variant \\
+\texttt{nbeats\_g.yaml}, \texttt{nbeats\_ig.yaml}       & paper-sample (step)      & paper baselines (10s, 30s; \texttt{ag0}, \texttt{agf}) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Sweep groups.} The 112-config Comprehensive Sweep (sliding) and 53-config curated paper-sample subset partition into five families: (i) paper baselines (\texttt{NBEATS-G}, \texttt{NBEATS-IG} at $n_\text{stacks} \in \{10, 30\}$ and \texttt{active\_g} $\in \{\text{F}, \text{f}\}$); (ii) homogeneous \texttt{TrendWavelet} stacks (\texttt{TW\_\{10,30\}s\_td3\_\{eq,2eq\}\_\{haar,db3,coif2,sym10\}}); (iii) alternating \texttt{T+W} dual-stack patterns over the same wavelet shortlist (RootBlock, AE, AELG backbones); (iv) efficiency bottlenecks (\texttt{TWAE}, \texttt{TWAELG}, \texttt{TWGAELG} at \texttt{latent\_dim} $\in \{8, 16, 32\}$, $n_\text{stacks}=10$); (v) Generic-AE controls (\texttt{GenericAE}, \texttt{GenericAELG}, \texttt{BNGenericAE} families). Hyperparameter grids are tabulated in Appendix~\ref{app:hyperparams:grids}.
+
+\subsection{Out-of-distribution sweeps}
+\label{app:configs:ood}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Out-of-distribution sweep configurations.}
+\label{tab:configs_ood}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Config file & Dataset & Notes \\
+\midrule
+\texttt{comprehensive\_sweep\_tourism.yaml}  & Tourism (Y/Q/M)        & sliding, sMAPE loss \\
+\texttt{omnibus\_benchmark\_tourism.yaml}    & Tourism                & cross-family omnibus \\
+\texttt{tourism\_aelg\_sota\_confirmation.yaml} & Tourism-Yearly      & targeted successive-halving on AELG \\
+\texttt{comprehensive\_sweep\_traffic.yaml}  & Traffic-96             & sliding, MSE loss, 100 epochs \\
+\texttt{traffic\_asymmetric\_wavelet\_study.yaml} & Traffic-96        & asymmetric wavelet families ($L=480$ vs.\ $H=96$) \\
+\texttt{comprehensive\_sweep\_weather.yaml}  & Weather-96             & sliding, MSE loss \\
+\texttt{comprehensive\_sweep\_weather\_fm7.yaml} & Weather-96         & forecast-multiplier sweep \\
+\texttt{omnibus\_benchmark\_weather.yaml}    & Weather                & cross-family omnibus \\
+\texttt{milk\_convergence.yaml}, \texttt{milk\_convergence\_10stack.yaml} & Milk & convergence-rate study (100 seeds) \\
+\texttt{unified\_benchmark\_milk.yaml}       & Milk                   & block-family benchmark \\
+\texttt{nhits\_benchmark\_weather.yaml}      & Weather (NHiTS)        & NHiTS transferability \\
+\texttt{nhits\_novel\_ae\_weather.yaml}      & Weather (NHiTS)        & novel-block port to NHiTS \\
+\texttt{nhits\_benchmark\_weather\_sliding.yaml} & Weather (NHiTS)    & sliding variant \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Targeted ablation configs}
+\label{app:configs:ablations}
+
+\begin{itemize}\itemsep -1pt
+\item \texttt{gate\_fn\_study\_m4.yaml}, \texttt{gate\_fn\_study\_weather.yaml} --- gating-function ablation on AELG.
+\item \texttt{generic\_dim\_sweep.yaml} --- \texttt{generic\_dim} (rank of learned generic branch in \texttt{TrendWaveletGeneric}) ablation.
+\item \texttt{kl\_weight\_sweep\_m4.yaml}, \texttt{kl\_weight\_sweep\_weather.yaml} --- VAE KL-weight ablation.
+\item \texttt{lg\_vae\_study\_m4.yaml}, \texttt{lg\_vae\_study\_large.yaml} --- learned-gate vs.\ VAE comparison.
+\item \texttt{resnet\_skip\_study\{,\_v2,\_v3\}.yaml} --- \texttt{skip\_distance} cross-stack residual injection.
+\item \texttt{ae\_trend\_study.yaml}, \texttt{trendae\_study.yaml}, \texttt{trendae\_ae\_alternating.yaml} --- Trend backbone hierarchy.
+\item \texttt{trend\_seasonality\_wavelet\_comparison.yaml} --- decomposition ablation.
+\item \texttt{tiered\_offset\_m4\_weekly\_plateau\_validation.yaml} --- Weekly plateau-LR tiered re-validation ($n=10$).
+\end{itemize}
+
+
 \section{Additional ablations}
 \label{app:ablations}
 
+This appendix lists the matched-seed Wilcoxon evidence for every empirical rule cited in Section~\ref{sec:depth_stability} and Appendix~\ref{app:hyperparams:block}. All numbers are taken verbatim from the analysis reports under \texttt{experiments/analysis/analysis\_reports/} and the strict health filter (Section~\ref{sec:results}) is applied throughout.
+
+\subsection{\texttt{active\_g}: per-period and per-dataset}
+\label{app:ablations:active_g}
+
+The \texttt{active\_g} extension is a Mann--Whitney win on Hourly (where it is decisive) and a Mann--Whitney loss on every other period. On small-data Milk it eliminates a 63\% bimodal failure mode but pays an absolute sMAPE cost on the converged subset.
+
+\begin{table}[h]
+\centering
+\small
+\caption{\texttt{active\_g} effect by dataset, paired Mann--Whitney. ``Quality cost'' is the absolute sMAPE delta on the converged subset of seeds; the convergence column is the failure-rate reduction.}
+\label{tab:active_g_ablation}
+\begin{tabular}{@{}lllrrl@{}}
+\toprule
+Dataset & Baseline sMAPE & \texttt{active\_g} sMAPE & $\Delta$ & MWU $p$ & Convergence effect \\
+\midrule
+Milk 6-stack    & $1.685$ ($n{=}37$)   & $2.500$ ($n{=}100$)  & $+0.815$ & $<10^{-6}$  & $63\% \to 0\%$ stuck \\
+Milk 10-stack   & $1.797$ ($n{=}36$)   & $2.455$ ($n{=}100$)  & $+0.659$ & $<10^{-5}$  & $64\% \to 0\%$ stuck \\
+M4-Yearly       & $13.616$ ($n{=}191$) & $13.692$ ($n{=}200$) & $+0.076$ & $<10^{-4}$  & $4.5\% \to 0\%$ stuck \\
+Tourism-Yearly  & $21.539$ ($n{=}197$) & $21.374$ ($n{=}200$) & $-0.165$ & $1.8\times 10^{-4}$ & $1.5\% \to 0\%$ stuck \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{\texttt{active\_g=True} vs.\ \texttt{active\_g='forecast'}.} The two variants are statistically indistinguishable at $n=200$ on M4-Yearly ($\Delta = -0.023$, $p=0.154$) and Tourism-Yearly ($\Delta = +0.066$, $p=0.087$), so the \texttt{'forecast'} variant is preferred only because it isolates the gate to the forecast head.
+
+\paragraph{Per-period verdict on M4 paper-sample.} Hourly: $9/9$ matched pairs improve under \texttt{agf} (5 significant at $p<0.05$); Hourly Δ in the canonical leaderboard is $-0.148$ sMAPE (\texttt{NBEATS-IG\_30s\_agf} $8.758$ vs.\ \texttt{ag0} $8.906$). Yearly/Quarterly/Monthly/Weekly/Daily: \texttt{agf} ties or loses on every protocol-LR cell tested. Treat \texttt{active\_g='forecast'} as a Hourly-only intervention.
+
+\subsection{Tiered basis-offset: per-period verdict}
+\label{app:ablations:tiered}
+
+The matched-seed (paper-sample, plateau LR) tiered vs.\ non-tiered comparison from \texttt{tiered\_offset\_m4\_allperiods\_analysis.md}:
+
+\begin{table}[h]
+\centering
+\small
+\caption{Tiered basis-offset, matched against the closest non-tiered baseline. ``Better'' counts paired wins for the tiered config; significance is paired Wilcoxon at $p<0.05$.}
+\label{tab:tiered_per_period}
+\begin{tabular}{@{}llrll@{}}
+\toprule
+Period & $n_\text{pairs}$ tiered $<$ base & Avg.\ $\Delta$ sMAPE & Sig.\ tiered$<$base & Sig.\ base$<$tiered \\
+\midrule
+Yearly    & $7/11$  & $-0.020$ & $1$ (\texttt{TAE+DB3V3AE\_30s}) & $0$ \\
+Quarterly & $8/11$  & $-0.020$ & $0$ & $0$ \\
+Monthly   & $7/11$  & $-0.105$ & $1$ (\texttt{T+DB3V3\_10s\_ag0}) & $0$ \\
+Weekly    & $2/11$  & $\mathbf{+0.130}$ & $0$ & $0$ \\
+Daily     & $\mathbf{11/11}$ & $\mathbf{-0.049}$ & $\mathbf{4}$ & $0$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The strongest single Daily wins (Cliff's $d \in [0.54, 0.78]$) are \texttt{TAELG+Sym10V3AELG\_10s\_tiered} ($\Delta = -0.080$, $p=0.0036$, $d=0.78$), \texttt{TAE+DB3V3AE\_30s\_tiered} ($\Delta = -0.074$, $p=0.0036$, $d=0.78$), \texttt{TAELG+DB3V3AELG\_10s\_tiered} ($\Delta = -0.067$, $p=0.0312$, $d=0.58$), \texttt{TAELG+Sym10V3AELG\_30s\_tiered} ($\Delta = -0.043$, $p=0.0452$, $d=0.54$). Weekly is a real cascade reversal at $H=13$, confirmed by an $n=10$ plateau-LR re-validation in \texttt{tiered\_offset\_m4\_weekly\_plateau\_validation\_results.csv}.
+
+\subsection{LR scheduler: paper-sample matched pairs}
+\label{app:ablations:lr}
+
+Plateau vs.\ MultiStepLR matched-pair deltas on the 53-config paper-sample subset:
+
+\begin{table}[h]
+\centering
+\small
+\caption{Paper-sample plateau-vs-step matched pairs ($\Delta = $ plateau $-$ step). Negative $\Delta$ favors plateau.}
+\label{tab:lr_matched}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Period & Mean $\Delta$ & Median $\Delta$ & $n_\text{pairs}$ \\
+\midrule
+Yearly    & $+0.007$         & $+0.021$ & $52$ \\
+Quarterly & $\mathbf{-0.029}$ & $-0.032$ & $30$ \\
+Monthly   & $\mathbf{-0.089}$ & $-0.198$ & $18$ \\
+Weekly    & $+0.089$         & $+0.080$ & $11$ \\
+Daily     & $\mathbf{-0.028}$ & $-0.028$ & $13$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Hourly scheduler choice is canonicalized at the cell level rather than the period level: \texttt{T+Sym10V3\_10s\_tiered\_ag0} (descend) prefers plateau ($8.922$ vs.\ $9.090$, $p=0.026$, $n=10$), while \texttt{TWAE\_10s\_td3\_sym10\_ld16\_tiered} (descend) prefers step\_paper ($9.243$ vs.\ $9.439$, $p=0.004$, $n=10$). The leaderboard cell for Hourly therefore mixes scheduler choice by config.
+
+\subsection{Traffic-96 NHiTS transferability}
+\label{app:ablations:nhits_traffic}
+
+Curated subsets of the M4 wavelet/AE/AELG block library were re-run on the NHiTS backbone~\citep{challu2023nhits} for Traffic at $H \in \{96, 192, 336, 720\}$ under MSE loss, 100 epochs, and 8 seeds. The pooling and hierarchical interpolation schedules are inherited from the published NHiTS recipe. Short-horizon ($H=96$) winners are unified \texttt{TrendWavelet} (sym10 / coif2 wavelet shortlist), long-horizon ($H \geq 336$) winners are \texttt{BottleneckGenericAE}/\texttt{BottleneckGenericAELG}. Asymmetric wavelet families (Section~\ref{sec:wavelet}, ``Asymmetric wavelet families'') are most useful at $H=96$ where the $L/H$ ratio is largest. Per-cell numbers and the matching Weather-96 NHiTS sweep are recorded in \texttt{nhits\_benchmark\_weather\_results.csv} and \texttt{nhits\_benchmark\_traffic\_results.csv}.
+
+
 \section{M4 full per-period tables}
 \label{app:m4_tables}
+
+This appendix lists the full top-5 leaderboard for every (period, protocol) cell summarized in Table~\ref{tab:main_leaderboard}. Numbers are taken verbatim from \texttt{m4\_overall\_leaderboard\_2026-05-03.md}; the strict health filter of Section~\ref{sec:results} is applied. Within each period the paper-sample table mixes step-paper and plateau LR (the per-cell scheduler is shown in the \emph{LR} column); the sliding table uses cosine-warmup throughout.
+
+\subsection{M4-Yearly ($H=6$, $L=30$)}
+
+\begin{table}[h]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\caption{M4-Yearly top-5: paper-sample (left) and sliding (right).}
+\label{tab:m4_yearly_full}
+\begin{tabular}{@{}llllrr@{}}
+\toprule
+\multicolumn{6}{l}{\textit{Paper-sample}} \\
+\midrule
+\# & Config & LR & sMAPE $\pm$ std & Params & $n$ \\
+\midrule
+1 & \texttt{T+DB3V3\_10s\_tiered\_agf}      & step    & $\mathbf{13.486 \pm 0.086}$ & 5.07M  & 5 \\
+2 & \texttt{T+Coif2V3\_30s\_bdeq}           & plateau & $13.542 \pm 0.148$          & 15.24M & 10 \\
+3 & \texttt{TWAE\_10s\_ld32\_ag0}           & plateau & $13.546 \pm 0.102$          & 0.48M  & 10 \\
+4 & \texttt{TALG+DB3V3ALG\_10s\_ag0}        & step    & $13.550 \pm 0.096$          & 1.04M  & 10 \\
+5 & \texttt{TWAE\_10s\_ld32\_sym10\_ag0}    & plateau & $13.553 \pm 0.165$          & 0.48M  & 10 \\
+\midrule
+\multicolumn{6}{l}{\textit{Sliding}} \\
+\midrule
+1 & \texttt{TW\_10s\_td3\_bdeq\_coif2}      & cos-warmup & $\mathbf{13.499 \pm 0.057}$ & 2.08M  & 10 \\
+2 & \texttt{TALG+Sym10V3ALG\_30s\_agf}      & cos-warmup & $13.504 \pm 0.103$          & 3.13M  & 10 \\
+3 & \texttt{TALG+Db3V3ALG\_30s\_ag0}        & cos-warmup & $13.507 \pm 0.080$          & 3.13M  & 10 \\
+4 & \texttt{TWAELG\_10s\_ld16\_coif2\_agf}  & cos-warmup & $13.524 \pm 0.060$          & 0.44M  & 10 \\
+5 & \texttt{T+Db3V3\_30s\_bd2eq}            & cos-warmup & $13.529 \pm 0.115$          & 15.29M & 10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{M4-Quarterly ($H=8$, $L=40$)}
+
+\begin{table}[h]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\caption{M4-Quarterly top-5: paper-sample (left) and sliding (right).}
+\label{tab:m4_quarterly_full}
+\begin{tabular}{@{}llllrr@{}}
+\toprule
+\multicolumn{6}{l}{\textit{Paper-sample}} \\
+\midrule
+\# & Config & LR & sMAPE $\pm$ std & Params & $n$ \\
+\midrule
+1 & \texttt{NBEATS-IG\_10s\_ag0}            & plateau & $\mathbf{10.313 \pm 0.055}$ & 19.64M & 10 \\
+2 & \texttt{TAE+Sym10V3AE\_10s\_tiered}     & step    & $10.330 \pm 0.056$          & 1.06M  & 4 \\
+3 & \texttt{TAELG+DB3V3AELG\_10s\_tiered}   & step    & $10.342 \pm 0.050$          & 1.06M  & 4 \\
+4 & \texttt{NBEATS-IG\_10s\_agf}            & plateau & $10.354 \pm 0.115$          & 19.64M & 10 \\
+5 & \texttt{T+Sym10V3\_30s\_tiered\_agf}    & plateau & $10.356 \pm 0.065$          & 15.34M & 10 \\
+\midrule
+\multicolumn{6}{l}{\textit{Sliding}} \\
+\midrule
+1 & \texttt{NBEATS-IG\_10s\_ag0}            & cos-warmup & $\mathbf{10.127 \pm 0.068}$ & 19.64M & 10 \\
+2 & \texttt{T+Sym10V3\_30s\_bd2eq}          & cos-warmup & $10.127 \pm 0.051$          & 15.45M & 10 \\
+3 & \texttt{TALG+HaarV3ALG\_30s\_ag0}       & cos-warmup & $10.144 \pm 0.048$          & 3.28M  & 10 \\
+4 & \texttt{T+Coif2V3\_30s\_bd2eq}          & cos-warmup & $10.146 \pm 0.045$          & 15.45M & 10 \\
+5 & \texttt{TW\_10s\_td3\_bdeq\_coif2}      & cos-warmup & $10.147 \pm 0.056$          & 2.11M  & 10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{M4-Monthly ($H=18$, $L=90$)}
+
+\begin{table}[h]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\caption{M4-Monthly top-5: paper-sample (left) and sliding (right).}
+\label{tab:m4_monthly_full}
+\begin{tabular}{@{}llllrr@{}}
+\toprule
+\multicolumn{6}{l}{\textit{Paper-sample}} \\
+\midrule
+\# & Config & LR & sMAPE $\pm$ std & Params & $n$ \\
+\midrule
+1 & \texttt{TW\_30s\_td3\_bdeq\_sym10}      & plateau & $\mathbf{13.240 \pm 0.334}$ & 6.78M  & 9 \\
+2 & \texttt{TW\_30s\_td3\_bdeq\_coif3}      & plateau & $13.296 \pm 0.182$          & 6.78M  & 5 \\
+3 & \texttt{NBEATS-IG\_30s\_ag0}            & plateau & $13.307 \pm 0.388$          & 38.13M & 9 \\
+4 & \texttt{NBEATS-G\_10s\_ag0}             & plateau & $13.312 \pm 0.252$          & 8.90M  & 10 \\
+5 & \texttt{NBEATS-G\_30s\_agf}             & plateau & $13.337 \pm 0.417$          & 26.70M & 10 \\
+\midrule
+\multicolumn{6}{l}{\textit{Sliding}} \\
+\midrule
+1 & \texttt{TW\_30s\_td3\_bd2eq\_coif2}     & cos-warmup & $\mathbf{13.279 \pm 0.303}$ & 7.08M  & 10 \\
+2 & \texttt{T+HaarV3\_30s\_bd2eq}           & cos-warmup & $13.308 \pm 0.242$          & 16.25M & 10 \\
+3 & \texttt{NBEATS-IG\_10s\_ag0}            & cos-warmup & $13.309 \pm 0.255$          & 20.33M & 10 \\
+4 & \texttt{TALG+Coif2V3ALG\_30s\_ag0}      & cos-warmup & $13.309 \pm 0.251$          & 4.03M  & 10 \\
+5 & \texttt{TW\_30s\_td3\_bdeq\_sym10}      & cos-warmup & $13.314 \pm 0.222$          & 6.78M  & 10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{M4-Weekly ($H=13$, $L=65$)}
+
+\begin{table}[h]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\caption{M4-Weekly top-5 paper-sample (step\_paper LR) and best plateau-LR cell (n=10 re-validation), plus sliding top-5.}
+\label{tab:m4_weekly_full}
+\begin{tabular}{@{}llllrr@{}}
+\toprule
+\multicolumn{6}{l}{\textit{Paper-sample (step\_paper LR)}} \\
+\midrule
+\# & Config & LR & sMAPE $\pm$ std & Params & $n$ \\
+\midrule
+1 & \texttt{T+Coif2V3\_30s\_bdeq}           & step    & $\mathbf{6.735 \pm 0.203}$ & 15.75M & 10 \\
+2 & \texttt{T+Db3V3\_30s\_bdeq}             & step    & $6.737 \pm 0.256$          & 15.75M & 10 \\
+3 & \texttt{T+Sym10V3\_30s\_bdeq}           & step    & $6.858 \pm 0.273$          & 15.75M & 10 \\
+4 & \texttt{T+Sym10V3\_30s\_tiered\_ag0}    & step    & $6.907 \pm 0.293$          & 15.68M & 10 \\
+5 & \texttt{T+Coif2V3\_10s\_bdeq}           & step    & $6.919 \pm 0.424$          & 5.25M  & 10 \\
+\midrule
+\multicolumn{6}{l}{\textit{Paper-sample (plateau LR re-validation, regression)}} \\
+\midrule
+1 & \texttt{TAE+Sym10V3AE\_30s\_tiered}     & plateau & $6.935 \pm 0.223$          & 3.37M  & 10 \\
+2 & \texttt{TAE+DB3V3AE\_30s\_tiered}       & plateau & $6.955 \pm 0.233$          & 3.37M  & 10 \\
+\midrule
+\multicolumn{6}{l}{\textit{Sliding}} \\
+\midrule
+1 & \texttt{T+Db3V3\_30s\_bdeq}             & cos-warmup & $\mathbf{6.671 \pm 0.208}$ & 15.75M & 10 \\
+2 & \texttt{TALG+HaarV3ALG\_30s\_ag0}       & cos-warmup & $6.673 \pm 0.129$          & 3.66M  & 10 \\
+3 & \texttt{T+HaarV3\_30s\_bdeq}            & cos-warmup & $6.675 \pm 0.185$          & 15.75M & 10 \\
+4 & \texttt{T+HaarV3\_30s\_bd2eq}           & cos-warmup & $6.685 \pm 0.193$          & 15.85M & 10 \\
+5 & \texttt{T+Sym10V3\_30s\_bdeq}           & cos-warmup & $6.686 \pm 0.168$          & 15.75M & 10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{M4-Daily ($H=14$, $L=70$)}
+
+\begin{table}[h]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\caption{M4-Daily top-5: paper-sample (left) and sliding (right).}
+\label{tab:m4_daily_full}
+\begin{tabular}{@{}llllrr@{}}
+\toprule
+\multicolumn{6}{l}{\textit{Paper-sample}} \\
+\midrule
+\# & Config & LR & sMAPE $\pm$ std & Params & $n$ \\
+\midrule
+1 & \texttt{T+Sym10V3\_10s\_tiered\_ag0}    & plateau & $\mathbf{3.012 \pm 0.031}$ & 5.25M & 10 \\
+2 & \texttt{TAELG+Sym10V3AELG\_10s\_tiered} & plateau & $3.013 \pm 0.023$          & 1.14M & 10 \\
+3 & \texttt{TAE+Sym10V3AE\_10s\_tiered}     & step    & $3.015 \pm 0.046$          & 1.14M & 4 \\
+4 & \texttt{T+DB3V3\_10s\_tiered\_ag0}      & plateau & $3.023 \pm 0.041$          & 5.25M & 10 \\
+5 & \texttt{TAE+DB3V3AE\_30s\_tiered}       & plateau & $3.026 \pm 0.041$          & 3.41M & 10 \\
+\midrule
+\multicolumn{6}{l}{\textit{Sliding}} \\
+\midrule
+1 & \texttt{NBEATS-G\_30s\_ag0}             & cos-warmup & $\mathbf{2.588 \pm 0.081}$ & 26.02M & 10 \\
+2 & \texttt{NBEATS-IG\_30s\_ag0}            & cos-warmup & $2.599 \pm 0.027$          & 37.40M & 10 \\
+3 & \texttt{NBEATS-G\_30s\_agf}             & cos-warmup & $2.605 \pm 0.052$          & 26.02M & 10 \\
+4 & \texttt{T+Db3V3\_30s\_bd2eq}            & cos-warmup & $2.709 \pm 0.052$          & 15.93M & 19 \\
+5 & \texttt{T+Db3V3\_30s\_bdeq}             & cos-warmup & $2.711 \pm 0.045$          & 15.82M & 17 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{M4-Hourly ($H=48$, $L=240$)}
+
+\begin{table}[h]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\caption{M4-Hourly top-10 paper-sample (mixed scheduler choice; canonicalized in Section~\ref{sec:m4_leaderboards}) and sliding top-5.}
+\label{tab:m4_hourly_full}
+\begin{tabular}{@{}llllrr@{}}
+\toprule
+\multicolumn{6}{l}{\textit{Paper-sample}} \\
+\midrule
+\# & Config & LR & sMAPE $\pm$ std & Params & $n$ \\
+\midrule
+1  & \texttt{NBEATS-IG\_30s\_agf}                  & step    & $\mathbf{8.758 \pm 0.099}$ & 43.58M & 10 \\
+2  & \texttt{NBEATS-G\_30s\_agf}                   & step    & $8.862 \pm 0.085$          & 31.76M & 10 \\
+3  & \texttt{NBEATS-IG\_10s\_agf}                  & step    & $8.893 \pm 0.106$          & 22.40M & 10 \\
+4  & \texttt{NBEATS-IG\_30s\_ag0}                  & step    & $8.906 \pm 0.083$          & 43.58M & 10 \\
+5  & \texttt{T+Sym10V3\_10s\_tiered\_ag0} (desc.)  & plateau & $8.922 \pm 0.113$          & 6.06M  & 10 \\
+6  & \texttt{TWAELG\_10s\_ld32\_db3\_agf}          & step    & $8.924 \pm 0.129$          & 0.85M  & 10 \\
+7  & \texttt{TWAELG\_10s\_ld32\_sym10\_agf}        & step    & $8.933 \pm 0.110$          & 0.85M  & 10 \\
+8  & \texttt{NBEATS-G\_30s\_ag0}                   & step    & $8.934 \pm 0.110$          & 31.76M & 10 \\
+9  & \texttt{TWAELG\_10s\_ld16\_db3\_agf}          & step    & $8.946 \pm 0.098$          & 0.81M  & 10 \\
+10 & \texttt{TWAE\_10s\_ld32\_agf}                 & step    & $8.953 \pm 0.099$          & 0.85M  & 10 \\
+\midrule
+\multicolumn{6}{l}{\textit{Sliding}} \\
+\midrule
+1  & \texttt{NBEATS-IG\_30s\_agf}                  & cos-warmup & $\mathbf{8.587 \pm 0.080}$ & 43.58M & 10 \\
+2  & \texttt{NBEATS-IG\_10s\_agf}                  & cos-warmup & $8.629 \pm 0.076$          & 22.40M & 10 \\
+3  & \texttt{TAE+DB3V3AE\_30s\_ld16\_agf}          & cos-warmup & $8.673 \pm 0.082$          & 5.42M  & 10 \\
+4  & \texttt{NBEATS-IG\_30s\_ag0}                  & cos-warmup & $8.680 \pm 0.104$          & 43.58M & 10 \\
+5  & \texttt{TALG+Coif2V3ALG\_30s\_agf}            & cos-warmup & $8.690 \pm 0.095$          & 5.42M  & 10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Cross-period generalist mean ranks}
+\label{app:m4_tables:generalists}
+
+\begin{table}[h]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\caption{Top-5 paper-sample generalists by mean rank across the six M4 periods. Ranks are within the 108-config paper-sample pool. ``--'' means the config did not run on that period.}
+\label{tab:generalist_paper}
+\begin{tabular}{@{}llllllllr@{}}
+\toprule
+\# & Config & Y & Q & M & W & D & H & Mean rank \\
+\midrule
+1 & \texttt{T+Sym10V3\_10s\_tiered\_ag0} & 11 & 6  & 41 & 16 & 1  & 5 & $\mathbf{13.33}$ \\
+2 & \texttt{T+DB3V3\_10s\_tiered\_ag0}   & 31 & 5  & 7  & 29 & 3  & -- & 15.00 \\
+3 & \texttt{T+DB3V3\_30s\_tiered\_ag0}   & 15 & 7  & 13 & 28 & 13 & -- & 15.20 \\
+4 & \texttt{NBEATS-IG\_30s\_ag0}         & 30 & 13 & 3  & 22 & 24 & 4 & 16.00 \\
+5 & \texttt{T+Sym10V3\_30s\_tiered\_ag0} & 37 & 17 & 28 & 4  & 6  & -- & 18.40 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\caption{Top-5 sliding generalists by mean rank across the six M4 periods. Ranks are within the 112-config sliding pool.}
+\label{tab:generalist_sliding}
+\begin{tabular}{@{}llllllllr@{}}
+\toprule
+\# & Config & Y & Q & M & W & D & H & Mean rank \\
+\midrule
+1 & \texttt{T+HaarV3\_30s\_bd2eq}         & 31 & 20 & 2  & 4  & 9  & 10 & $\mathbf{12.7}$ \\
+2 & \texttt{NBEATS-IG\_30s\_ag0}          & 41 & 13 & 20 & 28 & 2  & 4  & 18.0 \\
+3 & \texttt{NBEATS-IG\_10s\_ag0}          & 22 & 1  & 3  & 55 & 17 & 12 & 18.3 \\
+3 & \texttt{T+Db3V3\_30s\_bd2eq}          & 5  & 9  & 26 & 51 & 4  & 15 & 18.3 \\
+3 & \texttt{TW\_30s\_td3\_bdeq\_db3}      & 25 & 24 & 8  & 8  & 12 & 33 & 18.3 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Tourism and Milk Out-of-Distribution Results}
 \label{app:ood}
