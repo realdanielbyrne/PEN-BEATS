@@ -1,14 +1,14 @@
 # Fdb version 4
-["bibtex neurips_2026"] 1778151680.25575 "neurips_2026.aux" "neurips_2026.bbl" "neurips_2026" 1778151777.576 2
+["bibtex neurips_2026"] 1778151680.25575 "neurips_2026.aux" "neurips_2026.bbl" "neurips_2026" 1778152207.35972 2
   "./references.bib" 1778147412.42659 5802 e9d002867e466093f9a5e8053fcd2a36 ""
   "/usr/local/texlive/2026/texmf-dist/bibtex/bst/natbib/plainnat.bst" 1233624470 26816 ffe5423d2019860bad9f54bc402fac15 ""
-  "neurips_2026.aux" 1778151777.3194 32508 8e723139170f2b62f884c25bf23910d7 "pdflatex"
+  "neurips_2026.aux" 1778152207.1293 33198 77299958debd9dfa87fe3a39df684ce5 "pdflatex"
   (generated)
   "neurips_2026.bbl"
   "neurips_2026.blg"
   (rewritten before read)
-["pdflatex"] 1778151776.62447 "/Users/danielbyrne/GitHub/N-BEATS-Lightning/NBEATS-Explorations/Formatting_Instructions_For_NeurIPS_2026/neurips_2026.tex" "neurips_2026.pdf" "neurips_2026" 1778151777.57615 2
-  "/Users/danielbyrne/GitHub/N-BEATS-Lightning/NBEATS-Explorations/Formatting_Instructions_For_NeurIPS_2026/neurips_2026.tex" 1778151775.31551 106152 51087d82f7c0d8e5b664531cfd28021c ""
+["pdflatex"] 1778152206.43884 "/Users/danielbyrne/GitHub/N-BEATS-Lightning/NBEATS-Explorations/Formatting_Instructions_For_NeurIPS_2026/neurips_2026.tex" "neurips_2026.pdf" "neurips_2026" 1778152207.35987 2
+  "/Users/danielbyrne/GitHub/N-BEATS-Lightning/NBEATS-Explorations/Formatting_Instructions_For_NeurIPS_2026/neurips_2026.tex" 1778152205.17155 112027 e41bb394762c75bef59d28425d5eac4f ""
   "/usr/local/texlive/2026/texmf-dist/fonts/enc/dvips/base/8r.enc" 1165713224 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "/usr/local/texlive/2026/texmf-dist/fonts/enc/dvips/cm-super/cm-super-t1.enc" 1136849721 2971 def0b6c1f0b107b3b936def894055589 ""
   "/usr/local/texlive/2026/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
@@ -156,11 +156,11 @@
   "/usr/local/texlive/2026/texmf-var/web2c/pdftex/pdflatex.fmt" 1774209607 3636776 dc5fa9b6b1453b9d196cd42edf876004 ""
   "/usr/local/texlive/2026/texmf.cnf" 1774209515 577 648cd9f92f9c0eac486f4c71c85cfbbe ""
   "checklist.tex" 1778149336.4456 27811 7ba323887b3fcb6cc7920a22e6cc0af3 ""
-  "neurips_2026.aux" 1778151777.3194 32508 8e723139170f2b62f884c25bf23910d7 "pdflatex"
+  "neurips_2026.aux" 1778152207.1293 33198 77299958debd9dfa87fe3a39df684ce5 "pdflatex"
   "neurips_2026.bbl" 1778151680.34414 0 d41d8cd98f00b204e9800998ecf8427e "bibtex neurips_2026"
-  "neurips_2026.out" 1778151777.32072 13483 6f309062f5531f322ca031c2230b0eb9 "pdflatex"
+  "neurips_2026.out" 1778152207.13061 13589 b90e3526b37f2152575e7d26912982d1 "pdflatex"
   "neurips_2026.sty" 1776040580.73699 13462 818d80447f57703e59b8270885421e82 ""
-  "neurips_2026.tex" 1778151775.31551 106152 51087d82f7c0d8e5b664531cfd28021c ""
+  "neurips_2026.tex" 1778152205.17155 112027 e41bb394762c75bef59d28425d5eac4f ""
   (generated)
   "neurips_2026.aux"
   "neurips_2026.log"

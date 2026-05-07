@@ -1,566 +1,237 @@
-# N-BEATS Architecture Explorations and the Impact of Block Type on Performance
+# N-BEATS Lightning — Wavelet and Autoencoder Block Extensions
 
-A [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/) implementation of the [N-BEATS](https://arxiv.org/pdf/1905.10437.pdf) (Neural Basis Expansion Analysis for Time Series) forecasting architecture, extended with novel block types and published as the [`lightningnbeats`](https://pypi.org/project/lightningnbeats/) PyPI package.
+A [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/) implementation of [N-BEATS](https://arxiv.org/pdf/1905.10437.pdf) (Oreshkin et al., 2019) and an `NHiTSNet` variant, extended with wavelet and autoencoder block families. Published as [`lightningnbeats`](https://pypi.org/project/lightningnbeats/) on PyPI.
 
-## Introduction
+The companion research paper, *Wavelets and Autoencoders are All You Need*, lives at [NBEATS-Explorations/paper.md](NBEATS-Explorations/paper.md) and is the authoritative source for empirical findings, leaderboards, and ablation evidence. This README documents the library: what blocks exist, how to compose them, and where to find the protocols and reproducibility artifacts.
 
-Time series forecasting is one of the oldest and most consequential problems in quantitative science. For decades, the field was dominated by classical statistical methods -- exponential smoothing, ARIMA, and their many variants -- that offered strong theoretical grounding, interpretability, and reliable performance. The M4 competition (Makridakis et al., 2018; 2020) marked a turning point: while pure machine learning entries ranked poorly, the hybrid ES-RNN winner (Smyl, 2020) demonstrated that deep learning could contribute meaningfully to forecasting accuracy, leaving open the question of whether a *pure* deep learning architecture could achieve competitive results.
+## What this package adds beyond N-BEATS
 
-Oreshkin et al. (2019) answered this question with N-BEATS, a fully deep learning architecture that surpassed both the M4 winner and all prior statistical methods. N-BEATS introduced a distinctive design built on **doubly residual stacking** of basic blocks, each consisting of a multi-layer fully connected network that forks into backcast and forecast paths via learned or constrained basis expansion coefficients. The architecture offered two configurations: a **Generic** model using fully learnable basis functions, and an **Interpretable** model constraining basis functions to polynomial (Trend) and Fourier (Seasonality) forms.
+The original N-BEATS architecture pairs a 4-layer fully connected backbone with a basis-expansion head, organized into doubly residual stacks. This package keeps the doubly residual scaffold intact and extends three orthogonal axes:
 
-This observation motivates the present work: if polynomial and Fourier bases can achieve state-of-the-art results when embedded within the N-BEATS doubly residual framework, what happens when we substitute alternative basis expansions? This repository provides a systematic exploration of alternative block types including:
+1. **New basis families** — orthonormal Discrete Wavelet Transform (DWT) bases (`WaveletV3` and family-named subclasses), and composition blocks that fuse polynomial trend with wavelet bases (`TrendWavelet`) or with an additional learned generic branch (`TrendWaveletGeneric`).
+2. **New backbones** — `AERootBlock` (hourglass encoder–decoder), `AERootBlockLG` (adds a learned sigmoid gate on the latent), and `AERootBlockVAE` (variational latent with KL regularization). These are drop-in replacements for the standard 4-layer trunk and are paired with every block family above.
+3. **Composability** — `stack_types` is a free list of strings; any block can follow any other. Optional features include weight sharing, `active_g` (post-expansion activation), `skip_distance`/`skip_alpha` (ResNet-style cross-stack reinjection), `sum_losses`, asymmetric backcast/forecast wavelet families, and tiered SVD basis offsets.
 
-- **Wavelet basis expansion blocks** (V3 variants: Haar, Daubechies, Coiflets, Symlets) offering multi-resolution time-frequency localization
-- **Hybrid TrendWavelet / TrendWaveletGeneric blocks** combining polynomial trend, orthonormal wavelet, and optional learned generic basis expansions inside a single block
-- **Autoencoder blocks** with separated encoder-decoder paths for data-driven compressed representations
-- **Bottleneck generic blocks** with rank-*d* factorized projections for parameter-efficient basis expansion
-- **AE-backbone variants** (`AERootBlock`, `AERootBlockLG`, `AERootBlockVAE`) replacing the uniform FC-layer backbone with a hourglass encoder-decoder structure that achieves 5–10× parameter reduction
-- **Learned-gate autoencoder blocks** (AELG variants) with an adaptive sigmoid-gated latent bottleneck that learns to selectively suppress or amplify compressed representations
+The headline empirical claims from the paper are summarized once below; the paper has the matched-seed Wilcoxon tables, per-period leaderboards, and the strict health filter behind every number.
 
-A **key finding** from systematic benchmarks is that the original N-BEATS architecture (Oreshkin et al., 2019) was **significantly over-parameterized**. Our novel AE-backbone block types achieve 60–95% parameter reductions compared to the paper's NBEATS-G baseline (24.7M parameters) while matching or improving forecasting accuracy (see [Section 4.1 Table 2 of the research paper](NBEATS-Explorations/paper.md)):
-
-| Configuration | Parameters | Reduction vs NBEATS-G | M4-Yearly OWA |
-|---|---|---|---|
-| NBEATS-G (paper baseline) | 24.7M | — | 0.820 |
-| GenericAE | 4.8M | **81%** | **0.808** |
-| BottleneckGenericAE | 4.3M | **83%** | **0.806** |
-| NBEATS-I-AE (TrendAE + SeasonalityAE) | 2.2M | **91%** | **0.805** |
-
-These AE-backbone variants match or outperform the 24.7M-parameter NBEATS-G baseline while using a fraction of the parameters, with direct implications for deployment in memory- or latency-constrained environments.
-
-A **second key finding** is that tiered frequency-band cascades — assigning per-stack offsets into the SVD-orthogonalized DWT basis — decisively improve accuracy on noisy high-frequency signals. On M4-Daily under the paper-sample protocol, all top-10 configurations are tiered-cascade wavelet variants (Cliff's *d* 0.54–0.78 vs non-tiered). The current cross-period M4 champion (`T+Sym10V3_10s_tiered_ag0`) achieves a mean rank of 13.33/108 across all six M4 periods at 5–6M parameters — overtaking the 38–44M-parameter paper baseline at one-seventh the cost. Per-period paper-sample leaders (updated 2026-05-06):
-
-| Period | Best config | SMAPE | Params |
-|---|---|---:|---|
-| Yearly | T+Db3V3_10s_tiered_agf | 13.486 | 5.07M |
-| Quarterly | NBEATS-IG_10s_ag0 | 10.313 | 19.64M |
-| Monthly | TW_30s_td3_bdeq_sym10 | 13.240 | 6.78M |
-| Weekly | T+Coif2V3_30s_bdeq | 6.735 | 15.75M |
-| **Daily** | **TAE+Sym10V3AE_30s_tiered** | **3.047** | **3.41M** |
-| Hourly | NBEATS-IG_30s_agf | 8.758 | 43.58M |
-
-The M4-Daily entry was updated from the prior single-run result (3.012) after a controlled n=10 re-run showed `TAE+Sym10V3AE_30s_tiered` significantly outperforms the prior leader (MWU p=0.027, Cliff's *d*=−0.52, large). The parameter-efficient alternative `TAELG+DB3V3AELG_10s_tiered` (1.14M, SMAPE 3.052) is statistically equivalent and provides a further 3× reduction.
-
-Among healthy, converging configurations, **block type does not produce statistically significant differences in OWA forecasting accuracy** (Kruskal-Wallis p > 0.09 across all periods tested). Configuration rankings are inconsistent across periods (Spearman rho near zero), confirming that the doubly residual stacking framework itself — rather than the specific basis expansion — is the primary driver of accuracy. Block type *does* significantly affect parameter count (5–10× variation), training stability (0–100% convergence rate for wavelets), and convergence speed, making deployment constraints the practical basis for block selection.
-
-A **convergence study** (Part 6) across M4-Yearly and Weather-96 with 50 random seeds per configuration reveals that `active_g` eliminates catastrophic initialization sensitivity on M4-Yearly (reducing sMAPE coefficient of variation from 31.4% to 0.9%). The recommended default is `active_g='forecast'` (forecast-path activation only), which achieves 100% convergence reliability while recovering significant expressiveness compared to full `active_g=True`.
-
-See [NBEATS-Explorations/paper.md](NBEATS-Explorations/paper.md) for the full research paper.
-
-## N-BEATS Algorithm
-
-N-BEATS (Oreshkin et al., 2019) is composed of blocks organized into stacks. Each basic block accepts an input lookback window and outputs a **backcast** (reconstruction of the input) and a **forecast** (prediction of future values). The core computation begins with four fully connected layers with ReLU activations, producing a hidden representation that is then projected to expansion coefficients via linear layers. These coefficients are passed through basis functions to produce the outputs.
-
-The key innovation is the **doubly residual topology** inspired by deep residual learning (He et al., 2016): each block's backcast is subtracted from its input before passing to the next block (backward residual connection, enabling iterative signal decomposition), while each block's forecast is summed into the global forecast (forward residual connection, enabling hierarchical forecast aggregation). The final forecast is the sum of all blocks' partial forecasts.
-
-- **Block Architecture**: Each block consists of a multi-layer FC backbone followed by a fork into backcast and forecast paths via basis expansion. The choice of basis function determines the block type.
-
-- **Generic and Interpretable Configurations**: The Generic configuration uses fully learnable linear projections as basis functions. The Interpretable configuration constrains bases to polynomial (Trend) and Fourier (Seasonality) forms, producing decomposable forecasts.
-
-- **Weight Sharing**: When enabled within a stack, all blocks share parameters, improving validation performance particularly for the Interpretable architecture.
-
-- **Fast Learning**: N-BEATS converges quickly, typically within 10-30 epochs, making it practical to train ensembles of diverse models. The original paper achieved its best results with a 180-model ensemble combining multiple loss functions, backcast lengths, and random seeds.
+- AE-backbone variants reach **60–95% parameter reduction** versus paper-faithful Generic stacks at matched or better M4 sMAPE.
+- `TrendWavelet*AELG` configurations at <1M parameters land within ~0.5% sMAPE of 19–43M paper baselines (12–80× compression) on most M4 periods.
+- Among healthy configurations the doubly residual scaffold dominates accuracy variance — the basis family choice mostly trades compute, parameters, and stability rather than headline accuracy.
+- See [paper.md §4–§5](NBEATS-Explorations/paper.md) for per-period winners, the parameter-efficiency frontier, and the `active_g` / wavelet-family / latent-dim / `basis_dim` ablations.
 
 ## Requirements
 
-- **Python** >= 3.12
-- **PyTorch** >= 2.1.0
-- **Lightning** >= 2.1.0
+- **Python** ≥ 3.12, < 3.15
+- **PyTorch** ≥ 2.1.0
+- **Lightning** ≥ 2.1.0
 
-## Testing
+Supports CUDA, Apple MPS, and CPU. `lightningnbeats.get_best_accelerator()` returns the highest-priority device available.
 
-This project uses `pytest` with tests located in `tests/`.
-
-For the full testing workflow, command reference, conventions, and troubleshooting notes, see [TESTING.md](TESTING.md).
-
-## Getting Started
-
-### Installation
-
-Download the source from the [github repository](https://github.com/realdanielbyrne/N-BEATS-Lightning) or install it as a pip package to use in your project using the following command:
+## Installation
 
 ```bash
-pip install lightningnbeats
-```
-
-To install from source for development:
-
-```bash
+pip install lightningnbeats         # from PyPI
+# or, from source for development:
 git clone https://github.com/realdanielbyrne/N-BEATS-Lightning.git
 cd N-BEATS-Lightning
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+python -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
-### GPU / CUDA Installation
+### CUDA
 
-`pip install` and `pyproject.toml` always resolve `torch` from PyPI, which only hosts the CPU-only build. PyTorch's CUDA-enabled wheels are hosted on a separate index and must be installed explicitly **after** the base install.
-
-**Step 1 — install the package as normal:**
+PyPI hosts a CPU-only `torch` wheel. To use a CUDA build, install the package first, then upgrade `torch` from PyTorch's CUDA index:
 
 ```bash
-pip install -e .          # from source
-# or
-pip install lightningnbeats  # from PyPI
-```
-
-**Step 2 — upgrade torch to the CUDA build:**
-
-```bash
-# CUDA 12.8 (recommended — compatible with drivers 525+ including CUDA 13.x drivers)
-pip install -r requirements-cuda.txt
-
-# Or install torch directly for a specific CUDA version:
-# CUDA 12.8
+pip install -r requirements-cuda.txt                       # CUDA 12.8 (recommended)
+# or pick a specific build:
 pip install torch --index-url https://download.pytorch.org/whl/cu128 --upgrade
-# CUDA 12.1
 pip install torch --index-url https://download.pytorch.org/whl/cu121 --upgrade
-# CUDA 11.8
 pip install torch --index-url https://download.pytorch.org/whl/cu118 --upgrade
 ```
 
-Check available builds and match your driver at [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/).
+Match your driver at [pytorch.org/get-started/locally](https://pytorch.org/get-started/locally/).
 
-**Verify CUDA is detected:**
-
-```python
-import torch
-print(torch.cuda.is_available())      # True
-print(torch.cuda.get_device_name(0))  # e.g. NVIDIA GeForce RTX 4070
-```
-
-### Simple Example
-
-The following is a simple example of how to use this model.
-
-#### Load Data
-
-First load the required libraries and your data.
-
-```python
-# Import necessary libraries
-from lightningnbeats import NBeatsNet
-from lightningnbeats.loaders import *
-import pandas as pd
-
-# Load the milk.csv dataset
-milk = pd.read_csv('src/data/milk.csv', index_col=0)
-milkvals = milk.values.flatten()
-```
-
-#### Define the model and its hyperparameters
-
-Define the model by defining the architecture in the `stack_types` parameter.  The `stack_types` parameter is simply a list of strings that specify the type of block to use in each stack.  The following block types are available:
-
-- Generic
-- BottleneckGeneric
-- GenericAE
-- BottleneckGenericAE
-- GenericAEBackcast
-- GenericAEBackcastAE
-- Trend
-- TrendAE
-- Seasonality
-- SeasonalityAE
-- AutoEncoder
-- AutoEncoderAE
-- TrendWavelet
-- TrendWaveletAE
-- TrendWaveletAELG
-- TrendWaveletGeneric
-- TrendWaveletGenericAE
-- TrendWaveletGenericAELG
-- TrendWaveletGenericVAE
-- WaveletV3 *(generic base class — wavelet family set via `wavelet_type` parameter)*
-- HaarWaveletV3
-- DB2WaveletV3
-- DB3WaveletV3
-- DB4WaveletV3
-- DB10WaveletV3
-- DB20WaveletV3
-- Coif1WaveletV3
-- Coif2WaveletV3
-- Coif3WaveletV3
-- Coif10WaveletV3
-- Symlet2WaveletV3
-- Symlet3WaveletV3
-- Symlet10WaveletV3
-- Symlet20WaveletV3
-
-Generic base classes (`WaveletV3`, `WaveletV3AE`, `WaveletV3AELG`, `WaveletV3VAE2`, `WaveletV3VAE`) are the recommended public API for new experiments. They accept `wavelet_type`, `backcast_wavelet_type`, and `forecast_wavelet_type` parameters, allowing different wavelet families for the backcast and forecast paths. Family-named subclasses (e.g., `HaarWaveletV3`) remain as compatibility wrappers.
-
-The hybrid `TrendWavelet*` families expose the same wavelet-family controls. `TrendWaveletGeneric*` adds a third learned generic branch, giving a three-way additive decomposition: trend + wavelet + generic. These blocks additionally use `generic_dim` to control the rank of that learned branch.
-
-Note: `WaveletV2`/`AltWaveletV2` block families were removed due to instability. Historical experiment results are retained under `experiments/results/` for reference.
-
-This implementation extends the design original paper with several additional block types and by allowing any combination blocks in any order simply by specifying the block types in the stack_types parameter.
-
-```python
-forecast_length = 6
-backcast_length = 4 * forecast_length
-batch_size = 64
-n_stacks = 6
-
-interpretable_milkmodel = NBeatsNet(
-  stack_types=['Trend', 'Seasonality'],
-  backcast_length = backcast_length,
-  forecast_length = forecast_length,
-  n_blocks_per_stack = 3,
-  thetas_dim = 5,
-  t_width=256,
-  s_width=2048,
-  share_weights = True
-)
-```
-
-This model will forecast 6 steps into the future. The common practice is to use a multiple of the forecast horizon for the backcast length.  In this case, we will use 4 times the forecast horizon.
-
-Larger batch sizes will result in faster training, but may require more memory.  The number of blocks per stack is a hyperparameter that can be tuned.  The share_weights parameter is set to True to share weights across the blocks. Gerneally deeper stacks do not result in more accurate predictions as the model saturates pretty quickly.  To improve accuracy it is best to build moultiple models from differnt architectures and combine them in an ensemble by taking the forecast from each and using something like the mean or median of the combined results.
-
-#### Define a Pytorch Lightning DataModule
-
-Instantiate one of the predefined PyTorch Lightning Time Series Data Modules in this repository to help organize and load your data.
-
-- *TimeSeriesDataModule* - A PyTorch Lightning DataModule that takes a univariate time series as input and returns batches of samples of the time series. This is the most basic DataModule and is useful for single univariate time series data.
-- *RowCollectionTimeSeriesDataModule* - A PyTorch Lightning DataModule accepts a dataset that is a collection of time series organized into rows where each row represents a time series, and each column represents subsequent observations. For instance this is how the M4 dataset is organized.
-- *ColumnarCollectionTimeSeriesDataModule* - A PyTorch Datamodule that takes a collection of time series as input and returns batches of samples. The input dataset is a collection of time series organized such that columns represent individual time series and rows represent subsequent observations. This is how the Tourism dataset is organized.
-
-```python
-dm = TimeSeriesDataModule(
-  train_data = milkvals[:-forecast_length],
-  val_data = milkvals[-(forecast_length + backcast_length):],
-  batch_size = batch_size,
-  backcast_length = backcast_length,
-  forecast_length = forecast_length,
-  shuffle = True
-)
-
-```
-
-#### Define a Pytorch Lightning ModelCheckpoint (optional)
-
-Define a Pytorch Ligntning ModelCheckpoint callback to save the best model during training.  The model checkpoints will be saved to the default  `lightning/logs` directory unless otherwise specified.
-
-```python
-i_chk_callback = ModelCheckpoint(
-  save_top_k = 2, # save top 2 models
-  monitor = "val_loss", # monitor validation loss as evaluation
-  mode = "min",
-  filename = "{name}-{epoch:02d}-{val_loss:.2f}",
-)
-
-# Define a tensorboard logger
-i_tb_logger = pl_loggers.TensorBoardLogger(save_dir="lightning_logs/", name=i_name)
-
-```
-
-#### Define a Pytorch Lightning Trainer and train the model
-
-Use a standard Pytorch Lightning Trainer to train the model.  Be careful not to overtrain, as performance will begin to degrade after a certain point.  The N-BEATS architecture tends to settly fairly quickly into a relative minimum.   If the model is not performing well, try a different architecture or hyperparameters.  It is best to build an ensemble of models and combine the results to improve accuracy.  This can be done by taking the mean or median of the forecast from each model in the ensemble.
-
-```python
-interpretable_trainer =  pl.Trainer(
-  accelerator='auto' # use GPU if available
-  ,max_epochs=100
-  ,callbacks=[i_chk_callback]
-  ,logger=[i_tb_logger]
-)
-
-interpretable_trainer.fit(interpretable_milkmodel, datamodule=dm)
-interpretable_trainer.validate(interpretable_milkmodel, datamodule=dm)
-```
-
-#### Hardware Acceleration (GPU Support)
-
-This package supports multiple hardware accelerators. The PyTorch Lightning Trainer with `accelerator='auto'` will automatically select the best available device in this priority order: **CUDA GPU** > **Apple MPS** > **CPU**.
-
-| Accelerator | Platform | Notes |
-| --- | --- | --- |
-| **CUDA** | NVIDIA GPUs (Linux/Windows) | Install the [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) and the matching [PyTorch CUDA build](https://pytorch.org/get-started/locally/) |
-| **MPS** | Apple Silicon (macOS) | Metal Performance Shaders — available out of the box on M1/M2/M3/M4 Macs with PyTorch >= 2.1.0 |
-| **CPU** | Any | Fallback when no GPU is available |
-
-You can check which accelerator is available on your system:
-
-```python
-from lightningnbeats import get_best_accelerator
-print(get_best_accelerator())  # Returns 'cuda', 'mps', or 'cpu'
-```
-
-Or check individually:
-
-```python
-import torch
-print(f"CUDA available: {torch.cuda.is_available()}")
-print(f"MPS available:  {torch.backends.mps.is_available()}")
-```
-
-The `get_best_accelerator()` utility function returns a string compatible with Lightning's `accelerator` parameter:
+## Quickstart
 
 ```python
 from lightningnbeats import NBeatsNet, get_best_accelerator
+from lightningnbeats.loaders import TimeSeriesDataModule
 import lightning.pytorch as pl
+import pandas as pd
 
-accelerator = get_best_accelerator()
-trainer = pl.Trainer(accelerator=accelerator, max_epochs=100)
-```
+milk = pd.read_csv('src/data/milk.csv', index_col=0).values.flatten()
+forecast_length, backcast_length = 6, 24
 
-### Running Examples
-
-Example scripts are in the `examples/` directory and can be run as standalone scripts or cell-by-cell in Jupyter (using `#%%` markers):
-
-```bash
-cd examples
-python M4AllBlks.py       # M4 dataset benchmark across all block types
-python TourismAllBlks.py  # Tourism dataset benchmark
-```
-
-### Running Tests
-
-Tests use pytest:
-
-```bash
-pytest tests/              # run all tests
-pytest tests/ -v           # verbose output
-pytest tests/test_blocks.py  # run a specific test file
-```
-
-## N-BEATS Extensions and Variations
-
-This repository provides an implementation of N-BEATS that has been extended to include extended features which can be used to augment the basic design with more advanced features.
-
-### Active G (`active_g`)
-
-When enabled, `active_g` applies the block's activation function (default: ReLU) to the basis expansion outputs after the final linear layer of each block — i.e., to `g^b(θ^b)` and `g^f(θ^f)`. This parameter is not in the original N-BEATS paper.
-
-The parameter supports four modes:
-
-- `active_g=False` — paper-faithful, no post-expansion activation (default)
-- `active_g=True` — activation on both backcast and forecast paths
-- `active_g='forecast'` — activation on forecast path only (**recommended for production**)
-- `active_g='backcast'` — activation on backcast path only (not recommended)
-
-**Convergence study findings** (50–200 random seeds per configuration across M4-Yearly, Tourism-Yearly, Weather-96, and Milk datasets):
-
-- **Baseline** (`active_g=False`): best per-seed accuracy, but 7–30% of seeds fail catastrophically on M4-Yearly (sMAPE coefficient of variation: 31.4%). When seeds converge they produce the most accurate models.
-- **Balanced** (`active_g=True`): eliminates convergence failures (100% success rate); sMAPE CV drops to 0.9% on M4-Yearly. Accuracy cost: ~1% on large multi-series benchmarks, up to 76% on small univariate datasets.
-- **Forecast-only** (`active_g='forecast'`): matches the 100% convergence rate of balanced activation while recovering ~13% of the expressiveness gap. **This is the recommended default** for single-run production deployments. It also trains fastest (7.5s vs 9.5s on the Milk benchmark).
-- **Backcast-only** (`active_g='backcast'`): worst mode — reduces convergence rate *below* the unconstrained baseline (63% vs 70%) while constraining expressiveness. Avoid this mode.
-
-The core intuition: ReLU on forecast outputs prevents catastrophic cancellation in the forecast accumulation sum (∑ ŷ_ℓ), smoothing the loss landscape. ReLU on backcast outputs forces monotonically decreasing residuals — removing the ability to produce negative corrective backcasts — which destabilizes the doubly residual decomposition chain. Forecast-only activation captures the stability benefit while preserving residual expressiveness.
-
-On large multi-series benchmarks, the ~1% accuracy gap from `active_g='forecast'` is smaller than the ~3% gain from median ensembling across seeds, making it a net positive in production pipelines. On small univariate datasets, prefer `active_g=False` with multiple seeds and best-run selection.
-
-### BottleneckGeneric Block
-
-The `BottleneckGeneric` block is a variant of the paper's Generic block that uses a two-stage projection through an intermediate `thetas_dim` bottleneck instead of a single linear projection. This is equivalent to a rank-d factorization of the basis expansion matrix, where `d = thetas_dim`. The bottleneck regularizes the learned basis by limiting its rank, providing a tunable knob to control basis complexity — analogous to how Trend and Seasonality blocks use low-dimensional parameterizations (polynomial degree, number of Fourier harmonics) to constrain the function space.
-
-A corresponding `BottleneckGenericAE` variant uses the AERootBlock backbone instead of the standard RootBlock.
-
-```python
-n_stacks = 5
-stack_types = ['BottleneckGeneric'] * n_stacks
-stack_types = ['Trend', 'BottleneckGeneric'] * n_stacks
-```
-
-### Wavelet Basis Expansion Blocks
-
-This repository contains a number of experimental Wavelet Basis Expansion Blocks. Wavelet basis expansion is a mathematical technique used to represent signals or functions in terms of simpler, fixed building blocks called wavelets. Unlike Fourier transforms, which use sine and cosine functions as basis elements, wavelets can be localized in both time and frequency. This means they can represent both the frequency content of a signal and when these frequencies occur.
-
-This method is particularly useful for analyzing functions or signals that contain features at multiple scales.  The multi-resolution analysis capability of wavelets is particularly suited to capturing the essence of time series data then, which can have complex, hierarchical structures due to the presence of trends, seasonal effects, cycles, and irregular fluctuations.
-
-In addition to pure wavelet blocks, the repository also includes hybrid `TrendWavelet` and `TrendWaveletGeneric` families. `TrendWavelet` combines a fixed polynomial trend basis with an orthonormal DWT basis in one block. `TrendWaveletGeneric` extends that design with a third learned low-rank generic basis path, yielding `trend + wavelet + generic` additive outputs. Available variants are `TrendWaveletGeneric`, `TrendWaveletGenericAE`, `TrendWaveletGenericAELG`, and `TrendWaveletGenericVAE`.
-
-Wavelet blocks can be used in isolation or in combination with other blocks freely. V1 and V2 wavelet blocks were removed due to instability (NaN failures and MASE explosion). Use V3 variants. Historical V2 benchmark results are kept in `experiments/results/` for reference. For instance:
-
-```python
-n_stacks = 5
-stack_types = ['DB3WaveletV3'] * n_stacks # 5 stacks of DB3WaveletV3 blocks
-stack_types = ['Trend','DB3WaveletV3'] * n_stacks # 5 stacks of 1 Trend and 1 DB3WaveletV3
-stack_types = ['DB3WaveletV3','Generic'] # 5 stacks of 1 DB3WaveletV3 followed by 1 Generic
-
-# Using the generic base class with parameter-driven wavelet family
-stack_types = ['WaveletV3AELG'] * n_stacks
-model = NBeatsNet(..., stack_types=stack_types, wavelet_type='coif2')
-
-# Asymmetric wavelet families: different families for backcast and forecast paths
-# Useful when backcast and forecast lengths differ significantly (e.g., L=480, H=96)
-model = NBeatsNet(..., stack_types=stack_types, wavelet_type='coif2',
-                  backcast_wavelet_type='sym20', forecast_wavelet_type='coif2')
-```
-
-The Wavelet blocks available in this repository are as follows:
-
-- HaarWaveletV3
-- DB2WaveletV3
-- DB3WaveletV3
-- DB4WaveletV3
-- DB10WaveletV3
-- DB20WaveletV3
-- Coif1WaveletV3
-- Coif2WaveletV3
-- Coif3WaveletV3
-- Coif10WaveletV3
-- Symlet2WaveletV3
-- Symlet3WaveletV3
-- Symlet10WaveletV3
-- Symlet20WaveletV3
-
-For short targets, prefer shorter-support families such as `HaarWaveletV3`, `DB2WaveletV3`, or `DB3WaveletV3`. Longer filters (`DB20`, `Symlet20`, `Coif10`) need substantially longer backcast/forecast windows to expose real multilevel structure. When PyWavelets reports `dwt_max_level(...) == 0`, WaveletV3 now respects `level=0` instead of forcing an invalid level-1 decomposition, which avoids boundary-effect warnings while keeping the basis orthonormal.
-
-### AutoEncoder Block
-
-The AutoEncoder Block utilizes an AutoEncoider structure in both the forecast and backcast branches in the N-BEATS architecture.  The AutoEncoder block is useful for noisey time series data like Electric generation or in highly varied datasets like the M4.   It struggles with simpler more predictable datasets like the Milk Production Dataset taht rely on mostly trend.  However, combining this block with a Trend block often eliminates this problem.
-
-Like any other blocks in this implementation, the AutoEncoder block can be used in isolation or in combination with other blocks freely. For instance
-
-```python
-n_stacks = 5
-stack_types = ['AutoEncoder'] * n_stacks # 5 stacks of AutoEncoder blocks
-stack_types = ['Trend','AutoEncoder'] * n_stacks # 5 stacks of 1 Trend block followed by 1 AutoEncoder block
-```
-
-### GenericAEBackcast
-
-The GenericAEBackcast block is a Generic block that uses an AutoEncoder structure in only the backcast branch of the N-BEATS architecture.  This block is useful for noisey time series data like Electric generation or in highly varied datasets like the M4.   It doesn't struggle like the AutoEncoder block does with simpler more predictable datasets like the Milk Production Dataset.  It is genreally more accurate than the AutoEncoder block, and it settles on a solution faster.
-
-```python
-n_stacks = 5
-stack_types = ['GenericAEBackcast'] * n_stacks # 5 stacks of GenericAEBackcast blocks
-stack_types = ['Trend','GenericAEBackcast'] * n_stacks # 5 stacks of 1 Trend and 1 GenericAEBackcast block
-```
-
-### AERootBlock and its Variations
-
-The standard N-BEATS backbone uses four equal-width fully connected layers before the signal splits into backcast and forecast branches. `AERootBlock` replaces this with a hourglass encoder-decoder structure: input → `units/2` → `latent_dim` → `units/2` → `units`. With `latent_dim=4` and `units=512`, the bottleneck compresses the representation to just 4 dimensions, delivering 5–10× parameter reduction compared to the standard backbone.
-
-Three AE backbone variants are available:
-
-**`AERootBlock`** — Standard hourglass encoder-decoder:
-
-- `GenericAE`, `BottleneckGenericAE`, `GenericAEBackcastAE`
-- `TrendAE`, `SeasonalityAE`, `AutoEncoderAE`
-
-**`AERootBlockLG`** — Learned-gate backbone: adds a learnable `nn.Parameter` gate vector of size `latent_dim`. Applies `sigmoid(gate) × z` after the latent layer, enabling adaptive suppression or amplification of individual latent dimensions:
-
-- `GenericAELG`, `BottleneckGenericAELG`, `GenericAEBackcastAELG`
-- `TrendAELG`, `SeasonalityAELG`, `AutoEncoderAELG`
-
-**`AERootBlockVAE`** — Variational AE backbone: stochastic latent space with `fc2_mu`/`fc2_logvar` heads and reparameterization trick. KL divergence loss is accumulated and added during `training_step()`, scaled by the model-level `kl_weight` parameter (default `0.1`):
-
-- `GenericVAE`, `BottleneckGenericVAE`, `GenericAEBackcastVAE`
-- `TrendVAE`, `SeasonalityVAE`, `AutoEncoderVAE`
-
-For AE-style descendants, `latent_dim` controls the local autoencoder bottlenecks while `thetas_dim` remains reserved for explicit theta/basis projections where they still exist. In practice this means `AutoEncoderAE`/`AutoEncoderAELG`/`AutoEncoderVAE` and `GenericAEBackcastAE`/`GenericAEBackcastAELG`/`GenericAEBackcastVAE` compress branch-local paths with `latent_dim`, while `GenericAEBackcast*` forecast heads still project through `thetas_dim`.
-
-All three backbone variants can be used in isolation or freely mixed:
-
-```python
-n_stacks = 5
-stack_types = ['GenericAE'] * n_stacks                       # 5 stacks of GenericAE blocks
-stack_types = ['TrendAE', 'GenericAE'] * n_stacks            # alternating TrendAE and GenericAE
-stack_types = ['TrendAELG', 'Coif2WaveletV3'] * n_stacks     # learned-gate + wavelet (V3)
-```
-
-### Parameter Efficiency
-
-A central finding from our systematic benchmarks is that the original N-BEATS architecture (Oreshkin et al., 2019) was significantly **over-parameterized**. AE-backbone block types deliver 60–95% parameter reductions while matching or improving M4-Yearly OWA (full results in [Section 4.1 Table 2 of the research paper](NBEATS-Explorations/paper.md)):
-
-| Configuration | Parameters | Reduction | M4-Yearly OWA | Notes |
-|---|---|---|---|---|
-| NBEATS-G (paper baseline) | 24.7M | — | 0.820 | 30-stack Generic |
-| GenericAE | 4.8M | 81% | 0.808 | 30-stack AE-backbone Generic |
-| BottleneckGenericAE | 4.3M | 83% | 0.806 | Best cross-period stability |
-| NBEATS-I-AE | 2.2M | 91% | 0.805 | TrendAE + SeasonalityAE (2×3 stacks) |
-| TrendWaveletAE / TrendWaveletAELG | ~8–9M | ~65% | Competitive | Mixed interpretable-wavelet |
-
-`BottleneckGenericAE` offers the best balance of efficiency and cross-period generalization, never ranking below 5th across Yearly, Quarterly, and Monthly M4 periods. `NBEATS-I-AE` achieves the highest parameter efficiency (91% reduction) but its extreme 4-dimensional latent bottleneck becomes limiting for higher-frequency series with more complex seasonal patterns.
-
-```python
-# Parameter-efficient 30-stack model: 83% fewer parameters than NBEATS-G, matching OWA
 model = NBeatsNet(
-    stack_types=['BottleneckGenericAE'] * 30,
-    backcast_length=30,
-    forecast_length=6,
-    n_blocks_per_stack=1,
+    stack_types=['Trend', 'Seasonality'],
+    backcast_length=backcast_length,
+    forecast_length=forecast_length,
+    n_blocks_per_stack=3,
+    thetas_dim=5,
     share_weights=True,
-    latent_dim=4,
 )
+
+dm = TimeSeriesDataModule(
+    train_data=milk[:-forecast_length],
+    val_data=milk[-(forecast_length + backcast_length):],
+    backcast_length=backcast_length,
+    forecast_length=forecast_length,
+    batch_size=64,
+    shuffle=True,
+)
+
+trainer = pl.Trainer(accelerator=get_best_accelerator(), max_epochs=100)
+trainer.fit(model, datamodule=dm)
 ```
 
-### ResNet-Style Skip Connections
+`stack_types` is required — there is no default architecture. Any combination of registered block names is legal; blocks compose freely in any order.
 
-For deep stacks, N-BEATS residual connections can cause signal decay: each stack subtracts its backcast from the residual, and in architectures with 20+ stacks the remaining signal approaches zero, starving later stacks. ResNet-style skip connections counteract this by periodically re-injecting a scaled copy of the original input back into the residual stream.
+## Block reference
 
-Enable via `skip_distance` and `skip_alpha` on `NBeatsNet` or `NHiTSNet`:
+Every entry in [`constants.BLOCKS`](src/lightningnbeats/constants.py) is a valid `stack_types` string and maps to a concrete class in [`src/lightningnbeats/blocks/blocks.py`](src/lightningnbeats/blocks/blocks.py).
+
+### Backbones
+
+| Backbone | Topology | Notes |
+|---|---|---|
+| `RootBlock` | input → U → U → U → U | Paper-faithful 4-layer FC trunk. |
+| `AERootBlock` | input → U/2 → d → U/2 → U | Hourglass; `latent_dim` controls bottleneck `d`. |
+| `AERootBlockLG` | same as AE | Adds learned `sigmoid(γ) ⊙ z` gate; allows smaller `d` without accuracy loss. |
+| `AERootBlockVAE` | μ/logσ heads, reparameterization | KL loss accumulated and added during `training_step`, scaled by `kl_weight` (default `0.1`). |
+
+### Block families
+
+Each backbone is paired with the same set of basis-expansion heads:
+
+| Family | RootBlock | AERootBlock | AERootBlockLG | AERootBlockVAE |
+| --- | --- | --- | --- | --- |
+| Generic (paper) | `Generic` | `GenericAE` | `GenericAELG` | `GenericVAE` |
+| Bottleneck Generic | `BottleneckGeneric` | `BottleneckGenericAE` | `BottleneckGenericAELG` | `BottleneckGenericVAE` |
+| Backcast-only AE | `GenericAEBackcast` | `GenericAEBackcastAE` | `GenericAEBackcastAELG` | `GenericAEBackcastVAE` |
+| Branch-specific AE | `AutoEncoder` | `AutoEncoderAE` | `AutoEncoderAELG` | `AutoEncoderVAE` |
+| Trend (polynomial) | `Trend` | `TrendAE` | `TrendAELG` | `TrendVAE` |
+| Seasonality (Fourier) | `Seasonality` | `SeasonalityAE` | `SeasonalityAELG` | `SeasonalityVAE` |
+| Wavelet (DWT) | `WaveletV3` | `WaveletV3AE` | `WaveletV3AELG` | `WaveletV3VAE` |
+| Trend + Wavelet | `TrendWavelet` | `TrendWaveletAE` | `TrendWaveletAELG` | — |
+| Trend + Wavelet + Generic | `TrendWaveletGeneric` | `TrendWaveletGenericAE` | `TrendWaveletGenericAELG` | `TrendWaveletGenericVAE` |
+
+`WaveletV3` is the recommended public API: pass `wavelet_type` (e.g. `'haar'`, `'db3'`, `'coif2'`, `'sym10'`). Family-named subclasses (`HaarWaveletV3`, `DB3WaveletV3`, `Coif2WaveletV3`, `Symlet10WaveletV3`, …) remain as compatibility wrappers and are listed in `BLOCKS`. V1/V2 wavelet families were removed for instability; V2 results are preserved under `experiments/results/` for reference.
+
+For short forecast targets, prefer short-support wavelets (`haar`, `db2`, `db3`). When `pywt.dwt_max_level(...) == 0`, `_WaveletGeneratorV3` keeps `level=0` (approximation-only orthonormal basis) rather than forcing an invalid level-1 decomposition.
+
+### Composing stacks
 
 ```python
-model = NBeatsNet(
-    stack_types=['GenericAELG'] * 30,
-    backcast_length=30,
-    forecast_length=6,
-    skip_distance=5,   # re-inject every 5 stacks
-    skip_alpha=0.1,    # injection strength (recommended fixed value)
+# Pure generic (paper-equivalent at depth 30)
+NBeatsNet(stack_types=['Generic'] * 30, ...)
+
+# Interpretable (Trend + Seasonality)
+NBeatsNet(stack_types=['Trend', 'Seasonality'], n_blocks_per_stack=3, share_weights=True, ...)
+
+# Alternating Trend + Wavelet (RootBlock)
+NBeatsNet(stack_types=['Trend', 'DB3WaveletV3'] * 5, ...)
+
+# Unified TrendWavelet (single composite block)
+NBeatsNet(stack_types=['TrendWavelet'] * 30, wavelet_type='sym10', trend_thetas_dim=3, basis_dim=H, ...)
+
+# Sub-1M parameter compact model
+NBeatsNet(
+    stack_types=['TrendWaveletAELG'] * 10,
+    wavelet_type='db3', trend_thetas_dim=3, basis_dim=H, latent_dim=32,
+    share_weights=True, ...,
+)
+
+# Asymmetric wavelets for L >> H
+NBeatsNet(
+    stack_types=['WaveletV3AELG'] * 10,
+    wavelet_type='coif2',
+    backcast_wavelet_type='sym20', forecast_wavelet_type='coif2',
+    ...,
 )
 ```
 
-- **`skip_distance`** — Number of stacks between injections. `0` disables skip connections (default). Rule of thumb: `floor(n_stacks / 6)` provides adequate injection density.
-- **`skip_alpha`** — Injection strength. Accepts a float or `'learnable'` (creates an `nn.Parameter` initialized to 0.01). **`0.1` is the recommended default**, winning 4/5 comparisons against learnable alpha across M4, Tourism, and Weather datasets (ResNet Skip Study v1/v2). Default: `0.1`.
+> **Convention.** Place `Trend*` stacks before `Wavelet*` / `Generic*` / `Seasonality*` stacks. The block-ordering ablation (paper Appendix B.5) found Trend-first either neutral or strongly preferred on every dataset; reversing it can 2–3× the OWA on VAE backbones.
 
-**When to use skip connections** (findings from ResNet Skip Study v1/v2 across M4-Yearly, Tourism-Yearly, and Weather-96):
+## Width and dimension parameters
 
-| Architecture | Recommendation |
-|---|---|
-| `GenericAELG` at depth ≥ 20 | **Enable** — rescues bimodal convergence failure (SMAPE 36 → 13.8 on M4-Yearly). Use `skip_distance=floor(n_stacks/6)`, `skip_alpha=0.1`. |
-| `TrendWaveletAE` / `TrendWaveletAELG` | **Off** — no measurable benefit; can slightly hurt (p=0.001 on Tourism). |
-| `Generic` (30 stacks) | Off on M4; marginal benefit on Tourism (p=0.014). |
-| `GenericAE` | Off — depth-stable without skip. |
-| Double-VAE pairings | Skip reduces severity but does not fix the fundamental instability. |
+| Parameter | Default | Applies to |
+|---|---|---|
+| `g_width` | 512 | Generic / BottleneckGeneric / GenericAEBackcast / Wavelet families |
+| `s_width` | 2048 | Seasonality / SeasonalityAE |
+| `t_width` | 256 | Trend / TrendAE / TrendWavelet / TrendWaveletGeneric families |
+| `ae_width` | 512 | AutoEncoder / AutoEncoderAE |
+| `latent_dim` | 5 | AE bottleneck width `d` (and branch latents in `AutoEncoderAE`, `GenericAEBackcastAE`) |
+| `thetas_dim` | 3 | Reserved for explicit theta projections (`BottleneckGeneric`, `GenericAEBackcast*` forecast head) |
+| `trend_thetas_dim` | 3 | Polynomial order in `Trend*` and `TrendWavelet*` families |
+| `basis_dim` | 32 | Wavelet basis rank `k` per path |
+| `forecast_basis_dim` | `None` | Optional asymmetric basis rank on the forecast path |
+| `generic_dim` | — | Rank of the learned generic branch in `TrendWaveletGeneric*` |
 
-Skip connections also work in YAML experiment configs:
+For AE descendants, `latent_dim` controls the branch-local bottlenecks; `thetas_dim` is reserved for explicit basis-coefficient projections such as the `GenericAEBackcast*` forecast head.
 
-```yaml
-training:
-  skip_distance: 5
-  skip_alpha: 0.1
+## Selected extensions (cross-references to the paper)
+
+These knobs are repository extensions and not part of Oreshkin et al. (2019). The paper's appendices give the empirical evidence; this section just describes the API.
+
+- **`active_g`** — `False` (paper-faithful, recommended default), `True`, `'forecast'`, or `'backcast'`. Applies the block's nonlinearity to the basis-expansion outputs. The `'forecast'` mode helps decisively on M4-Hourly and rescues some Generic convergence failures, but is not a global default; see paper Appendix B.5.
+- **`skip_distance` / `skip_alpha`** — ResNet-style reinjection of the original input every `skip_distance` stacks, scaled by `skip_alpha` (float or `'learnable'`). Useful for `GenericAELG` at depth ≥ 20; off by default. Detailed recommendation table in the paper's ResNet-skip ablation.
+- **`sum_losses`** — Adds `0.25 · L(backcast, 0)` to the loss to push backcasts toward full reconstruction. Off by default; reserved for the convergence study (paper Appendix D).
+- **Asymmetric wavelet families** — `backcast_wavelet_type` and `forecast_wavelet_type` override `wavelet_type` per path. Useful when `L ≫ H` (e.g., Traffic-96).
+- **Tiered basis offsets** (`basis_offset`) — Cycle each stack through a different SVD spectrum slice of the orthonormal wavelet basis. Strongest on M4-Daily under paper-sample; regresses on Weekly.
+
+## Custom losses
+
+In addition to the standard `torch.nn` losses, the package registers `SMAPELoss`, `MAPELoss`, `MASELoss` (accepts `seasonal_period`), and `NormalizedDeviationLoss`. Select by name via the `loss=` argument.
+
+## Datasets
+
+`lightningnbeats.data` ships dataset adapters that subclass `BenchmarkDataset` and expose a uniform `train_data` / `test_data` / `forecast_length` / `frequency` / `name` interface, plus `compute_owa()` where Naive2 baselines are available:
+
+- **M4** — bundled CSVs for all six periods (Yearly / Quarterly / Monthly / Weekly / Daily / Hourly). OWA supported.
+- **Tourism** — Yearly / Quarterly / Monthly. Columnar layout.
+- **Traffic-96** and **Weather-96** — downloaded from Hugging Face on first use, cached at `~/.cache/lightningnbeats/`. Parameterized by horizon.
+- **Milk** — single-series univariate.
+
+Use the matching `DataModule` for the layout: `RowCollectionTimeSeriesDataModule` (M4-style row-oriented), `ColumnarCollectionTimeSeriesDataModule` (Tourism/Traffic/Weather-style), or `TimeSeriesDataModule` (single series).
+
+## Experiments
+
+Reproducing or extending the paper's sweeps is driven by YAML through [`experiments/run_from_yaml.py`](experiments/run_from_yaml.py):
+
+```bash
+python experiments/run_from_yaml.py experiments/configs/nbeats_g.yaml --dry-run
+python experiments/run_from_yaml.py experiments/configs/nbeats_g.yaml
+python experiments/run_from_yaml.py experiments/configs/genericae_pure.yaml          # successive halving
+python experiments/run_from_yaml.py experiments/configs/trendae_ae_alternating.yaml
+python experiments/run_from_yaml.py experiments/configs/nbeats_g.yaml --analyze-only # no retraining
 ```
 
-### Custom Loss Functions
+The launcher supports two-pass studies, atomic claim files for parallel workers, search/successive-halving rounds, custom CSV columns, and full CLI overrides. Schema reference: [`experiments/configs/schema.md`](experiments/configs/schema.md). Canonical training-protocol YAMLs (sliding, paper-sample MultiStepLR, paper-sample plateau) and their reproducibility CSVs are listed in [paper.md Appendix B.9](NBEATS-Explorations/paper.md).
 
-In addition to standard PyTorch loss functions (MSELoss, L1Loss, SmoothL1Loss, etc.), this implementation provides several custom loss functions commonly used in time series forecasting:
+Examples in [`examples/`](examples/) (`#%%` cell markers, runnable as scripts or in Jupyter):
 
-- **`SMAPELoss`** — Symmetric Mean Absolute Percentage Error. Scale-independent metric that treats over- and under-predictions symmetrically.
-- **`MAPELoss`** — Mean Absolute Percentage Error. Measures forecast accuracy as a percentage of the true values.
-- **`MASELoss`** — Mean Absolute Scaled Error. Compares forecast errors against a naive seasonal baseline. Accepts a `seasonal_period` parameter.
-- **`NormalizedDeviationLoss`** — Normalized Deviation (ND). Ratio of total absolute error to total absolute true values.
-
-Specify the loss function by name when creating the model:
-
-```python
-model = NBeatsNet(
-  stack_types=['Trend', 'Seasonality'],
-  backcast_length=24,
-  forecast_length=6,
-  loss='SMAPELoss'  # or 'MAPELoss', 'MASELoss', 'NormalizedDeviationLoss', 'MSELoss', etc.
-)
+```bash
+python examples/M4AllBlks.py
+python examples/TourismAllBlks.py
 ```
 
-## Upcoming Work
+## Testing
 
-NHiTS-architecture benchmarks using the same parameter-efficient AE-backbone block types are in progress. These experiments evaluate both `NBeatsNet` (10-stack) and `NHiTSNet` (3-stack with hierarchical pooling and multi-rate signal sampling) configurations with AELG block variants against NHiTS published baselines on the Weather and Traffic datasets across four forecast horizons (96, 192, 336, 720 steps), using the NHiTS evaluation protocol (Z-score normalization, 70/10/20 train/val/test split, MSE loss). The YAML launcher now honors the top-level `protocol` block for these studies, including dataset split settings, optional target-column inclusion, datamodule normalization/validation behavior, and protocol fallbacks for loss / forecast multiplier / batch size. YAML/unified runs also use atomic claim files in `experiments/results/.claims/` so parallel workers can skip already-claimed jobs safely; pass-aware claim IDs prevent two-pass studies from colliding. Configuration files:
+```bash
+pytest tests/                         # all
+pytest tests/test_blocks.py -v        # block shapes / registries
+```
 
-- [`experiments/configs/nhits_benchmark_weather.yaml`](experiments/configs/nhits_benchmark_weather.yaml)
-- [`experiments/configs/nhits_benchmark_traffic.yaml`](experiments/configs/nhits_benchmark_traffic.yaml)
+Conventions and troubleshooting: [TESTING.md](TESTING.md). CI does not run tests; no linter or formatter is configured.
 
-## Architecture Naming
+## Adding a new block
 
-The parameter-efficient AE-backbone block family represents a substantive departure from the original N-BEATS formulation — 60–95% parameter reduction while matching accuracy across diverse benchmarks — and warrants a distinctive name for publication and community reference. The following candidates apply to both N-BEATS and NHiTS base architectures:
+1. Create the class in [`src/lightningnbeats/blocks/blocks.py`](src/lightningnbeats/blocks/blocks.py), inheriting from `RootBlock`, `AERootBlock`, `AERootBlockLG`, or `AERootBlockVAE`. `forward()` must return `(backcast, forecast)`.
+2. Add the class name to `BLOCKS` in [`constants.py`](src/lightningnbeats/constants.py).
+3. If a new width parameter is needed, extend the dispatch in `NBeatsNet.create_stack()`.
+4. Add a shape test; the parametrized `TestAllBlocksOutputShapes` picks up new entries automatically.
 
-| Name | Rationale |
-|---|---|
-| **N-BEATS-AE** / **NHiTS-AE** | Directly maps to the architectural contribution (`AERootBlock`). Short, technically precise, and cleanly namespaces within the existing N-BEATS/NHiTS family while signaling the encoder-decoder innovation. Works well as a paper identifier: *N-BEATS-AE: Parameter-Efficient Neural Basis Expansion via Autoencoder Backbones*. |
-| **LeanBeats** | A standalone portmanteau emphasizing parameter leanness and the N-BEATS foundation. Works across variants (`LeanBeats-G`, `LeanBeats-I`, `LeanNHiTS`) without relying on the original trademark-adjacent capitalization. Memorable and distinctive in literature search. |
-| **N-BEATS-Compact** / **NHiTS-Compact** | Signals the compression insight unambiguously. Natural as a paper title suffix: *N-BEATS-Compact: 90% Parameter Reduction with Matched Forecasting Accuracy*. Immediately communicates practical value to deployment-focused practitioners. |
-| **N-BEATS v2** / **NHiTS v2** | Simplest versioning approach, making lineage explicit while signaling a systematic improvement. Most appropriate if the work is framed as a direct successor to Oreshkin et al. (2019) / Challu et al. (2023) rather than a novel architectural family. |
-| **AE-BEATS** | Foregrounds the autoencoder innovation first, signaling a broader architectural rethinking rather than a minor variant. Most distinctive in literature search. Best suited if the backbone redesign — rather than forecasting accuracy per se — is the primary contribution being claimed. |
+## Citation
+
+If the wavelet / AE block families or the parameter-efficiency results are useful in your work, please cite *Wavelets and Autoencoders are All You Need* — see [NBEATS-Explorations/paper.md](NBEATS-Explorations/paper.md) for the canonical text and reproducibility pointers.

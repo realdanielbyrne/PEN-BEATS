@@ -784,10 +784,38 @@ Config file & Dataset & Notes \\
 
 This appendix lists the matched-seed Wilcoxon evidence for every empirical rule cited in Section~\ref{sec:depth_stability} and Appendix~\ref{app:hyperparams:block}. All numbers are taken verbatim from the analysis reports under \texttt{experiments/analysis/analysis\_reports/} and the strict health filter (Section~\ref{sec:results}) is applied throughout.
 
-\subsection{\texttt{active\_g}: per-period and per-dataset}
+\subsection{\texttt{active\_g}: Definition, Instability, and Per-Period Effect}
 \label{app:ablations:active_g}
 
-The \texttt{active\_g} extension is a Mann--Whitney win on Hourly (where it is decisive) and a Mann--Whitney loss on every other period. On small-data Milk it eliminates a 63\% bimodal failure mode but pays an absolute sMAPE cost on the converged subset.
+\paragraph{Definition.}
+Standard N-BEATS Generic blocks produce their backcast and forecast estimates via a pair of unconstrained linear projections from the shared trunk hidden state:
+\[
+  \hat{\mathbf{b}} = \mathbf{W}_b \mathbf{h}, \qquad \hat{\mathbf{f}} = \mathbf{W}_f \mathbf{h},
+\]
+where $\mathbf{h} \in \mathbb{R}^U$ is the output of the four-layer fully-connected trunk and $\mathbf{W}_b, \mathbf{W}_f$ are learned projection matrices. The \texttt{active\_g} parameter applies a nonlinear post-activation to these output projections before they are used as basis-expansion coefficients:
+\[
+  \hat{\mathbf{b}} = \sigma(\mathbf{W}_b \mathbf{h}), \qquad \hat{\mathbf{f}} = \sigma(\mathbf{W}_f \mathbf{h}),
+\]
+where $\sigma$ is the model's configured activation function (ReLU by default). The variant \texttt{active\_g='forecast'} applies the activation only to the forecast projection $\mathbf{W}_f$, leaving the backcast head linear; \texttt{active\_g=True} activates both heads. The parameter defaults to \texttt{False}, preserving the unconstrained linear output of the original N-BEATS architecture~\citep{oreshkin2020nbeats}.
+
+\paragraph{Observed instabilities and convergence failures.}
+During a large-scale convergence study ($n = 200$ seeds per configuration, M4-Yearly), overparameterised plain Generic stacks---in particular \texttt{NBEATS-G\_30s\_ag0}---exhibited a pronounced bimodal failure mode: a substantial fraction of random seeds converged to a degenerate fixed point with sMAPE an order of magnitude above the well-converged subset. The same pathology appeared at extreme rates on the small-data Milk series: 63\% of 6-stack seeds and 64\% of 10-stack seeds were classified as stuck (sMAPE $> 5$). A less severe version manifested on M4-Yearly at 4.5\%.
+
+Setting \texttt{active\_g} to either \texttt{True} or \texttt{'forecast'} eliminated the stuck-mode failure \emph{entirely} in every configuration where it was tested. The 63\% failure rate on Milk (6-stack) fell to 0\%; the 64\% rate on Milk (10-stack) fell to 0\%; the 4.5\% M4-Yearly rate fell to 0\% (Table~\ref{tab:active_g_ablation}). The improvement in convergence reliability is unambiguous and statistically decisive across all datasets examined.
+
+\paragraph{A working hypothesis: unactivated linear outputs as a source of instability.}
+The observation that a single activation function placed after the Generic block's output projections eliminates convergence failures---without any other architectural change---invites a mechanistic explanation. We offer the following as a working hypothesis, and acknowledge that we do not yet have evidence sufficient for a strong theoretical claim.
+
+In the doubly-residual N-BEATS stack, each block decomposes its input by subtracting its backcast from the residual stream and accumulating its forecast into the output. When the final projection is linear and unconstrained, there is no inherent bound on the magnitude of the backcast or forecast signals produced in early training. If a block produces a large-magnitude backcast by chance at initialisation, it over-subtracts the input residual; the corrupted signal passed to the next block can then be further amplified by that block's own unconstrained projections. In deep stacks this cascade can compound across many layers, driving the model into a region from which a standard Adam optimiser with a cosine or step learning-rate schedule cannot recover.
+
+Applying an activation to the output projection bounds the projected signal---ReLU, for instance, restricts it to the non-negative half-space---and effectively regularises the magnitude of the backcast and forecast estimates throughout early training. We conjecture that this soft amplitude bound prevents the runaway signal cascade responsible for bimodal stuck modes, and that the benefit is greatest precisely where the doubly-residual accumulation is deepest (many stacks) or training data are scarcest (Milk, a single univariate series), so that gradient information is too weak to self-correct the corrupted residual chain.
+
+This hypothesis is broadly consistent with established observations in deep network optimisation: unrestricted linear outputs are known to produce gradient-scale instabilities in certain architectures~\citep{hochreiter1991untersuchungen,pascanu2013difficulty}, and activation functions have historically served a stabilising role beyond their role in representational capacity~\citep{glorot2011deep}. We stress, however, that the causal mechanism here is specific to the doubly-residual structure of N-BEATS; whether linear output instability generalises to other architectures with different signal-routing conventions remains an open question.
+
+\paragraph{Trade-offs.}
+The stability benefit of \texttt{active\_g} comes at an accuracy cost in most regimes. Even on datasets where it eliminates stuck modes entirely---Milk 6-stack, Milk 10-stack---the mean sMAPE of the converged subset increases, indicating that the activation constrains the model's representational range in ways that are detrimental once optimisation is no longer the binding constraint. On M4, every period except Hourly shows a statistically significant accuracy regression under \texttt{agf}. The Hourly gain is genuine and robust ($9/9$ matched pairs improve, 5 at $p < 0.05$), which may reflect properties specific to that period's long horizon and high-frequency structure. Our recommendation is therefore to treat \texttt{active\_g} as a targeted intervention rather than a global default: use \texttt{ag0} for paper-faithful reproducibility; switch to \texttt{agf} for M4-Hourly; apply \texttt{active\_g=True} only when bimodal convergence failures are observed and convergence reliability takes priority over converged-subset accuracy.
+
+Table~\ref{tab:active_g_ablation} summarises the quantitative outcome: \texttt{active\_g} is a Mann--Whitney win on Hourly (where it is decisive) and a Mann--Whitney loss on every other period, and on small-data Milk it eliminates a 63\% bimodal failure mode while paying an absolute sMAPE cost on the converged subset.
 
 \begin{table}[h]
 \centering
