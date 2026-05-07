@@ -172,12 +172,12 @@
 \newlabel{app:hyperparams:generalist}{{B.8}{15}{Cross-period generalists}{subsection.B.8}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {B.9}Reproducibility}{15}{subsection.B.9}\protected@file@percent }
 \newlabel{app:hyperparams:repro}{{B.9}{15}{Reproducibility}{subsection.B.9}{}}
-\@writefile{toc}{\contentsline {paragraph}{Canonical CSVs (\texttt  {experiments/results/m4/}).}{15}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Canonical CSVs (\nolinkurl  {experiments/results/m4/}).}{15}{section*.22}\protected@file@percent }
 \def\@LN@column{1}
 \@writefile{lot}{\contentsline {table}{\numberline {12}{\ignorespaces Best M4 configuration per (period, protocol). All cells are $n=10$ unless noted. ``ttd'' = \texttt  {trend\_thetas\_dim}; ``ld'' = \texttt  {latent\_dim}; ``bd'' = \texttt  {basis\_dim} label; ``\texttt  {ag}'' = \texttt  {active\_g} (\texttt  {0} = \texttt  {False}, \texttt  {f} = \texttt  {'forecast'}).}}{16}{table.12}\protected@file@percent }
 \newlabel{tab:quickpick}{{12}{16}{Best M4 configuration per (period, protocol). All cells are $n=10$ unless noted. ``ttd'' = \texttt {trend\_thetas\_dim}; ``ld'' = \texttt {latent\_dim}; ``bd'' = \texttt {basis\_dim} label; ``\texttt {ag}'' = \texttt {active\_g} (\texttt {0} = \texttt {False}, \texttt {f} = \texttt {'forecast'})}{table.12}{}}
 \@writefile{toc}{\contentsline {paragraph}{Canonical analysis.}{16}{section*.23}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Canonical YAML configs (\texttt  {experiments/configs/}).}{16}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Canonical YAML configs (\nolinkurl  {experiments/configs/}).}{16}{section*.24}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {B.10}Compute resources}{16}{subsection.B.10}\protected@file@percent }
 \newlabel{app:hyperparams:compute}{{B.10}{16}{Compute resources}{subsection.B.10}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {C}Configuration list}{16}{appendix.C}\protected@file@percent }
@@ -195,6 +195,8 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {C.3}Targeted ablation configs}{17}{subsection.C.3}\protected@file@percent }
 \newlabel{app:configs:ablations}{{C.3}{17}{Targeted ablation configs}{subsection.C.3}{}}
 \citation{oreshkin2020nbeats}
+\citation{hochreiter1991untersuchungen,pascanu2013difficulty}
+\citation{glorot2011deep}
 \def\@LN@column{1}
 \@writefile{toc}{\contentsline {section}{\numberline {D}Additional ablations}{18}{appendix.D}\protected@file@percent }
 \newlabel{app:ablations}{{D}{18}{Additional ablations}{appendix.D}{}}
@@ -203,12 +205,9 @@
 \@writefile{toc}{\contentsline {paragraph}{Definition.}{18}{section*.26}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Observed instabilities and convergence failures.}{18}{section*.27}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{A working hypothesis: unactivated linear outputs as a source of instability.}{18}{section*.28}\protected@file@percent }
-\citation{hochreiter1991untersuchungen,pascanu2013difficulty}
-\citation{glorot2011deep}
 \def\@LN@column{1}
 \@writefile{toc}{\contentsline {paragraph}{Structural regularisation in AE and Wavelet blocks as an implicit substitute.}{19}{section*.29}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Trade-offs.}{19}{section*.30}\protected@file@percent }
-\citation{challu2023nhits}
 \def\@LN@column{1}
 \@writefile{lot}{\contentsline {table}{\numberline {15}{\ignorespaces \texttt  {active\_g} effect by dataset, paired Mann--Whitney. ``Quality cost'' is the absolute sMAPE delta on the converged subset of seeds; the convergence column is the failure-rate reduction. ``Converged subset'' applies a dataset-specific stuck-mode filter beyond the strict health filter of Section~\ref {sec:results} ($\mathrm  {sMAPE}<20$ on M4-Yearly, $\mathrm  {sMAPE}<30$ on Tourism-Yearly, $\mathrm  {sMAPE}<5$ on Milk) so that bimodal stuck seeds do not contaminate the converged-mean estimate.}}{20}{table.15}\protected@file@percent }
 \newlabel{tab:active_g_ablation}{{15}{20}{\texttt {active\_g} effect by dataset, paired Mann--Whitney. ``Quality cost'' is the absolute sMAPE delta on the converged subset of seeds; the convergence column is the failure-rate reduction. ``Converged subset'' applies a dataset-specific stuck-mode filter beyond the strict health filter of Section~\ref {sec:results} ($\mathrm {sMAPE}<20$ on M4-Yearly, $\mathrm {sMAPE}<30$ on Tourism-Yearly, $\mathrm {sMAPE}<5$ on Milk) so that bimodal stuck seeds do not contaminate the converged-mean estimate}{table.15}{}}
@@ -220,9 +219,10 @@
 \newlabel{tab:tiered_per_period}{{16}{20}{Tiered basis-offset, matched against the closest non-tiered baseline. ``Better'' counts paired wins for the tiered config; significance is paired Wilcoxon at $p<0.05$}{table.16}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {D.3}LR scheduler: paper-sample matched pairs}{20}{subsection.D.3}\protected@file@percent }
 \newlabel{app:ablations:lr}{{D.3}{20}{LR scheduler: paper-sample matched pairs}{subsection.D.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {17}{\ignorespaces Paper-sample plateau-vs-step matched pairs ($\Delta = $ plateau $-$ step). Negative $\Delta $ favors plateau.}}{20}{table.17}\protected@file@percent }
+\newlabel{tab:lr_matched}{{17}{20}{Paper-sample plateau-vs-step matched pairs ($\Delta = $ plateau $-$ step). Negative $\Delta $ favors plateau}{table.17}{}}
+\citation{challu2023nhits}
 \def\@LN@column{1}
-\@writefile{lot}{\contentsline {table}{\numberline {17}{\ignorespaces Paper-sample plateau-vs-step matched pairs ($\Delta = $ plateau $-$ step). Negative $\Delta $ favors plateau.}}{21}{table.17}\protected@file@percent }
-\newlabel{tab:lr_matched}{{17}{21}{Paper-sample plateau-vs-step matched pairs ($\Delta = $ plateau $-$ step). Negative $\Delta $ favors plateau}{table.17}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {D.4}Traffic-96 NHiTS transferability}{21}{subsection.D.4}\protected@file@percent }
 \newlabel{app:ablations:nhits_traffic}{{D.4}{21}{Traffic-96 NHiTS transferability}{subsection.D.4}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {E}M4 full per-period tables}{21}{appendix.E}\protected@file@percent }
@@ -230,58 +230,57 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {E.1}M4-Yearly ($H=6$, $L=30$)}{21}{subsection.E.1}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {18}{\ignorespaces M4-Yearly top-5: paper-sample (left) and sliding (right).}}{21}{table.18}\protected@file@percent }
 \newlabel{tab:m4_yearly_full}{{18}{21}{M4-Yearly top-5: paper-sample (left) and sliding (right)}{table.18}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {E.2}M4-Quarterly ($H=8$, $L=40$)}{21}{subsection.E.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {E.3}M4-Monthly ($H=18$, $L=90$)}{21}{subsection.E.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {E.4}M4-Weekly ($H=13$, $L=65$)}{21}{subsection.E.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {E.5}M4-Daily ($H=14$, $L=70$)}{21}{subsection.E.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {E.6}M4-Hourly ($H=48$, $L=240$)}{21}{subsection.E.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {E.7}Cross-period generalist mean ranks}{21}{subsection.E.7}\protected@file@percent }
+\newlabel{app:m4_tables:generalists}{{E.7}{21}{Cross-period generalist mean ranks}{subsection.E.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {F}Tourism and Milk Out-of-Distribution Results}{21}{appendix.F}\protected@file@percent }
+\newlabel{app:ood}{{F}{21}{Tourism and Milk Out-of-Distribution Results}{appendix.F}{}}
 \def\@LN@column{1}
 \@writefile{lot}{\contentsline {table}{\numberline {19}{\ignorespaces M4-Quarterly top-5: paper-sample (left) and sliding (right).}}{22}{table.19}\protected@file@percent }
 \newlabel{tab:m4_quarterly_full}{{19}{22}{M4-Quarterly top-5: paper-sample (left) and sliding (right)}{table.19}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {20}{\ignorespaces M4-Monthly top-5: paper-sample (left) and sliding (right).}}{22}{table.20}\protected@file@percent }
 \newlabel{tab:m4_monthly_full}{{20}{22}{M4-Monthly top-5: paper-sample (left) and sliding (right)}{table.20}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {E.2}M4-Quarterly ($H=8$, $L=40$)}{22}{subsection.E.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {E.3}M4-Monthly ($H=18$, $L=90$)}{22}{subsection.E.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {E.4}M4-Weekly ($H=13$, $L=65$)}{22}{subsection.E.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {E.5}M4-Daily ($H=14$, $L=70$)}{22}{subsection.E.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {E.6}M4-Hourly ($H=48$, $L=240$)}{22}{subsection.E.6}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {E.7}Cross-period generalist mean ranks}{22}{subsection.E.7}\protected@file@percent }
-\newlabel{app:m4_tables:generalists}{{E.7}{22}{Cross-period generalist mean ranks}{subsection.E.7}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {F}Tourism and Milk Out-of-Distribution Results}{22}{appendix.F}\protected@file@percent }
-\newlabel{app:ood}{{F}{22}{Tourism and Milk Out-of-Distribution Results}{appendix.F}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {F.1}Tourism (Y/Q/M)}{22}{subsection.F.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {F.2}Milk}{22}{subsection.F.2}\protected@file@percent }
 \def\@LN@column{1}
 \@writefile{lot}{\contentsline {table}{\numberline {21}{\ignorespaces M4-Weekly top-5 paper-sample (step\_paper LR) and best plateau-LR cell (n=10 re-validation), plus sliding top-5.}}{23}{table.21}\protected@file@percent }
 \newlabel{tab:m4_weekly_full}{{21}{23}{M4-Weekly top-5 paper-sample (step\_paper LR) and best plateau-LR cell (n=10 re-validation), plus sliding top-5}{table.21}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {22}{\ignorespaces M4-Daily top-5: paper-sample (left) and sliding (right).}}{23}{table.22}\protected@file@percent }
 \newlabel{tab:m4_daily_full}{{22}{23}{M4-Daily top-5: paper-sample (left) and sliding (right)}{table.22}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {F.2}Milk}{23}{subsection.F.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {F.3}Backbone-by-regime summary}{23}{subsection.F.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {G}TrendWavelet and AE-MLP on a Transformer LLM}{23}{appendix.G}\protected@file@percent }
+\newlabel{app:llm_transfer}{{G}{23}{TrendWavelet and AE-MLP on a Transformer LLM}{appendix.G}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {G.1}Architecture port}{23}{subsection.G.1}\protected@file@percent }
 \citation{eval-harness}
+\citation{llama32}
 \def\@LN@column{1}
 \@writefile{lot}{\contentsline {table}{\numberline {23}{\ignorespaces M4-Hourly top-10 paper-sample (mixed scheduler choice; canonicalized in Section~\ref {sec:m4_leaderboards}) and sliding top-5.}}{24}{table.23}\protected@file@percent }
 \newlabel{tab:m4_hourly_full}{{23}{24}{M4-Hourly top-10 paper-sample (mixed scheduler choice; canonicalized in Section~\ref {sec:m4_leaderboards}) and sliding top-5}{table.23}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {24}{\ignorespaces Top-5 paper-sample generalists by mean rank across the six M4 periods. Ranks are within the 108-config paper-sample pool. ``--'' means the config did not run on that period.}}{24}{table.24}\protected@file@percent }
 \newlabel{tab:generalist_paper}{{24}{24}{Top-5 paper-sample generalists by mean rank across the six M4 periods. Ranks are within the 108-config paper-sample pool. ``--'' means the config did not run on that period}{table.24}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {G}TrendWavelet and AE-MLP on a Transformer LLM}{24}{appendix.G}\protected@file@percent }
-\newlabel{app:llm_transfer}{{G}{24}{TrendWavelet and AE-MLP on a Transformer LLM}{appendix.G}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {G.1}Architecture port}{24}{subsection.G.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {G.2}From-scratch SmolLM2-135M trajectory}{24}{subsection.G.2}\protected@file@percent }
-\citation{llama32}
+\@writefile{toc}{\contentsline {subsection}{\numberline {G.3}Distillation recovery on Llama-3.2-1B}{24}{subsection.G.3}\protected@file@percent }
 \def\@LN@column{1}
 \@writefile{lot}{\contentsline {table}{\numberline {25}{\ignorespaces Top-5 sliding generalists by mean rank across the six M4 periods. Ranks are within the 112-config sliding pool.}}{25}{table.25}\protected@file@percent }
 \newlabel{tab:generalist_sliding}{{25}{25}{Top-5 sliding generalists by mean rank across the six M4 periods. Ranks are within the 112-config sliding pool}{table.25}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {26}{\ignorespaces Tourism protocol-local winners (comprehensive-sweep protocol, mean $\pm $ std over surviving seeds).}}{25}{table.26}\protected@file@percent }
 \newlabel{tab:tourism_winners}{{26}{25}{Tourism protocol-local winners (comprehensive-sweep protocol, mean $\pm $ std over surviving seeds)}{table.26}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {G.3}Distillation recovery on Llama-3.2-1B}{25}{subsection.G.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {G.4}Reinvesting saved parameters}{25}{subsection.G.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {G.5}Caveats and reproducibility}{25}{subsection.G.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {H}Limitations}{25}{appendix.H}\protected@file@percent }
+\newlabel{sec:limitations}{{H}{25}{Limitations}{appendix.H}{}}
 \def\@LN@column{1}
 \@writefile{lot}{\contentsline {table}{\numberline {27}{\ignorespaces Parameter counts for the SmolLM2-135M-class port. The MLP block accounts for 59\% of the baseline parameter count and is the primary compression target. Total compression of the variants is roughly proportional to MLP-block compression.}}{26}{table.27}\protected@file@percent }
 \newlabel{tab:llm_params}{{27}{26}{Parameter counts for the SmolLM2-135M-class port. The MLP block accounts for 59\% of the baseline parameter count and is the primary compression target. Total compression of the variants is roughly proportional to MLP-block compression}{table.27}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {28}{\ignorespaces Token-matched validation perplexity (in-domain val set, same harness across variants). The wavelet variant closes the gap to baseline monotonically; the gap-to-\texttt  {ae\_mlp} ratio drops from $1.05$ at 250\,M tokens to under $1.0$ by 1.85\,B tokens, so the projection ranking reflects an already-realized ordering rather than a slope-fit artifact.}}{26}{table.28}\protected@file@percent }
 \newlabel{tab:llm_trajectory}{{28}{26}{Token-matched validation perplexity (in-domain val set, same harness across variants). The wavelet variant closes the gap to baseline monotonically; the gap-to-\texttt {ae\_mlp} ratio drops from $1.05$ at 250\,M tokens to under $1.0$ by 1.85\,B tokens, so the projection ranking reflects an already-realized ordering rather than a slope-fit artifact}{table.28}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {H}Limitations}{26}{appendix.H}\protected@file@percent }
-\newlabel{sec:limitations}{{H}{26}{Limitations}{appendix.H}{}}
 \def\@LN@column{1}
 \@writefile{lot}{\contentsline {table}{\numberline {29}{\ignorespaces Layer-15 AE-LG swap on Llama-3.2-1B with two-phase AE-pretraining and KD fine-tuning. The same block design that pays a $+0.28$-nat plateau from scratch (Section~\ref {sec:transfer_llm}) recovers below the unmodified original perplexity once the teacher signal is added.}}{27}{table.29}\protected@file@percent }
 \newlabel{tab:llm_kd}{{29}{27}{Layer-15 AE-LG swap on Llama-3.2-1B with two-phase AE-pretraining and KD fine-tuning. The same block design that pays a $+0.28$-nat plateau from scratch (Section~\ref {sec:transfer_llm}) recovers below the unmodified original perplexity once the teacher signal is added}{table.29}{}}
-\def\@LN@column{1}
 \def\@LN@column{1}
 \def\@LN@column{1}
 \def\@LN@column{1}
@@ -295,4 +294,4 @@
 \def\@LN@column{1}
 \def\@LN@column{1}
 \def\@LN@column{1}
-\gdef \@abspage@last{34}
+\gdef \@abspage@last{33}

@@ -158,6 +158,7 @@ Because $\sigma(\gamma_i)$ saturates at zero or one at its limits, the network c
   \caption{Backbone architecture comparison.}
   \label{tab:backbones}
   \centering
+  \resizebox{\textwidth}{!}{%
   \begin{tabular}{llll}
     \toprule
     Backbone & Layer topology & Latent operation & Extra params \\
@@ -166,7 +167,7 @@ Because $\sigma(\gamma_i)$ saturates at zero or one at its limits, the network c
     AERootBlock   & input $\to U/2 \to d \to U/2 \to U$                   & Deterministic pass-through              & Negligible \\
     AERootBlockLG & Same as AE                                            & $z \cdot \sigma(\gamma)$                & $d$ (gate vector) \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}
 
 \subsubsection{Parameter efficiency}
@@ -217,6 +218,7 @@ The \texttt{latent\_dim} hyperparameter controls the branch-local bottleneck siz
   \caption{Single-trunk vs.\ branch-specific AE designs.}
   \label{tab:branch-ae}
   \centering
+  \resizebox{\textwidth}{!}{%
   \begin{tabular}{lllll}
     \toprule
     Block & Shared trunk & Backcast branch & Forecast branch & \texttt{thetas\_dim} role \\
@@ -225,7 +227,7 @@ The \texttt{latent\_dim} hyperparameter controls the branch-local bottleneck siz
     \texttt{AutoEncoderAE}        & AERootBlock & $z \to$ enc-dec $\to$ output              & $z \to$ enc-dec $\to$ output                              & unused \\
     \texttt{GenericAEBackcastAE}  & AERootBlock & $z \to$ enc-dec $\to$ output              & $z \to$ enc-dec $\to \boldsymbol{\theta}^f \to$ basis     & coefficient projection \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}
 
 The branch-specific design adds approximately $4 \cdot U_b \cdot d_b$ parameters per branch, where $U_b$ is the branch width and $d_b$ the branch latent size. For typical settings ($U_b = U/2$, $d_b = d$), this doubles the AE parameter budget relative to a shared-head block, but keeps the total well below the RootBlock baseline since both the trunk and the branches remain in the hourglass regime.
@@ -279,6 +281,7 @@ M4~\citep{makridakis2020m4} is the primary benchmark (six frequencies, 100{,}000
   \caption{Datasets and evaluation parameters. The paper-sample protocol enforces the in-sample constraint $L_h \cdot H$~\citep[Appendix~D]{oreshkin2020nbeats} on the trailing window of each series, with $L_h = 1.5$ for Yearly/Quarterly and $L_h = 10$ otherwise.}
   \label{tab:datasets}
   \centering
+  \resizebox{\textwidth}{!}{%
   \begin{tabular}{llrlll}
     \toprule
     Dataset & Frequency & Series & Horizon $H$ & Lookback $L$ & Primary metric \\
@@ -289,7 +292,7 @@ M4~\citep{makridakis2020m4} is the primary benchmark (six frequencies, 100{,}000
     Weather-96       & 10-min  & 21 ch.\   & 96                         & $5H$            & MSE, MAE \\
     Milk             & monthly & 1         & 6                          & $5H$            & sMAPE \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}
 
 \subsection{Training Protocols}
@@ -503,6 +506,7 @@ Table~\ref{tab:sweep_grids} lays out the grid actually executed for each block f
 \small
 \caption{Hyperparameter grids per block family. ``--'' means the parameter does not apply to the family.}
 \label{tab:sweep_grids}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}llllllll@{}}
 \toprule
 Family & $n_\text{stacks}$ & wavelet & \texttt{trend\_thetas\_dim} & \texttt{basis\_dim} & \texttt{latent\_dim} & \texttt{active\_g} & \texttt{share\_weights} \\
@@ -516,7 +520,7 @@ Family & $n_\text{stacks}$ & wavelet & \texttt{trend\_thetas\_dim} & \texttt{bas
 \texttt{TWAELG}      & $10$ & shortlist & $3$ & \texttt{eq} & $\{16, 32\}$ & $\{\text{F},\,\text{f}\}$ & \texttt{True} \\
 \texttt{TWGAELG}     & $10$ & shortlist & $3$ & \texttt{eq} & $\{16, 32\}$ & $\{\text{F},\,\text{f}\}$ & \texttt{True} \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \\[0.3em]
 \textit{Wavelet shortlist:} $\{\text{haar},\,\text{db3},\,\text{coif2},\,\text{sym10}\}$. \quad \textit{$\text{eq} \equiv \text{forecast\_length}$.} \quad
 $\text{F} \equiv$ \texttt{False}, $\text{f} \equiv$ \texttt{'forecast'}.
@@ -692,11 +696,13 @@ When a single configuration must run across all six M4 periods (cross-period rep
 \subsection{Reproducibility}
 \label{app:hyperparams:repro}
 
-\paragraph{Canonical CSVs (\texttt{experiments/results/m4/}).} Paper-sample (step-paper LR): \texttt{comprehensive\_m4\_paper\_sample\_results.csv}, \texttt{comprehensive\_m4\_paper\_sample\_sym10\_fills\_results.csv}, \texttt{tiered\_offset\_m4\_allperiods\_paperlr\_results.csv}, \texttt{m4\_hourly\_sym10\_tiered\_offset\_paperlr\_results.csv}. Paper-sample (plateau LR): \texttt{comprehensive\_m4\_paper\_sample\_plateau\_results.csv}, \texttt{tiered\_offset\_m4\_allperiods\_results.csv}, \texttt{m4\_hourly\_sym10\_tiered\_offset\_results.csv}. Sliding: \texttt{comprehensive\_sweep\_m4\_results.csv}.
+\begin{sloppypar}
+\paragraph{Canonical CSVs (\nolinkurl{experiments/results/m4/}).} Paper-sample (step-paper LR): \nolinkurl{comprehensive_m4_paper_sample_results.csv}, \nolinkurl{comprehensive_m4_paper_sample_sym10_fills_results.csv}, \nolinkurl{tiered_offset_m4_allperiods_paperlr_results.csv}, \nolinkurl{m4_hourly_sym10_tiered_offset_paperlr_results.csv}. Paper-sample (plateau LR): \nolinkurl{comprehensive_m4_paper_sample_plateau_results.csv}, \nolinkurl{tiered_offset_m4_allperiods_results.csv}, \nolinkurl{m4_hourly_sym10_tiered_offset_results.csv}. Sliding: \nolinkurl{comprehensive_sweep_m4_results.csv}.
 
-\paragraph{Canonical analysis.} Meta-leaderboard at \texttt{experiments/analysis/analysis\_reports/m4\_overall\_leaderboard\_2026-05-03.md}, regenerable from \texttt{experiments/analysis/scripts/m4\_overall\_leaderboard.py}. The strict health filter \texttt{diverged $\lor$ smape$>$100 $\lor$ (best\_epoch$=$0 $\land$ smape$>$50) $\lor$ smape NaN} is applied to every cell.
+\paragraph{Canonical analysis.} Meta-leaderboard at \nolinkurl{experiments/analysis/analysis_reports/m4_overall_leaderboard_2026-05-03.md}, regenerable from \nolinkurl{experiments/analysis/scripts/m4_overall_leaderboard.py}. The strict health filter \texttt{diverged $\lor$ smape$>$100 $\lor$ (best\_epoch$=$0 $\land$ smape$>$50) $\lor$ smape NaN} is applied to every cell.
 
-\paragraph{Canonical YAML configs (\texttt{experiments/configs/}).} Paper-sample faithful: \texttt{comprehensive\_m4\_paper\_sample.yaml}. Paper-sample plateau: \texttt{comprehensive\_m4\_paper\_sample\_plateau.yaml}. Sliding: \texttt{comprehensive\_sweep\_m4.yaml}. Tiered: \texttt{tiered\_offset\_m4\_allperiods.yaml} (and \texttt{m4\_hourly\_sym10\_tiered\_offset.yaml} for the dedicated Hourly file).
+\paragraph{Canonical YAML configs (\nolinkurl{experiments/configs/}).} Paper-sample faithful: \nolinkurl{comprehensive_m4_paper_sample.yaml}. Paper-sample plateau: \nolinkurl{comprehensive_m4_paper_sample_plateau.yaml}. Sliding: \nolinkurl{comprehensive_sweep_m4.yaml}. Tiered: \nolinkurl{tiered_offset_m4_allperiods.yaml} (and \nolinkurl{m4_hourly_sym10_tiered_offset.yaml} for the dedicated Hourly file).
+\end{sloppypar}
 
 \subsection{Compute resources}
 \label{app:hyperparams:compute}
@@ -716,6 +722,7 @@ This appendix enumerates the YAML configs that drive every sweep cited in the pa
 \small
 \caption{M4 sweep configurations. Sliding $\equiv$ \texttt{nbeats\_sliding} sampling with cosine-warmup LR; paper-sample $\equiv$ \texttt{nbeats\_paper} iteration-based protocol of Appendix~\ref{app:protocols} with either MultiStepLR (faithful) or ReduceLROnPlateau.}
 \label{tab:configs_m4}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lll@{}}
 \toprule
 Config file & Protocol & Cell count \\
@@ -730,7 +737,7 @@ Config file & Protocol & Cell count \\
 \texttt{m4\_hourly\_sym10\_tiered\_offset\_paperlr.yaml}& paper-sample (step)      & Hourly MultiStepLR variant \\
 \texttt{nbeats\_g.yaml}, \texttt{nbeats\_ig.yaml}       & paper-sample (step)      & paper baselines (10s, 30s; \texttt{ag0}, \texttt{agf}) \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
 \paragraph{Sweep groups.} The 112-config Comprehensive Sweep (sliding) and 53-config curated paper-sample subset partition into five families: (i) paper baselines (\texttt{NBEATS-G}, \texttt{NBEATS-IG} at $n_\text{stacks} \in \{10, 30\}$ and \texttt{active\_g} $\in \{\text{F}, \text{f}\}$); (ii) homogeneous \texttt{TrendWavelet} stacks (\texttt{TW\_\{10,30\}s\_td3\_\{eq,2eq\}\_\{haar,db3,coif2,sym10\}}); (iii) alternating \texttt{T+W} dual-stack patterns over the same wavelet shortlist (RootBlock, AE, AELG backbones); (iv) efficiency bottlenecks (\texttt{TWAE}, \texttt{TWAELG}, \texttt{TWGAELG} at \texttt{latent\_dim} $\in \{8, 16, 32\}$, $n_\text{stacks}=10$); (v) Generic-AE controls (\texttt{GenericAE}, \texttt{GenericAELG}, \texttt{BNGenericAE} families). Hyperparameter grids are tabulated in Appendix~\ref{app:hyperparams:grids}.
@@ -743,6 +750,7 @@ Config file & Protocol & Cell count \\
 \small
 \caption{Out-of-distribution sweep configurations.}
 \label{tab:configs_ood}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lll@{}}
 \toprule
 Config file & Dataset & Notes \\
@@ -761,7 +769,7 @@ Config file & Dataset & Notes \\
 \texttt{nhits\_novel\_ae\_weather.yaml}      & Weather (NHiTS)        & novel-block port to NHiTS \\
 \texttt{nhits\_benchmark\_weather\_sliding.yaml} & Weather (NHiTS)    & sliding variant \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}
 
 \subsection{Targeted ablation configs}
@@ -908,7 +916,7 @@ Curated subsets of the M4 wavelet/AE/AELG block library were re-run on the NHiTS
 
 This appendix lists the full top-5 leaderboard for every (period, protocol) cell summarized in Table~\ref{tab:main_leaderboard}. Numbers are taken verbatim from \texttt{m4\_overall\_leaderboard\_2026-05-03.md}; the strict health filter of Section~\ref{sec:results} is applied. Within each period the paper-sample table mixes step-paper and plateau LR (the per-cell scheduler is shown in the \emph{LR} column); the sliding table uses cosine-warmup throughout.
 
-\subsection{M4-Yearly ($H=6$, $L=30$)}
+\subsection{\texorpdfstring{M4-Yearly ($H=6$, $L=30$)}{M4-Yearly (H=6, L=30)}}
 
 \begin{table}[h]
 \centering
@@ -939,7 +947,7 @@ This appendix lists the full top-5 leaderboard for every (period, protocol) cell
 \end{tabular}
 \end{table}
 
-\subsection{M4-Quarterly ($H=8$, $L=40$)}
+\subsection{\texorpdfstring{M4-Quarterly ($H=8$, $L=40$)}{M4-Quarterly (H=8, L=40)}}
 
 \begin{table}[h]
 \centering
@@ -970,7 +978,7 @@ This appendix lists the full top-5 leaderboard for every (period, protocol) cell
 \end{tabular}
 \end{table}
 
-\subsection{M4-Monthly ($H=18$, $L=90$)}
+\subsection{\texorpdfstring{M4-Monthly ($H=18$, $L=90$)}{M4-Monthly (H=18, L=90)}}
 
 \begin{table}[h]
 \centering
@@ -1001,7 +1009,7 @@ This appendix lists the full top-5 leaderboard for every (period, protocol) cell
 \end{tabular}
 \end{table}
 
-\subsection{M4-Weekly ($H=13$, $L=65$)}
+\subsection{\texorpdfstring{M4-Weekly ($H=13$, $L=65$)}{M4-Weekly (H=13, L=65)}}
 
 \begin{table}[h]
 \centering
@@ -1037,7 +1045,7 @@ This appendix lists the full top-5 leaderboard for every (period, protocol) cell
 \end{tabular}
 \end{table}
 
-\subsection{M4-Daily ($H=14$, $L=70$)}
+\subsection{\texorpdfstring{M4-Daily ($H=14$, $L=70$)}{M4-Daily (H=14, L=70)}}
 
 \begin{table}[h]
 \centering
@@ -1068,7 +1076,7 @@ This appendix lists the full top-5 leaderboard for every (period, protocol) cell
 \end{tabular}
 \end{table}
 
-\subsection{M4-Hourly ($H=48$, $L=240$)}
+\subsection{\texorpdfstring{M4-Hourly ($H=48$, $L=240$)}{M4-Hourly (H=48, L=240)}}
 
 \begin{table}[h]
 \centering
@@ -1173,7 +1181,9 @@ The qualitative picture matches the M4 sweep at smaller scale. RootBlock-backed 
 
 \subsection{Milk}
 
-The univariate Milk production series is the small-data stress test (one series, $H=6$, $L=5H$, sMAPE loss). The 10-stack winner is \texttt{TALG+DB3V3ALG\_10s} at sMAPE $1.512 \pm 0.572$, 1.0M parameters, 10 surviving seeds, against an N-BEATS-IG-10 reference of $1.785$. The Milk sweep also reproduces the small-data version of the Generic-stack stability problem reported in Section~\ref{sec:depth_stability}: RootBlock and Generic baselines show high run-to-run divergence, while AE-family TrendWavelet models cut divergence to the low single digits and produce the reliable winner above. The convergence-rate breakdown by configuration is recorded in \texttt{experiments/results/milk\_convergence\_10stack/milk\_convergence\_10stack\_results.csv}.
+\begin{sloppypar}
+The univariate Milk production series is the small-data stress test (one series, $H=6$, $L=5H$, sMAPE loss). The 10-stack winner is \texttt{TALG+DB3V3ALG\_10s} at sMAPE $1.512 \pm 0.572$, 1.0M parameters, 10 surviving seeds, against an N-BEATS-IG-10 reference of $1.785$. The Milk sweep also reproduces the small-data version of the Generic-stack stability problem reported in Section~\ref{sec:depth_stability}: RootBlock and Generic baselines show high run-to-run divergence, while AE-family TrendWavelet models cut divergence to the low single digits and produce the reliable winner above. The convergence-rate breakdown by configuration is recorded in \nolinkurl{experiments/results/milk_convergence_10stack/milk_convergence_10stack_results.csv}.
+\end{sloppypar}
 
 \subsection{Backbone-by-regime summary}
 
@@ -1192,6 +1202,7 @@ We replace two block types in a Llama-architecture Transformer with the time-ser
   \caption{Parameter counts for the SmolLM2-135M-class port. The MLP block accounts for 59\% of the baseline parameter count and is the primary compression target. Total compression of the variants is roughly proportional to MLP-block compression.}
   \label{tab:llm_params}
   \centering
+  \resizebox{\textwidth}{!}{%
   \begin{tabular}{lrrrr}
     \toprule
     Variant & Total & MLP block & Attention & Embed + LM head \\
@@ -1200,7 +1211,7 @@ We replace two block types in a Llama-architecture Transformer with the time-ser
     \texttt{ae\_mlp}                             & 69.3M  & 14.4M & 26.5M & 28.3M \\
     \texttt{tw\_root\_fc\_db3\_64\_tiered\_silu} & 67.2M  & 12.3M & 26.5M & 28.3M \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}
 
 \subsection{From-scratch SmolLM2-135M trajectory}
@@ -1254,7 +1265,9 @@ The parameter saving is not the headline result on its own; the headline result 
 
 \subsection{Caveats and reproducibility}
 
-Single seed per variant in the SmolLM2-class runs; cross-seed standard deviation is unmeasured. Recipe drift between the legacy 2-GPU DDP runs (\texttt{baseline}, \texttt{ae\_mlp}) and the 1-GPU runs (wavelet variants) is absorbed by the calibration anchor described above; reported gaps are an order of magnitude larger than any plausible drift. Only \texttt{baseline} and \texttt{ae\_mlp} reached the full 3.0\,B-token budget; wavelet rows in Table~\ref{tab:llm_trajectory} are partial-checkpoint values, with the 3.0\,B endpoint a projection. Source reports with the full projection methodology, calibration arithmetic, per-task lm-eval breakdowns, AE-pretraining init hierarchy, and fc2/fc3 SVD rule are at \texttt{pellm/evals/smol\_replacement\_paper/preliminary\_feasibility\_report.md}, \texttt{analysis\_tw\_root\_fc\_vs\_ae\_mlp\_vs\_baseline.md}, \texttt{analysis\_ae\_pretraining.md}, and \texttt{experiments/analysis/analysis\_reports/pellm\_validation\_and\_theory\_revision.md}.
+\begin{sloppypar}
+Single seed per variant in the SmolLM2-class runs; cross-seed standard deviation is unmeasured. Recipe drift between the legacy 2-GPU DDP runs (\texttt{baseline}, \texttt{ae\_mlp}) and the 1-GPU runs (wavelet variants) is absorbed by the calibration anchor described above; reported gaps are an order of magnitude larger than any plausible drift. Only \texttt{baseline} and \texttt{ae\_mlp} reached the full 3.0\,B-token budget; wavelet rows in Table~\ref{tab:llm_trajectory} are partial-checkpoint values, with the 3.0\,B endpoint a projection. Source reports with the full projection methodology, calibration arithmetic, per-task lm-eval breakdowns, AE-pretraining init hierarchy, and fc2/fc3 SVD rule are at \nolinkurl{pellm/evals/smol_replacement_paper/preliminary_feasibility_report.md}, \nolinkurl{analysis_tw_root_fc_vs_ae_mlp_vs_baseline.md}, \nolinkurl{analysis_ae_pretraining.md}, and \nolinkurl{experiments/analysis/analysis_reports/pellm_validation_and_theory_revision.md}.
+\end{sloppypar}
 
 \section{Limitations}
 \label{sec:limitations}
