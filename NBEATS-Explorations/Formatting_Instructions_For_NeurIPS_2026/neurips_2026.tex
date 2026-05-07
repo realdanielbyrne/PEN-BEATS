@@ -94,13 +94,15 @@ The mother wavelet $\psi(t)$ is scaled and translated to produce a family of bas
 \end{equation*}
 where $j$ controls scale (frequency resolution) and $k$ controls translation (time position). Short, high-frequency wavelets have narrow time resolution; long, low-frequency wavelets have narrow frequency resolution. This makes wavelets substantially more effective for real-world time series analysis, where variance and frequency content change over time.
 
-A discrete wavelet transform (DWT) brings the continuous wavelet into the digital domain. DWTs compute the inner product of a signal with a basis family, producing a set of orthonormal coefficients that can then be used to reconstruct the original signal.
+A discrete wavelet transform (DWT) brings the continuous wavelet into the digital domain. DWTs compute the inner product of a signal with a basis family, producing a set of orthonormal coefficients that can then be used to reconstruct the original signal~\citep{mallat1989wavelet,daubechies1992ten}.
 
-Wavelets have been used sparsely in machine learning. WaveNet (2022, arXiv:2505.11781) learns a filter-bank specialized to fit non-stationary signals by learning the basis function through decomposing its $n$-th order derivatives and then learning an affine transformation that lets the network suppress and cross-mix frequencies in training.
+Wavelets have been used sparsely in machine learning. WaveTS~\citep{zhou2025wavets} learns a filter-bank specialized to fit non-stationary signals by learning the basis function through decomposing its $n$-th order derivatives and then learning an affine transformation that lets the network suppress and cross-mix frequencies in training.
 
-MultiWave (arXiv:2306.10164) is a model-agnostic preprocessor around any neural network architecture. It takes the concept of machine-learning/signal-processing equivalency to heart by preprocessing input data with a DWT, grouping the outputs by frequency, and then feeding the groups into any neural network (Transformer, FFN, CNN, etc.), feeding different groups into different networks. The networks' outputs are combined and an inverse DWT is applied to obtain the prediction.
+MultiWave~\citep{deznabi2023multiwave} is a model-agnostic preprocessor around any neural network architecture. It takes the concept of machine-learning/signal-processing equivalency to heart by preprocessing input data with a DWT, grouping the outputs by frequency, and then feeding the groups into any neural network (Transformer, FFN, CNN, etc.), feeding different groups into different networks. The networks' outputs are combined and an inverse DWT is applied to obtain the prediction.
 
-W-Transformers (arXiv:2209.03945v1) uses a similar approach by preprocessing time-series data with a discrete overlapping wavelet transform and then feeding the results into a collection of transformer models to analyze the decomposed signals independently.
+W-Transformers~\citep{sasal2022wtransformers} uses a similar approach by preprocessing time-series data with a discrete overlapping wavelet transform and then feeding the results into a collection of transformer models to analyze the decomposed signals independently.
+
+Most directly related, \citet{pramanick2024fusion} apply DWT preprocessing to N-BEATS itself, training separate Generic stacks per sub-band; our work differs by embedding the wavelet basis inside each block rather than as an external preprocessor.
 
 \subsection{Autoencoders}
 
@@ -110,7 +112,7 @@ x -> encoder -> z -> decoder -> x_hat
 loss = reconstruction_error(x, x_hat) + optional_regularization
 \end{verbatim}
 
-The premise is that the model is constrained by the reduced dimensionality of the latent space. Therefore, since the decoder network does not have access to the original signal, a perfect copy is difficult. Thus the network is pushed to learn how to reconstruct the original signal from the information it can extract from the latent representation. The classic paper of Hinton and Salakhutdinov \citep{hinton2006reducing} showed that autoencoders generalize PCA to non-linear domains. Autoencoders are also used widely for self-supervised pretraining, generative modeling, and image denoising and generation.
+The premise is that the model is constrained by the reduced dimensionality of the latent space. Therefore, since the decoder network does not have access to the original signal, a perfect copy is difficult. Thus the network is pushed to learn how to reconstruct the original signal from the information it can extract from the latent representation. The classic paper of Hinton and Salakhutdinov \citep{hinton2006reducing} showed that autoencoders generalize PCA to non-linear domains. Autoencoders are also used widely for self-supervised pretraining, generative modeling, and image denoising and generation~\citep{vincent2008denoising}.
 
 
 \section{Model Description}
@@ -337,7 +339,91 @@ To confirm that the proposed blocks are not specific to the N-BEATS doubly-resid
 \section{Results}
 \label{sec:results}
 
-Per-period leaderboards, parameter-efficiency frontiers, and ablations are reported here. Detailed tables are deferred to Appendix~\ref{app:m4_tables}.
+All tables apply the strict health filter used in the analysis reports: a run is excluded if \texttt{diverged=True}, if sMAPE exceeds 100, or if \texttt{best\_epoch=0} with sMAPE above 50. Means and standard deviations are computed over surviving seeds. For M4, the main comparison uses the paper-sample protocol to stay close to the N-BEATS training setup of \citet{oreshkin2020nbeats}; sliding-window M4 results, plateau-LR variants, and full per-period tables are deferred to Appendix~\ref{app:m4_tables} because absolute sMAPE is not comparable across sampling protocols.
+
+\subsection{Per-Period Leaderboards}
+\label{sec:m4_leaderboards}
+
+Table~\ref{tab:main_leaderboard} gives the compact leaderboard used for the main claims. Wavelet and TrendWavelet variants win or tie most short- and medium-horizon tasks, but the result is not universal: N-BEATS-I+G \citep{oreshkin2020nbeats} remains the M4-Quarterly and M4-Hourly reference. M4-Hourly also illustrates an important convention: the winning \texttt{agf} configuration uses \texttt{active\_g=forecast}, a \texttt{lightningnbeats} extension rather than the paper-faithful N-BEATS block.
+
+\begin{table}[t]
+  \caption{Protocol-local winners used for the main comparison. M4 rows use the paper-sample protocol; Tourism, Weather, and Milk use their comprehensive-sweep protocols. Scores are mean $\pm$ std over the surviving seeds. Asterisks mark \texttt{active\_g=forecast}, which is not part of the original N-BEATS paper~\citep{oreshkin2020nbeats}.}
+  \label{tab:main_leaderboard}
+  \centering
+  \scriptsize
+  \setlength{\tabcolsep}{2.3pt}
+  \begin{tabular}{llllrrl}
+    \toprule
+    Task & Metric & Best config & Score & Params & $n$ & N-BEATS ref. \\
+    \midrule
+    M4-Yearly    & sMAPE & \texttt{T+Coif2V3 30s bdeq}     & $13.542 \pm 0.148$ & 15.2M & 10 & G-10: 13.564 \\
+    M4-Quarterly & sMAPE & \texttt{NBEATS-IG 10s ag0}      & $10.312 \pm 0.055$ & 19.6M & 10 & same \\
+    M4-Monthly   & sMAPE & \texttt{TW 30s td3 sym10}       & $13.240 \pm 0.334$ & 6.8M  & 9  & IG-30: 13.307 \\
+    M4-Weekly    & sMAPE & \texttt{T+Coif2V3 30s bdeq}     & $6.735 \pm 0.203$  & 15.8M & 10 & IG-10: 6.974 \\
+    M4-Daily     & sMAPE & \texttt{T+Sym10V3 10s tiered}   & $3.014 \pm 0.035$  & 5.3M  & 10 & IG-30: 3.062 \\
+    M4-Hourly    & sMAPE & \texttt{NBEATS-IG 30s agf}$^*$  & $8.758 \pm 0.099$  & 43.6M & 10 & IG-30: 8.906 \\
+    Tourism-Y    & sMAPE & \texttt{TW 10s td3 db3}         & $21.773 \pm 0.384$ & 2.0M  & 10 & IG-10$^*$: 22.180 \\
+    Weather-96   & MSE   & \texttt{TAE+DB3V3AE 30s ld8}    & $0.138 \pm 0.027$  & 7.1M  & 10 & IG-10: 0.183 \\
+    Milk         & sMAPE & \texttt{TALG+DB3V3ALG 10s}      & $1.512 \pm 0.572$  & 1.0M  & 10 & IG-10: 1.785 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The strongest cross-dataset statement is therefore conditional rather than absolute: structured wavelet bases are a better use of parameters on most tasks in the sweep, but the winning architecture changes with horizon, sampling protocol, and dataset size. Tourism also has a targeted result outside the 112-config sweep (\texttt{TrendWaveletAELG\_coif3\_eq\_bcast\_td3\_ld16}, sMAPE 20.864), so Table~\ref{tab:main_leaderboard} should not be read as a final Tourism SOTA claim.
+
+\subsection{Parameter-Efficiency Frontier}
+\label{sec:param_efficiency}
+
+Parameter efficiency is the most stable positive result and is the direct test of the central hypothesis stated in Section~\ref{sec:experimental_setup}. Table~\ref{tab:sub1m_frontier} isolates the best sub-1M M4 model for each paper-sample period. These models are not always winners --- especially on Weekly --- but they repeatedly sit close to the top of the leaderboard at one-tenth to one-fiftieth the parameter count. The clearest example is M4-Hourly: \texttt{TWAELG\_10s\_ld32\_db3\_agf} uses 0.85M parameters and trails the 43.6M \texttt{NBEATS-IG\_30s\_agf} reference by only 0.166 sMAPE.
+
+\begin{table}[t]
+  \caption{Best sub-1M M4 configurations under the paper-sample protocol. ``Gap'' is relative to the period winner in Table~\ref{tab:main_leaderboard}; ``Param ratio'' compares the period winner's parameter count with the compact model.}
+  \label{tab:sub1m_frontier}
+  \centering
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{llllrr}
+    \toprule
+    Period & Compact config & Params & sMAPE & Gap & Param ratio \\
+    \midrule
+    Yearly    & \texttt{TWAE 10s ld32 ag0}        & 0.48M & $13.546 \pm 0.102$ & +0.03\% & 32$\times$ \\
+    Quarterly & \texttt{TWAE 10s ld32 ag0}        & 0.49M & $10.404 \pm 0.028$ & +0.89\% & 40$\times$ \\
+    Monthly   & \texttt{TWAE 10s ld32 sym10}      & 0.58M & $13.513 \pm 0.378$ & +2.06\% & 12$\times$ \\
+    Weekly    & \texttt{TWAELG 10s ld32 db3}      & 0.54M & $7.252 \pm 0.263$  & +7.68\% & 29$\times$ \\
+    Daily     & \texttt{TWGAELG 10s ld16 db3}     & 0.52M & $3.051 \pm 0.049$  & +1.21\% & 10$\times$ \\
+    Hourly    & \texttt{TWAELG 10s ld32 db3 agf}$^*$ & 0.85M & $8.924 \pm 0.129$ & +1.89\% & 51$\times$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Stability and Ablations}
+\label{sec:depth_stability}
+
+The negative results are as important as the winners. First, overparameterized Generic stacks are unstable: \texttt{NBEATS-G\_30s\_ag0} (paper baseline group of Section~\ref{sec:experimental_setup}) has bimodal paper-sample behavior on M4-Quarterly ($15.40 \pm 9.97$), M4-Weekly ($8.78 \pm 4.61$), and M4-Daily ($10.21 \pm 12.01$), even though its best seeds can look competitive. TrendWavelet blocks do not show the same stuck-mode behavior. Second, the Milk sweep shows the small-data version of the same effect: RootBlock/Generic families have high divergence, while AE-family TrendWavelet models reduce divergence to the low single digits and give the reliable Milk winner in Table~\ref{tab:main_leaderboard}.
+
+The ablations support five practical rules; the underlying matched-seed Wilcoxon tables are listed in Appendix~\ref{app:ablations}.
+\begin{enumerate}
+\item \texttt{active\_g=forecast} is not a global default. It is decisive on M4-Hourly (9/9 matched pairs improve, 5 significant at $p<0.05$) and rescues some Generic convergence failures, but is worse or neutral elsewhere and harmful for Weather unified stacks.
+\item AE and AELG are statistically similar on M4 at matched configurations; AELG is preferred only when its smaller latent dimension is needed for parameter budget.
+\item Tiered basis offsets are strongest on paper-sample M4-Daily but regress on Weekly, so they belong to a Daily-specific recipe rather than the main default.
+\item Wavelet family matters across datasets, but the M4 shortlist reduces to \texttt{haar}, \texttt{db3}, \texttt{coif2}, and \texttt{sym10}; \texttt{coif3} has no per-period M4 SOTA and is dropped from the main defaults.
+\item Backbone preference reverses by data regime: RootBlock variants are strongest on M4 and Tourism, while AE variants lead on Weather and Milk.
+\end{enumerate}
+
+\subsection{NHiTS Transferability and Weather-Only Transfer}
+\label{sec:transfer_summary}
+
+The block interface transfers more cleanly than the hyperparameters. Re-running the curated NHiTS sweep of Section~\ref{sec:experimental_setup} on the NHiTS backbone~\citep{challu2023nhits}, we report Weather-96 / Weather long-horizon transfer as the primary transfer evidence; the matching Traffic horizons run under the same harness are deferred to Appendix~\ref{app:ablations} because their per-horizon variance is still settling and they do not yet alter the qualitative picture.
+
+The Weather NHiTS sweep yields four refined findings:
+\begin{enumerate}
+\item \emph{NHiTS-Generic is not the best use of the NHiTS stack.} TrendWavelet and BottleneckGenericAE/AELG families dominate the short-epoch Weather sweep when substituted for the vanilla NHiTS Generic blocks, while preserving the NHiTS pooling and hierarchical interpolation schedules.
+\item \emph{Horizon shifts the ranking.} Short-horizon NHiTS (H=96) favors unified \texttt{TrendWavelet} blocks, whereas long horizons (H=336, 720) favor \texttt{BottleneckGenericAE}. The same horizon-dependent reordering is visible on the partial Traffic sweep but is reported as supporting evidence only.
+\item \emph{NHiTS reorders the hyperparameter axes seen on N-BEATS.} \texttt{active\_g=forecast}, which is decisive on M4-Hourly under the doubly-residual N-BEATS stack, is neutral-to-negative across the NHiTS Weather benchmark.
+\item \emph{The strong VAE result is architecture-specific.} \texttt{TrendWaveletGenericVAE} is unexpectedly competitive in the NHiTS Weather sweep. We treat this as an NHiTS-specific observation rather than as evidence that VAE backbones generalize broadly --- pure VAE configurations remain excluded \emph{a priori} elsewhere on reproducibility grounds (Section~\ref{sec:limitations}).
+\end{enumerate}
+
+The cross-architecture takeaway is therefore narrow but genuine: structured wavelet bases and AE/AELG bottlenecks are useful reusable components even when removed from the N-BEATS doubly-residual schedule, but their optimal stack pattern, activation setting, latent dimension, and scheduler remain dataset- and architecture-dependent.
 
 
 \section{Limitations}
@@ -358,30 +444,8 @@ The architectural sweep is centered on the M4 benchmark; while we include Touris
 
 {
 \small
-
-\begin{thebibliography}{9}
-
-\bibitem[Challu et al.(2023)]{challu2023nhits}
-Challu, C., Olivares, K.G., Oreshkin, B.N., Ramirez, F.G., Canseco, M.M., \& Dubrawski, A.\ (2023)
-NHiTS: Neural Hierarchical Interpolation for Time Series Forecasting.
-\textit{Proceedings of the AAAI Conference on Artificial Intelligence}, 37(6):6989--6997.
-
-\bibitem[Hinton \& Salakhutdinov(2006)]{hinton2006reducing}
-Hinton, G.E.\ \& Salakhutdinov, R.R.\ (2006)
-Reducing the dimensionality of data with neural networks.
-\textit{Science}, 313(5786):504--507.
-
-\bibitem[Makridakis et al.(2020)]{makridakis2020m4}
-Makridakis, S., Spiliotis, E., \& Assimakopoulos, V.\ (2020)
-The M4 Competition: 100{,}000 time series and 61 forecasting methods.
-\textit{International Journal of Forecasting}, 36(1):54--74.
-
-\bibitem[Oreshkin et al.(2020)]{oreshkin2020nbeats}
-Oreshkin, B.N., Carpov, D., Chapados, N., \& Bengio, Y.\ (2020)
-N-BEATS: Neural Basis Expansion Analysis for Interpretable Time Series Forecasting.
-\textit{International Conference on Learning Representations (ICLR)}.
-
-\end{thebibliography}
+\bibliographystyle{plainnat}
+\bibliography{references}
 }
 
 
@@ -423,8 +487,266 @@ All other settings (sampling, $L_h$, batch size, step budget, sub-epoch validati
 The N-BEATS paper reports a single training procedure, so any one-protocol comparison conflates the architectural change with whatever artifacts that specific schedule introduces on the new architecture. By running each architecture under both A.1 (faithful) and A.2 (plateau) we can attribute observed gains to one of three categories. (i) Gains under both protocols are robust evidence for the architectural claim. (ii) Gains under the faithful protocol only constitute a head-to-head replacement for the published baseline. (iii) Gains under the plateau protocol only are a finding contingent on a more responsive LR schedule, which we report as such rather than as a clean architectural win.
 
 
-\section{Hyperparameter grids}
+\section{Hyperparameters and Empirical Defaults}
 \label{app:hyperparams}
+
+This appendix is the single reference for every hyperparameter exposed by the \texttt{lightningnbeats} model classes used in this paper. For each hyperparameter we report (i) the constructor default in the released package, (ii) the value used in the M4 sweeps reported in Section~\ref{sec:results}, (iii) the swept range when applicable, and (iv) the empirical recommendation that came out of those sweeps. Recommendations are M4-only; out-of-distribution dataset deltas (Tourism, Traffic, Weather, Milk) are summarized in Section~\ref{sec:experimental_setup} and not repeated here. Reproducibility pointers to canonical CSVs and YAML configs are collected in Section~\ref{app:hyperparams:repro}.
+
+\subsection{Code defaults vs paper-sweep values}
+\label{app:hyperparams:defaults}
+
+Table~\ref{tab:hyperparams_defaults} enumerates every keyword argument of \texttt{NBeatsNet.\_\_init\_\_} (\texttt{src/lightningnbeats/models.py}, lines 88--313). The constructor defaults define the released package surface; the paper-sweep column lists the value or grid actually used in the experiments of Section~\ref{sec:experimental_setup}. Where the paper-sweep value disagrees with the constructor default --- most notably \texttt{share\_weights} --- the override is documented at Appendix~\ref{app:protocols} (see ``Other settings'').
+
+\begin{table}[h]
+\centering
+\small
+\caption{N-BEATS / lightningnbeats hyperparameters: constructor defaults and the values used in this paper's M4 sweeps.}
+\label{tab:hyperparams_defaults}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Parameter & Constructor default & Paper sweep value (M4) \\
+\midrule
+\multicolumn{3}{l}{\textit{Optimization (\texttt{\_NBeatsBase})}} \\
+\texttt{loss} & \texttt{SMAPELoss} & \texttt{SMAPELoss} \\
+\texttt{optimizer\_name} & \texttt{Adam} & \texttt{Adam} ($\beta_1{=}0.9$, $\beta_2{=}0.999$) \\
+\texttt{learning\_rate} & $10^{-3}$ & $10^{-3}$ \\
+\texttt{sum\_losses} & \texttt{False} & \texttt{False} \\
+\texttt{kl\_weight} & $10^{-3}$ & $0.1$ for VAE families only \\
+\midrule
+\multicolumn{3}{l}{\textit{Stack composition (\texttt{NBeatsNet})}} \\
+\texttt{stack\_types} & \emph{required} & per-config (Section~\ref{sec:experimental_setup}) \\
+\texttt{n\_blocks\_per\_stack} & $1$ & $1$ \\
+\texttt{share\_weights} & \texttt{False} & \texttt{True} (paper-sample, Appendix~\ref{app:protocols}) \\
+\texttt{active\_g} & \texttt{False} & swept over $\{\text{\texttt{False}},\,\text{\texttt{'forecast'}}\}$ \\
+\midrule
+\multicolumn{3}{l}{\textit{Block widths}} \\
+\texttt{g\_width} & $512$ & $512$ \\
+\texttt{s\_width} & $2048$ & $2048$ \\
+\texttt{t\_width} & $256$ & $256$ \\
+\texttt{ae\_width} & $512$ & $512$ \\
+\midrule
+\multicolumn{3}{l}{\textit{Block-level priors}} \\
+\texttt{latent\_dim} & $5$ & swept $\{8, 16, 32\}$ \\
+\texttt{basis\_dim} & $32$ & set per-period via \texttt{eq\_fcast} or \texttt{2}$\,\cdot\,$\texttt{eq\_fcast} \\
+\texttt{forecast\_basis\_dim} & \texttt{None} & not used on M4 \\
+\texttt{trend\_thetas\_dim} & $3$ & swept $\{3, 5\}$ \\
+\texttt{wavelet\_type} & \texttt{db3} & swept $\{\text{haar},\,\text{db3},\,\text{coif2},\,\text{sym10}\}$ \\
+\texttt{backcast\_wavelet\_type} & \texttt{None} & not used on M4 (Traffic-96 only) \\
+\texttt{forecast\_wavelet\_type} & \texttt{None} & not used on M4 (Traffic-96 only) \\
+\midrule
+\multicolumn{3}{l}{\textit{Cross-stack residuals}} \\
+\texttt{skip\_distance} & $0$ & $0$ \\
+\texttt{skip\_alpha} & $0.1$ & not exercised on M4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Lookback and forecast multiplier.} For all M4 cells we use $L = 5H$ (\texttt{forecast\_multiplier=5}). The paper-sample protocol additionally clamps the valid sampling window to the trailing $L_h \cdot H$ time steps with $L_h = 1.5$ on Yearly/Quarterly and $L_h = 10$ elsewhere; see Appendix~\ref{app:protocols}.
+
+\subsection{Architectural sweep grids}
+\label{app:hyperparams:grids}
+
+Table~\ref{tab:sweep_grids} lays out the grid actually executed for each block family in the 112-config Comprehensive Sweep (sliding) and the curated 53-config subset (paper-sample MultiStepLR + plateau). Block-family abbreviations match Section~\ref{sec:experimental_setup}: \texttt{T+W} = alternating \texttt{Trend} + \texttt{WaveletV3} (RootBlock), \texttt{T+W AELG} = alternating \texttt{TrendAELG} + \texttt{WaveletV3AELG}, \texttt{TW} = unified \texttt{TrendWavelet} block, \texttt{TWAE}/\texttt{TWAELG} = unified \texttt{TrendWaveletAE}/\texttt{TrendWaveletAELG}, \texttt{TWGAELG} = \texttt{TrendWaveletGenericAELG}.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Hyperparameter grids per block family. ``--'' means the parameter does not apply to the family.}
+\label{tab:sweep_grids}
+\begin{tabular}{@{}llllllll@{}}
+\toprule
+Family & $n_\text{stacks}$ & wavelet & \texttt{trend\_thetas\_dim} & \texttt{basis\_dim} & \texttt{latent\_dim} & \texttt{active\_g} & \texttt{share\_weights} \\
+\midrule
+\texttt{NBEATS-G}    & $\{10, 30\}$ & --    & --    & --    & --    & $\{\text{F},\,\text{f}\}$ & \texttt{True} \\
+\texttt{NBEATS-IG}   & $\{10, 30\}$ & --    & $3$   & --    & --    & $\{\text{F},\,\text{f}\}$ & \texttt{True} \\
+\texttt{TW}          & $\{10, 30\}$ & shortlist & $\{3, 5\}$ & $\{\text{eq},\,2{\cdot}\text{eq}\}$ & --   & \texttt{F} & \texttt{True} \\
+\texttt{T+W} (RB)    & $\{10, 30\}$ & shortlist & $3$ & $\{\text{eq},\,2{\cdot}\text{eq}\}$ & -- & $\{\text{F},\,\text{f}\}$ & \texttt{True} \\
+\texttt{T+W AELG}    & $\{10, 30\}$ & shortlist & $3$ & \texttt{eq} & $\{16, 32\}$ & $\{\text{F},\,\text{f}\}$ & \texttt{True} \\
+\texttt{TWAE}        & $10$ & shortlist & $3$ & \texttt{eq} & $\{8, 16, 32\}$ & $\{\text{F},\,\text{f}\}$ & \texttt{True} \\
+\texttt{TWAELG}      & $10$ & shortlist & $3$ & \texttt{eq} & $\{16, 32\}$ & $\{\text{F},\,\text{f}\}$ & \texttt{True} \\
+\texttt{TWGAELG}     & $10$ & shortlist & $3$ & \texttt{eq} & $\{16, 32\}$ & $\{\text{F},\,\text{f}\}$ & \texttt{True} \\
+\bottomrule
+\end{tabular}
+\\[0.3em]
+\textit{Wavelet shortlist:} $\{\text{haar},\,\text{db3},\,\text{coif2},\,\text{sym10}\}$. \quad \textit{$\text{eq} \equiv \text{forecast\_length}$.} \quad
+$\text{F} \equiv$ \texttt{False}, $\text{f} \equiv$ \texttt{'forecast'}.
+\end{table}
+
+\paragraph{Wavelet basis implementation.} For each target length $T \in \{L, H\}$, \texttt{\_WaveletGeneratorV3} (\texttt{src/lightningnbeats/blocks/blocks.py:2621}) builds a raw synthesis matrix of size $T \times T$ by reconstructing each unit impulse in each DWT coefficient band through \texttt{pywt.waverec}. The decomposition level is $\min(L_{\max}, 5)$, where $L_{\max}=\texttt{pywt.dwt\_max\_level}(T,\,\texttt{dec\_len})$; when $L_{\max}=0$ (filter longer than target), we keep level $0$ rather than forcing a boundary-corrupted level-$1$ decomposition. The raw matrix is then SVD-orthogonalized: rows of $V^\top$ form an orthonormal basis ordered low-to-high frequency by singular value. \texttt{basis\_offset} chooses the starting row and \texttt{basis\_dim} the row count, so a stack at offset $\ell\,\Delta$ with width $k$ uses $V^\top[\ell\,\Delta:\ell\,\Delta+k,\;:]$. The result is registered as a non-trainable buffer; inference is a single \texttt{matmul}.
+
+\subsection{Training-protocol hyperparameters (sliding)}
+\label{app:hyperparams:sliding}
+
+The faithful and plateau paper-sample variants are documented in Appendix~\ref{app:protocols}. The sliding-window protocol used by the Comprehensive Sweep (\texttt{experiments/configs/comprehensive\_sweep\_m4.yaml}) is: epoch-based training with sMAPE loss, Adam at $10^{-3}$, batches drawn by sliding the lookback over each series; \texttt{max\_epochs}$=75$, \texttt{min\_epochs}$=10$, early-stop \texttt{patience}$=20$ with $\Delta_{\min}=10^{-3}$; cosine annealing with a $15$-epoch linear warmup down to $\eta_{\min}=10^{-6}$. Sub-epoch validation is not required under sliding because the per-epoch validation pass is on the natural held-out tail of each series.
+
+\subsection{Per-period recommendations}
+\label{app:hyperparams:perperiod}
+
+Sections~\ref{app:hyperparams:lr}--\ref{app:hyperparams:wavelet} are the empirical findings that came out of the sweeps in Section~\ref{sec:results}. Numbers are taken verbatim from the meta-analysis report \texttt{experiments/analysis/analysis\_reports/m4\_overall\_leaderboard\_2026-05-03.md}; absolute sMAPE is not comparable across protocols.
+
+\subsubsection{LR scheduler by period and protocol}
+\label{app:hyperparams:lr}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Recommended LR scheduler per (period, protocol). Plateau $\equiv$ \texttt{ReduceLROnPlateau} with $\text{patience}=3$ val-check units, $\text{factor}=0.5$, $\text{cooldown}=1$, $\text{min\_lr}=10^{-6}$. Step-paper $\equiv$ MultiStepLR with $10$ evenly spaced milestones, $\gamma=0.5$. Cosine-warmup $\equiv$ $15$-epoch linear warmup then cosine annealing to $\eta_{\min}=10^{-6}$.}
+\label{tab:lr_per_period}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Period & Paper-sample (\texttt{nbeats\_paper}) & Sliding \\
+\midrule
+Yearly    & step-paper (neutral; either works) & cosine-warmup \\
+Quarterly & \textbf{plateau} ($\Delta_{\text{step}\to\text{plateau}}=-0.029$, $n=30$) & cosine-warmup \\
+Monthly   & \textbf{plateau} ($\Delta=-0.089$, median $-0.198$, $n=18$) & cosine-warmup \\
+Weekly    & step-paper (plateau regresses by $+0.20$ at $n=10$, locked out) & cosine-warmup \\
+Daily     & \textbf{plateau} ($\Delta=-0.028$, $n=13$) & cosine-warmup \\
+Hourly    & step-paper (head-to-head against plateau not yet run on novel families) & cosine-warmup \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Mandatory.} Plateau LR on \texttt{nbeats\_paper} requires sub-epoch validation: \texttt{val\_check\_interval=100}, \texttt{patience=20} val-check units, $\Delta_{\min}=10^{-3}$. Without these, early stopping fires on the first warmup-corrupted check and collapses to \texttt{best\_epoch} $\in \{0, 1\}$ (Appendix~\ref{app:protocols}).
+
+\subsubsection{Sampling protocol verdict per period}
+\label{app:hyperparams:sampling}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Sampling-protocol verdict per M4 period. $\Delta = \text{sliding} - \text{paper-sample}$ on the best config for each protocol; negative $\Delta$ favors sliding. Absolute sMAPE within a row is not comparable across protocols (Appendix~\ref{app:protocols}).}
+\label{tab:protocol_per_period}
+\begin{tabular}{@{}llllll@{}}
+\toprule
+Period & $H$ & Best sliding sMAPE & Best paper-sample sMAPE & $\Delta$ & Winner \\
+\midrule
+Yearly    & $6$  & $13.499$ & $13.542$ & $\approx 0$ & tie \\
+Quarterly & $8$  & $10.127$ & $10.313$ & $-0.19$ & \textbf{sliding} \\
+Monthly   & $18$ & $13.279$ & $13.240$ & $+0.04$ & paper-sample \\
+Weekly    & $13$ & $\phantom{0}6.671$ & $\phantom{0}6.735$ & $-0.06$ & sliding \\
+Daily     & $14$ & $\phantom{0}2.588$ & $\phantom{0}3.012$ & $\mathbf{-0.42}$ & \textbf{sliding} \\
+Hourly    & $48$ & $\phantom{0}8.587$ & $\phantom{0}8.758$ & $-0.17$ & \textbf{sliding} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For paper-faithful comparison to \citet{oreshkin2020nbeats} we report paper-sample numbers in the main body. For absolute-sMAPE leaderboards on long-horizon periods (Daily, Hourly, Quarterly), sliding is the stronger protocol. We never mix the two within a leaderboard.
+
+\subsubsection{Wavelet family per period}
+\label{app:hyperparams:wavelet}
+
+The shortlist $\{\text{haar},\,\text{db3},\,\text{coif2},\,\text{sym10}\}$ is the M4 default. \texttt{coif3} is dropped because it produced no per-period SOTA in either protocol despite being tested. Per-period leaders are summarized in Table~\ref{tab:wavelet_per_period}. The cross-period generalist under paper-sample is \texttt{sym10} (configuration \texttt{T+Sym10V3\_10s\_tiered\_ag0}, mean rank $13.33/108$); under sliding it is \texttt{haar} (\texttt{T+HaarV3\_30s\_bd2eq}, mean rank $12.7/112$).
+
+\begin{table}[h]
+\centering
+\small
+\caption{Best wavelet family per M4 period within the shortlist. Paper-sample uses the LR scheduler from Table~\ref{tab:lr_per_period}; sliding uses cosine-warmup throughout.}
+\label{tab:wavelet_per_period}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Period & Paper-sample best wavelet & Sliding best wavelet \\
+\midrule
+Yearly    & db3 / coif2 (within seed noise)         & coif2 \\
+Quarterly & sym10 (paper baseline NBEATS-IG wins overall) & sym10 / haar \\
+Monthly   & sym10 (unified TW)                      & coif2 (unified TW) \\
+Weekly    & coif2 (alternating T+W)                 & db3 (alternating T+W) \\
+Daily     & sym10 (tiered)                          & paper baseline (NBEATS-G) \\
+Hourly    & sym10 (tiered) or paper baseline        & paper baseline (NBEATS-IG) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Block-level recommendations}
+\label{app:hyperparams:block}
+
+The following compact rules summarize the empirical findings for each block-level hyperparameter on M4. Each rule is sourced from the meta-analysis report and the sweep CSVs in \texttt{experiments/results/m4/}.
+
+\paragraph{\texttt{basis\_dim}.} Use the label \texttt{eq\_fcast}, i.e.\ $k = H$, as the default. At convergence (R3, $\geq 50$ epochs equivalent) the spread between \texttt{eq\_fcast}, \texttt{lt\_bcast}, and \texttt{eq\_bcast} is $<0.014$ sMAPE on M4-Yearly across $14$ wavelet families and three datasets; the apparent advantage of larger labels at $10$ epochs is a convergence-speed artifact. Avoid \texttt{lt\_fcast} for $H \le 8$ ($0\%$ R3 survival on M4-Yearly in the AELG sweep). For unified \texttt{TrendWavelet} blocks the basis-dim sensitivity is higher (spread $0.37$ sMAPE), so \texttt{eq\_fcast} is even more critical there.
+
+\paragraph{\texttt{latent\_dim}.} For \texttt{AERootBlockLG}-backed blocks (\texttt{TWAELG}, \texttt{TAELG+WV3AELG}, etc.), \texttt{latent\_dim}$=16$ is the default ($n\geq 600$ runs, $p<0.02$ vs $32$ on both M4-Yearly and Tourism-Yearly). For plain \texttt{AERootBlock}, \texttt{latent\_dim}$\in\{5, 8\}$ are statistically equivalent (Mann--Whitney $p=0.71$, $n=330$ each); \texttt{latent\_dim}$=2$ is catastrophically underparameterized ($p<3\times 10^{-20}$ vs $\{5, 8\}$). The unified \texttt{TrendWaveletAELG} block prefers \texttt{latent\_dim}$=16$, with one known catastrophic combination: \texttt{db4} + \texttt{eq\_fcast} + \texttt{latent\_dim}$=16$ (sMAPE $\sim 76$); \texttt{db4} at \texttt{latent\_dim}$=8$ or with other basis-dim labels is fine.
+
+\paragraph{\texttt{trend\_thetas\_dim}.} Use $3$ for $H \le 10$ and $5$ for $H \ge 50$. Significant on Tourism-Yearly ($H=4$, $p=0.008$, ttd$=3$) and on Weather-96 ($H=96$, $p=0.042$, ttd$=5$) at convergence. Mid-horizon crossover (Monthly $H=18$, Weekly $H=13$, Daily $H=14$) defaults to $3$ on insufficient evidence. The earlier ``always ttd$=3$'' finding was a $10$-epoch convergence-speed artifact on Weather, reversed at $50$ epochs.
+
+\paragraph{Trend backbone hierarchy.} On M4 the ordering is RootBlock $>$ AELG $>$ AE for alternating Trend+Wavelet stacks. The plain AE bottleneck homogenizes wavelet-family signal in alternating configurations ($\eta^2 = 0.003$, ns) and is not viable; the learned gate in AELG restores competitiveness. On Weather-96 and Milk this hierarchy reverses (AE $>$ AELG, Mann--Whitney $p=0.036$ on Weather), but those datasets are out of scope for this appendix.
+
+\paragraph{Block ordering.} Always place \texttt{Trend*} stacks before \texttt{Wavelet*}, \texttt{Generic*}, or \texttt{Seasonality*} stacks. In the VAE2 study (M4-Yearly + Weather-96) every significantly-different ordering pair --- including one Bonferroni-significant pair on M4 (Cohen's $r=0.83$) --- favored Trend-first; no pair favored the reverse. For VAE-family backbones, reversing the order can $2{-}3\times$ the OWA. Treat this as a fixed convention, not a hyperparameter to search.
+
+\paragraph{TrendWavelet vs alternating T+W.} Under paper-sample protocol on M4, alternating $T{+}\langle\text{wav}\rangle$V3 (RootBlock) beats unified \texttt{TrendWavelet} by $\approx 10$ mean-rank points ($14.1$ vs $24.3$ across $53$ configs $\times 6$ periods). Default to alternating when $\geq 15$M parameters is acceptable. Reserve unified \texttt{TrendWavelet} (or its AE/AELG variants) for parameter-constrained scenarios: \texttt{TWAELG\_10s\_ld32\_db3} achieves $0.48$--$0.85$M parameters and top-$5$ on Yearly, Daily, and Hourly. Plateau LR has flipped the Monthly winner to unified \texttt{TW\_30s\_td3\_bdeq\_sym10} ($13.240$); on every other period alternating is at least co-optimal.
+
+\paragraph{\texttt{active\_g}.} The constructor default \texttt{False} (paper-faithful, abbreviated \texttt{ag0}) is the robust choice on M4. \texttt{active\_g}$=$\texttt{'forecast'} (\texttt{agf}) helps on Hourly only --- every paper backbone gains $0.07$--$0.15$ sMAPE there --- and ties or loses on every other period. \texttt{active\_g} is a \texttt{lightningnbeats} extension and is not part of the original N-BEATS architecture: configurations marked \texttt{ag0} are paper-faithful, configurations marked \texttt{agf} apply the extension and are not strictly comparable to \citet{oreshkin2020nbeats}.
+
+\paragraph{Other ablations (not exercised on M4).} \texttt{skip\_distance} (cross-stack residual injection) never helps on M4 in the configurations tested and slightly hurts deep stacks; \texttt{sum\_losses} adds a backcast-reconstruction term ($0.25 \cdot \mathrm{sMAPE}(\hat{x}, 0)$) and is reserved for the convergence study reported in Appendix~\ref{app:ablations}. Both default to off in this paper.
+
+\subsection{Drop list}
+\label{app:hyperparams:drop}
+
+Configurations excluded \emph{a priori} from the curated paper-sample subset and from any paper-headline leaderboard. Each is supported by at least one CSV in \texttt{experiments/results/m4/}.
+
+\begin{itemize}\itemsep -1pt
+\item \textbf{BottleneckGeneric family} (\texttt{BNG*}, \texttt{BNAE*}, \texttt{BNAELG*}): universally worst on M4.
+\item \textbf{Pure VAE configs} (\texttt{GenericVAE\_3s\_sw0}, etc.): mean sMAPE $55$--$68$ on Q/M/W/D, unusable.
+\item \textbf{\texttt{NBEATS-G\_30s\_ag0} on Q/W/M}: bimodal collapse, sMAPE std $7.4$--$9.5$.
+\item \textbf{All \texttt{*\_sd5} variants} (\texttt{skip\_distance}$=5$): never help on M4.
+\item \textbf{All \texttt{*\_coif3} variants on M4}: no per-period SOTA across either protocol.
+\item \textbf{\texttt{\_30s\_agf} tiered configs at \texttt{\_10s} depth}: run-to-run divergence outliers.
+\item \textbf{Step-paper LR on Q/M/D}: dominated by plateau LR (Table~\ref{tab:lr_per_period}).
+\item \textbf{Pure \texttt{GenericAE\_*}, \texttt{GenericAELG\_*}}: bottoms out at mean rank $\approx 38$.
+\end{itemize}
+
+\subsection{Quick-pick decision table}
+\label{app:hyperparams:quickpick}
+
+Table~\ref{tab:quickpick} is the per-period recipe to copy into a YAML config for a new M4 experiment. Each row reproduces the per-period top cell of the appropriate leaderboard (paper-sample if the column says \texttt{nbeats\_paper}, sliding otherwise) from \texttt{m4\_overall\_leaderboard\_2026-05-03.md}.
+
+\begin{table}[h]
+\centering
+\scriptsize
+\caption{Best M4 configuration per (period, protocol). All cells are $n=10$ unless noted. ``ttd'' = \texttt{trend\_thetas\_dim}; ``ld'' = \texttt{latent\_dim}; ``bd'' = \texttt{basis\_dim} label; ``\texttt{ag}'' = \texttt{active\_g} (\texttt{0} = \texttt{False}, \texttt{f} = \texttt{'forecast'}).}
+\label{tab:quickpick}
+\begin{tabular}{@{}llllllllllr@{}}
+\toprule
+Period & Protocol & LR & Block family / config & Depth & Wavelet & ttd & bd & ld & ag & sMAPE \\
+\midrule
+Yearly    & paper-sample & plateau    & \texttt{T+Coif2V3} (RB)             & $30$ & coif2 & $3$ & \texttt{eq}    & --   & 0 & $13.542$ \\
+Quarterly & paper-sample & plateau    & \texttt{NBEATS-IG}                  & $10$ & --    & $3$ & --             & --   & 0 & $10.313$ \\
+Monthly   & paper-sample & plateau    & \texttt{TW} (unified)               & $30$ & sym10 & $3$ & \texttt{eq}    & --   & 0 & $13.240$ \\
+Weekly    & paper-sample & step-paper & \texttt{T+Coif2V3} (RB)             & $30$ & coif2 & $3$ & \texttt{eq}    & --   & 0 & $\phantom{0}6.735$ \\
+Daily     & paper-sample & plateau    & \texttt{T+Sym10V3} (RB, tiered)     & $10$ & sym10 & $3$ & \texttt{eq}    & --   & 0 & $\phantom{0}3.012$ \\
+Hourly    & paper-sample & step-paper & \texttt{NBEATS-IG}                  & $30$ & --    & $3$ & --             & --   & f & $\phantom{0}8.758$ \\
+\midrule
+Yearly    & sliding      & cos-warmup & \texttt{TW} (unified)               & $10$ & coif2 & $3$ & \texttt{eq}    & --   & 0 & $13.499$ \\
+Quarterly & sliding      & cos-warmup & \texttt{NBEATS-IG}                  & $10$ & --    & $3$ & --             & --   & 0 & $10.127$ \\
+Monthly   & sliding      & cos-warmup & \texttt{TW} (unified)               & $30$ & coif2 & $3$ & \texttt{2eq}   & --   & 0 & $13.279$ \\
+Weekly    & sliding      & cos-warmup & \texttt{T+Db3V3} (RB)               & $30$ & db3   & $3$ & \texttt{eq}    & --   & 0 & $\phantom{0}6.671$ \\
+Daily     & sliding      & cos-warmup & \texttt{NBEATS-G}                   & $30$ & --    & --  & --             & --   & 0 & $\phantom{0}2.588$ \\
+Hourly    & sliding      & cos-warmup & \texttt{NBEATS-IG}                  & $30$ & --    & $3$ & --             & --   & f & $\phantom{0}8.587$ \\
+\midrule
+\multicolumn{11}{l}{\textit{Sub-1M parameter champions (paper-sample):}} \\
+Yearly    & paper-sample & plateau & \texttt{TWAE\_10s\_ld32}             & $10$ & db3   & $3$ & \texttt{eq} & $32$ & 0 & $13.546$ \\
+Daily     & paper-sample & plateau & \texttt{TWGAELG\_10s\_ld16\_db3}     & $10$ & db3   & $3$ & \texttt{eq} & $16$ & 0 & $\phantom{0}3.051$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Cross-period generalists}
+\label{app:hyperparams:generalist}
+
+When a single configuration must run across all six M4 periods (cross-period reporting, ensemble bases, ablation harnesses), three configurations dominate by mean per-period rank:
+
+\begin{itemize}\itemsep -1pt
+\item \textbf{Paper-sample, all-6-period coverage:} \texttt{T+Sym10V3\_10s\_tiered\_ag0}, mean rank $13.33/108$, $5.07$--$6.06$M parameters; top-$11$ on every M4 period.
+\item \textbf{Paper-sample, paper-faithful alternative:} \texttt{NBEATS-IG\_30s\_ag0}, mean rank $16.0/68$, $38$--$44$M parameters. Use when reproducing \citet{oreshkin2020nbeats} or when zero divergence is required.
+\item \textbf{Sliding, all-6-period coverage:} \texttt{T+HaarV3\_30s\_bd2eq}, mean rank $12.7/112$, $16.25$M parameters; smaller alternative \texttt{TALG+HaarV3ALG\_30s\_ag0} ($3.66$M, mean rank $21.0$).
+\end{itemize}
+
+\subsection{Reproducibility}
+\label{app:hyperparams:repro}
+
+\paragraph{Canonical CSVs (\texttt{experiments/results/m4/}).} Paper-sample (step-paper LR): \texttt{comprehensive\_m4\_paper\_sample\_results.csv}, \texttt{comprehensive\_m4\_paper\_sample\_sym10\_fills\_results.csv}, \texttt{tiered\_offset\_m4\_allperiods\_paperlr\_results.csv}, \texttt{m4\_hourly\_sym10\_tiered\_offset\_paperlr\_results.csv}. Paper-sample (plateau LR): \texttt{comprehensive\_m4\_paper\_sample\_plateau\_results.csv}, \texttt{tiered\_offset\_m4\_allperiods\_results.csv}, \texttt{m4\_hourly\_sym10\_tiered\_offset\_results.csv}. Sliding: \texttt{comprehensive\_sweep\_m4\_results.csv}.
+
+\paragraph{Canonical analysis.} Meta-leaderboard at \texttt{experiments/analysis/analysis\_reports/m4\_overall\_leaderboard\_2026-05-03.md}, regenerable from \texttt{experiments/analysis/scripts/m4\_overall\_leaderboard.py}. The strict health filter \texttt{diverged $\lor$ smape$>$100 $\lor$ (best\_epoch$=$0 $\land$ smape$>$50) $\lor$ smape NaN} is applied to every cell.
+
+\paragraph{Canonical YAML configs (\texttt{experiments/configs/}).} Paper-sample faithful: \texttt{comprehensive\_m4\_paper\_sample.yaml}. Paper-sample plateau: \texttt{comprehensive\_m4\_paper\_sample\_plateau.yaml}. Sliding: \texttt{comprehensive\_sweep\_m4.yaml}. Tiered: \texttt{tiered\_offset\_m4\_allperiods.yaml} (and \texttt{m4\_hourly\_sym10\_tiered\_offset.yaml} for the dedicated Hourly file).
 
 \section{Configuration list}
 \label{app:configs}

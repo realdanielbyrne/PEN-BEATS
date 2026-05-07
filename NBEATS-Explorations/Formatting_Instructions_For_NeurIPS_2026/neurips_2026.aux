@@ -7,7 +7,13 @@
 \@writefile{toc}{\contentsline {section}{\numberline {1}Introduction and Prior Work}{1}{section.1}\protected@file@percent }
 \newlabel{sec:intro}{{1}{1}{Introduction and Prior Work}{section.1}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Introduction}{1}{subsection.1.1}\protected@file@percent }
+\citation{mallat1989wavelet,daubechies1992ten}
+\citation{zhou2025wavets}
+\citation{deznabi2023multiwave}
+\citation{sasal2022wtransformers}
+\citation{pramanick2024fusion}
 \citation{hinton2006reducing}
+\citation{vincent2008denoising}
 \def\@LN@column{1}
 \@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Wavelets}{2}{subsection.1.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Autoencoders}{2}{subsection.1.3}\protected@file@percent }
@@ -19,12 +25,12 @@
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.1}RootBlock}{3}{subsubsection.2.1.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.2}AERootBlock}{3}{subsubsection.2.1.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.3}AERootBlockLG}{3}{subsubsection.2.1.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.4}Parameter efficiency}{3}{subsubsection.2.1.4}\protected@file@percent }
 \def\@LN@column{1}
 \@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Backbone architecture comparison.}}{4}{table.1}\protected@file@percent }
 \newlabel{tab:backbones}{{1}{4}{Backbone architecture comparison}{table.1}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Backbone parameter counts at default widths ($L = 480$).}}{4}{table.2}\protected@file@percent }
 \newlabel{tab:param-counts}{{2}{4}{Backbone parameter counts at default widths ($L = 480$)}{table.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.1.4}Parameter efficiency}{4}{subsubsection.2.1.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Branch-specific encoder-decoder designs}{4}{subsection.2.2}\protected@file@percent }
 \def\@LN@column{1}
 \@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Single-trunk vs.\ branch-specific AE designs.}}{5}{table.3}\protected@file@percent }
@@ -43,51 +49,138 @@
 \@writefile{toc}{\contentsline {section}{\numberline {3}Experimental Setup}{6}{section.3}\protected@file@percent }
 \newlabel{sec:experimental_setup}{{3}{6}{Experimental Setup}{section.3}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Datasets}{6}{subsection.3.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Training Protocols}{6}{subsection.3.2}\protected@file@percent }
 \citation{oreshkin2020nbeats}
 \citation{oreshkin2020nbeats}
 \def\@LN@column{1}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Training Protocols}{7}{subsection.3.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Sliding-Window Protocol}{7}{section*.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{N-BEATS Paper-Sampling Protocol, faithful replication}{7}{section*.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{N-BEATS Paper-Sampling Protocol, plateau LR variant}{7}{section*.5}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Seeds and statistics.}{7}{section*.6}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Architecture Sweep}{7}{subsection.3.3}\protected@file@percent }
 \citation{challu2023nhits}
+\citation{oreshkin2020nbeats}
+\citation{oreshkin2020nbeats}
 \def\@LN@column{1}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Ablation: \texttt  {active\_g}}{8}{subsection.3.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.5}NHiTS Transferability}{8}{subsection.3.5}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {4}Results}{8}{section.4}\protected@file@percent }
 \newlabel{sec:results}{{4}{8}{Results}{section.4}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5}Limitations}{8}{section.5}\protected@file@percent }
-\newlabel{sec:limitations}{{5}{8}{Limitations}{section.5}{}}
-\bibcite{challu2023nhits}{{1}{2023}{{Challu et al.}}{{}}}
-\bibcite{hinton2006reducing}{{2}{2006}{{Hinton \& Salakhutdinov}}{{}}}
-\bibcite{makridakis2020m4}{{3}{2020}{{Makridakis et al.}}{{}}}
-\bibcite{oreshkin2020nbeats}{{4}{2020}{{Oreshkin et al.}}{{}}}
 \citation{oreshkin2020nbeats}
 \citation{oreshkin2020nbeats}
 \def\@LN@column{1}
-\@writefile{toc}{\contentsline {section}{\numberline {A}Paper-Sample Protocol Details}{9}{appendix.A}\protected@file@percent }
-\newlabel{app:protocols}{{A}{9}{Paper-Sample Protocol Details}{appendix.A}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}Faithful replication (MultiStepLR)}{9}{subsection.A.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Sampling.}{9}{section*.9}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Optimization.}{9}{section*.10}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Learning-rate schedule.}{9}{section*.11}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Validation and early stopping.}{9}{section*.12}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Other settings.}{9}{section*.13}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Protocol-local winners used for the main comparison. M4 rows use the paper-sample protocol; Tourism, Weather, and Milk use their comprehensive-sweep protocols. Scores are mean $\pm $ std over the surviving seeds. Asterisks mark \texttt  {active\_g=forecast}, which is not part of the original N-BEATS paper~\citep  {oreshkin2020nbeats}.}}{9}{table.5}\protected@file@percent }
+\newlabel{tab:main_leaderboard}{{5}{9}{Protocol-local winners used for the main comparison. M4 rows use the paper-sample protocol; Tourism, Weather, and Milk use their comprehensive-sweep protocols. Scores are mean $\pm $ std over the surviving seeds. Asterisks mark \texttt {active\_g=forecast}, which is not part of the original N-BEATS paper~\citep {oreshkin2020nbeats}}{table.5}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Best sub-1M M4 configurations under the paper-sample protocol. ``Gap'' is relative to the period winner in Table~\ref {tab:main_leaderboard}; ``Param ratio'' compares the period winner's parameter count with the compact model.}}{9}{table.6}\protected@file@percent }
+\newlabel{tab:sub1m_frontier}{{6}{9}{Best sub-1M M4 configurations under the paper-sample protocol. ``Gap'' is relative to the period winner in Table~\ref {tab:main_leaderboard}; ``Param ratio'' compares the period winner's parameter count with the compact model}{table.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Per-Period Leaderboards}{9}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:m4_leaderboards}{{4.1}{9}{Per-Period Leaderboards}{subsection.4.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Parameter-Efficiency Frontier}{9}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:param_efficiency}{{4.2}{9}{Parameter-Efficiency Frontier}{subsection.4.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Stability and Ablations}{9}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:depth_stability}{{4.3}{9}{Stability and Ablations}{subsection.4.3}{}}
+\citation{challu2023nhits}
+\bibstyle{plainnat}
+\bibdata{references}
 \def\@LN@column{1}
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Plateau LR variant (ReduceLROnPlateau)}{10}{subsection.A.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Learning-rate schedule.}{10}{section*.14}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Effect.}{10}{section*.15}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.3}Why two paper-sample protocols}{10}{subsection.A.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {B}Hyperparameter grids}{10}{appendix.B}\protected@file@percent }
-\newlabel{app:hyperparams}{{B}{10}{Hyperparameter grids}{appendix.B}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {C}Configuration list}{10}{appendix.C}\protected@file@percent }
-\newlabel{app:configs}{{C}{10}{Configuration list}{appendix.C}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {D}Additional ablations}{10}{appendix.D}\protected@file@percent }
-\newlabel{app:ablations}{{D}{10}{Additional ablations}{appendix.D}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {E}M4 full per-period tables}{10}{appendix.E}\protected@file@percent }
-\newlabel{app:m4_tables}{{E}{10}{M4 full per-period tables}{appendix.E}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}NHiTS Transferability and Weather-Only Transfer}{10}{subsection.4.4}\protected@file@percent }
+\newlabel{sec:transfer_summary}{{4.4}{10}{NHiTS Transferability and Weather-Only Transfer}{subsection.4.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Limitations}{10}{section.5}\protected@file@percent }
+\newlabel{sec:limitations}{{5}{10}{Limitations}{section.5}{}}
+\bibcite{challu2023nhits}{{1}{2023}{{Challu et~al.}}{{Challu, Olivares, Oreshkin, Ramirez, Mergenthaler-Canseco, and Dubrawski}}}
+\bibcite{daubechies1992ten}{{2}{1992}{{Daubechies}}{{}}}
+\bibcite{deznabi2023multiwave}{{3}{2023}{{Deznabi and Fiterau}}{{}}}
+\bibcite{hinton2006reducing}{{4}{2006}{{Hinton and Salakhutdinov}}{{}}}
+\bibcite{makridakis2020m4}{{5}{2020}{{Makridakis et~al.}}{{Makridakis, Spiliotis, and Assimakopoulos}}}
+\bibcite{mallat1989wavelet}{{6}{1989}{{Mallat}}{{}}}
+\bibcite{oreshkin2020nbeats}{{7}{2020}{{Oreshkin et~al.}}{{Oreshkin, Carpov, Chapados, and Bengio}}}
+\bibcite{pramanick2024fusion}{{8}{2024}{{Pramanick et~al.}}{{Pramanick, Singhal, et~al.}}}
+\bibcite{sasal2022wtransformers}{{9}{2022}{{Sasal et~al.}}{{Sasal, Chakraborty, and Hadid}}}
+\bibcite{vincent2008denoising}{{10}{2008}{{Vincent et~al.}}{{Vincent, Larochelle, Bengio, and Manzagol}}}
+\bibcite{zhou2025wavets}{{11}{2025}{{Zhou et~al.}}{{Zhou, Hu, Wen, Kwok, and Liang}}}
+\citation{oreshkin2020nbeats}
+\def\@LN@column{1}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Paper-Sample Protocol Details}{11}{appendix.A}\protected@file@percent }
+\newlabel{app:protocols}{{A}{11}{Paper-Sample Protocol Details}{appendix.A}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}Faithful replication (MultiStepLR)}{11}{subsection.A.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Sampling.}{11}{section*.9}\protected@file@percent }
+\citation{oreshkin2020nbeats}
+\def\@LN@column{1}
+\@writefile{toc}{\contentsline {paragraph}{Optimization.}{12}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Learning-rate schedule.}{12}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Validation and early stopping.}{12}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Other settings.}{12}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Plateau LR variant (ReduceLROnPlateau)}{12}{subsection.A.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Learning-rate schedule.}{12}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Effect.}{12}{section*.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.3}Why two paper-sample protocols}{12}{subsection.A.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {B}Hyperparameters and Empirical Defaults}{12}{appendix.B}\protected@file@percent }
+\newlabel{app:hyperparams}{{B}{12}{Hyperparameters and Empirical Defaults}{appendix.B}{}}
+\def\@LN@column{1}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.1}Code defaults vs paper-sweep values}{13}{subsection.B.1}\protected@file@percent }
+\newlabel{app:hyperparams:defaults}{{B.1}{13}{Code defaults vs paper-sweep values}{subsection.B.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces N-BEATS / lightningnbeats hyperparameters: constructor defaults and the values used in this paper's M4 sweeps.}}{13}{table.7}\protected@file@percent }
+\newlabel{tab:hyperparams_defaults}{{7}{13}{N-BEATS / lightningnbeats hyperparameters: constructor defaults and the values used in this paper's M4 sweeps}{table.7}{}}
+\@writefile{toc}{\contentsline {paragraph}{Lookback and forecast multiplier.}{13}{section*.16}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.2}Architectural sweep grids}{13}{subsection.B.2}\protected@file@percent }
+\newlabel{app:hyperparams:grids}{{B.2}{13}{Architectural sweep grids}{subsection.B.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{Wavelet basis implementation.}{13}{section*.17}\protected@file@percent }
+\def\@LN@column{1}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Hyperparameter grids per block family. ``--'' means the parameter does not apply to the family.}}{14}{table.8}\protected@file@percent }
+\newlabel{tab:sweep_grids}{{8}{14}{Hyperparameter grids per block family. ``--'' means the parameter does not apply to the family}{table.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.3}Training-protocol hyperparameters (sliding)}{14}{subsection.B.3}\protected@file@percent }
+\newlabel{app:hyperparams:sliding}{{B.3}{14}{Training-protocol hyperparameters (sliding)}{subsection.B.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.4}Per-period recommendations}{14}{subsection.B.4}\protected@file@percent }
+\newlabel{app:hyperparams:perperiod}{{B.4}{14}{Per-period recommendations}{subsection.B.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {B.4.1}LR scheduler by period and protocol}{14}{subsubsection.B.4.1}\protected@file@percent }
+\newlabel{app:hyperparams:lr}{{B.4.1}{14}{LR scheduler by period and protocol}{subsubsection.B.4.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Recommended LR scheduler per (period, protocol). Plateau $\equiv $ \texttt  {ReduceLROnPlateau} with $\text  {patience}=3$ val-check units, $\text  {factor}=0.5$, $\text  {cooldown}=1$, $\text  {min\_lr}=10^{-6}$. Step-paper $\equiv $ MultiStepLR with $10$ evenly spaced milestones, $\gamma =0.5$. Cosine-warmup $\equiv $ $15$-epoch linear warmup then cosine annealing to $\eta _{\min }=10^{-6}$.}}{14}{table.9}\protected@file@percent }
+\newlabel{tab:lr_per_period}{{9}{14}{Recommended LR scheduler per (period, protocol). Plateau $\equiv $ \texttt {ReduceLROnPlateau} with $\text {patience}=3$ val-check units, $\text {factor}=0.5$, $\text {cooldown}=1$, $\text {min\_lr}=10^{-6}$. Step-paper $\equiv $ MultiStepLR with $10$ evenly spaced milestones, $\gamma =0.5$. Cosine-warmup $\equiv $ $15$-epoch linear warmup then cosine annealing to $\eta _{\min }=10^{-6}$}{table.9}{}}
+\@writefile{toc}{\contentsline {paragraph}{Mandatory.}{14}{section*.18}\protected@file@percent }
+\citation{oreshkin2020nbeats}
+\def\@LN@column{1}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {B.4.2}Sampling protocol verdict per period}{15}{subsubsection.B.4.2}\protected@file@percent }
+\newlabel{app:hyperparams:sampling}{{B.4.2}{15}{Sampling protocol verdict per period}{subsubsection.B.4.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Sampling-protocol verdict per M4 period. $\Delta = \text  {sliding} - \text  {paper-sample}$ on the best config for each protocol; negative $\Delta $ favors sliding. Absolute sMAPE within a row is not comparable across protocols (Appendix~\ref {app:protocols}).}}{15}{table.10}\protected@file@percent }
+\newlabel{tab:protocol_per_period}{{10}{15}{Sampling-protocol verdict per M4 period. $\Delta = \text {sliding} - \text {paper-sample}$ on the best config for each protocol; negative $\Delta $ favors sliding. Absolute sMAPE within a row is not comparable across protocols (Appendix~\ref {app:protocols})}{table.10}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {B.4.3}Wavelet family per period}{15}{subsubsection.B.4.3}\protected@file@percent }
+\newlabel{app:hyperparams:wavelet}{{B.4.3}{15}{Wavelet family per period}{subsubsection.B.4.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {11}{\ignorespaces Best wavelet family per M4 period within the shortlist. Paper-sample uses the LR scheduler from Table~\ref {tab:lr_per_period}; sliding uses cosine-warmup throughout.}}{15}{table.11}\protected@file@percent }
+\newlabel{tab:wavelet_per_period}{{11}{15}{Best wavelet family per M4 period within the shortlist. Paper-sample uses the LR scheduler from Table~\ref {tab:lr_per_period}; sliding uses cosine-warmup throughout}{table.11}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.5}Block-level recommendations}{15}{subsection.B.5}\protected@file@percent }
+\newlabel{app:hyperparams:block}{{B.5}{15}{Block-level recommendations}{subsection.B.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{\texttt  {basis\_dim}.}{15}{section*.19}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\texttt  {latent\_dim}.}{15}{section*.20}\protected@file@percent }
+\citation{oreshkin2020nbeats}
+\def\@LN@column{1}
+\@writefile{toc}{\contentsline {paragraph}{\texttt  {trend\_thetas\_dim}.}{16}{section*.21}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Trend backbone hierarchy.}{16}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Block ordering.}{16}{section*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{TrendWavelet vs alternating T+W.}{16}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\texttt  {active\_g}.}{16}{section*.25}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Other ablations (not exercised on M4).}{16}{section*.26}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.6}Drop list}{16}{subsection.B.6}\protected@file@percent }
+\newlabel{app:hyperparams:drop}{{B.6}{16}{Drop list}{subsection.B.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.7}Quick-pick decision table}{16}{subsection.B.7}\protected@file@percent }
+\newlabel{app:hyperparams:quickpick}{{B.7}{16}{Quick-pick decision table}{subsection.B.7}{}}
+\citation{oreshkin2020nbeats}
+\def\@LN@column{1}
+\@writefile{lot}{\contentsline {table}{\numberline {12}{\ignorespaces Best M4 configuration per (period, protocol). All cells are $n=10$ unless noted. ``ttd'' = \texttt  {trend\_thetas\_dim}; ``ld'' = \texttt  {latent\_dim}; ``bd'' = \texttt  {basis\_dim} label; ``\texttt  {ag}'' = \texttt  {active\_g} (\texttt  {0} = \texttt  {False}, \texttt  {f} = \texttt  {'forecast'}).}}{17}{table.12}\protected@file@percent }
+\newlabel{tab:quickpick}{{12}{17}{Best M4 configuration per (period, protocol). All cells are $n=10$ unless noted. ``ttd'' = \texttt {trend\_thetas\_dim}; ``ld'' = \texttt {latent\_dim}; ``bd'' = \texttt {basis\_dim} label; ``\texttt {ag}'' = \texttt {active\_g} (\texttt {0} = \texttt {False}, \texttt {f} = \texttt {'forecast'})}{table.12}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.8}Cross-period generalists}{17}{subsection.B.8}\protected@file@percent }
+\newlabel{app:hyperparams:generalist}{{B.8}{17}{Cross-period generalists}{subsection.B.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {B.9}Reproducibility}{17}{subsection.B.9}\protected@file@percent }
+\newlabel{app:hyperparams:repro}{{B.9}{17}{Reproducibility}{subsection.B.9}{}}
+\@writefile{toc}{\contentsline {paragraph}{Canonical CSVs (\texttt  {experiments/results/m4/}).}{17}{section*.27}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Canonical analysis.}{17}{section*.28}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Canonical YAML configs (\texttt  {experiments/configs/}).}{17}{section*.29}\protected@file@percent }
+\def\@LN@column{1}
+\@writefile{toc}{\contentsline {section}{\numberline {C}Configuration list}{18}{appendix.C}\protected@file@percent }
+\newlabel{app:configs}{{C}{18}{Configuration list}{appendix.C}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D}Additional ablations}{18}{appendix.D}\protected@file@percent }
+\newlabel{app:ablations}{{D}{18}{Additional ablations}{appendix.D}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {E}M4 full per-period tables}{18}{appendix.E}\protected@file@percent }
+\newlabel{app:m4_tables}{{E}{18}{M4 full per-period tables}{appendix.E}{}}
 \def\@LN@column{1}
 \def\@LN@column{1}
 \def\@LN@column{1}
@@ -95,4 +188,4 @@
 \def\@LN@column{1}
 \def\@LN@column{1}
 \def\@LN@column{1}
-\gdef \@abspage@last{17}
+\gdef \@abspage@last{25}
