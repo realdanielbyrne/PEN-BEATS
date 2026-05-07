@@ -845,7 +845,7 @@ Tourism-Yearly  & $21.539$ ($n{=}197$) & $21.374$ ($n{=}200$) & $-0.165$ & $1.8\
 
 \paragraph{\texttt{active\_g=True} vs.\ \texttt{active\_g='forecast'}.} The two variants are statistically indistinguishable at $n=200$ on M4-Yearly ($\Delta = -0.023$, $p=0.154$) and Tourism-Yearly ($\Delta = +0.066$, $p=0.087$), so the \texttt{'forecast'} variant is preferred only because it isolates the gate to the forecast head.
 
-\paragraph{Per-period verdict on M4 paper-sample.} Hourly: $9/9$ matched pairs improve under \texttt{agf} (5 significant at $p<0.05$); Hourly Δ in the canonical leaderboard is $-0.148$ sMAPE (\texttt{NBEATS-IG\_30s\_agf} $8.758$ vs.\ \texttt{ag0} $8.906$). Yearly/Quarterly/Monthly/Weekly/Daily: \texttt{agf} ties or loses on every protocol-LR cell tested. Treat \texttt{active\_g='forecast'} as a Hourly-only intervention.
+\paragraph{Per-period verdict on M4 paper-sample.} Hourly: $9/9$ matched pairs improve under \texttt{agf} (5 significant at $p<0.05$); Hourly $\Delta$ in the canonical leaderboard is $-0.148$ sMAPE (\texttt{NBEATS-IG\_30s\_agf} $8.758$ vs.\ \texttt{ag0} $8.906$). Yearly/Quarterly/Monthly/Weekly/Daily: \texttt{agf} ties or loses on every protocol-LR cell tested. Treat \texttt{active\_g='forecast'} as a Hourly-only intervention.
 
 \subsection{Tiered basis-offset: per-period verdict}
 \label{app:ablations:tiered}
