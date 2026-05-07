@@ -792,7 +792,7 @@ The \texttt{active\_g} extension is a Mann--Whitney win on Hourly (where it is d
 \begin{table}[h]
 \centering
 \small
-\caption{\texttt{active\_g} effect by dataset, paired Mann--Whitney. ``Quality cost'' is the absolute sMAPE delta on the converged subset of seeds; the convergence column is the failure-rate reduction.}
+\caption{\texttt{active\_g} effect by dataset, paired Mann--Whitney. ``Quality cost'' is the absolute sMAPE delta on the converged subset of seeds; the convergence column is the failure-rate reduction. ``Converged subset'' applies a dataset-specific stuck-mode filter beyond the strict health filter of Section~\ref{sec:results} ($\mathrm{sMAPE}<20$ on M4-Yearly, $\mathrm{sMAPE}<30$ on Tourism-Yearly, $\mathrm{sMAPE}<5$ on Milk) so that bimodal stuck seeds do not contaminate the converged-mean estimate.}
 \label{tab:active_g_ablation}
 \begin{tabular}{@{}lllrrl@{}}
 \toprule
@@ -800,7 +800,7 @@ Dataset & Baseline sMAPE & \texttt{active\_g} sMAPE & $\Delta$ & MWU $p$ & Conve
 \midrule
 Milk 6-stack    & $1.685$ ($n{=}37$)   & $2.500$ ($n{=}100$)  & $+0.815$ & $<10^{-6}$  & $63\% \to 0\%$ stuck \\
 Milk 10-stack   & $1.797$ ($n{=}36$)   & $2.455$ ($n{=}100$)  & $+0.659$ & $<10^{-5}$  & $64\% \to 0\%$ stuck \\
-M4-Yearly       & $13.616$ ($n{=}191$) & $13.692$ ($n{=}200$) & $+0.076$ & $<10^{-4}$  & $4.5\% \to 0\%$ stuck \\
+M4-Yearly       & $13.616$ ($n{=}191$) & $13.669$ ($n{=}200$) & $+0.053$ & $<10^{-4}$  & $4.5\% \to 0\%$ stuck \\
 Tourism-Yearly  & $21.539$ ($n{=}197$) & $21.374$ ($n{=}200$) & $-0.165$ & $1.8\times 10^{-4}$ & $1.5\% \to 0\%$ stuck \\
 \bottomrule
 \end{tabular}
@@ -885,11 +885,11 @@ This appendix lists the full top-5 leaderboard for every (period, protocol) cell
 \midrule
 \# & Config & LR & sMAPE $\pm$ std & Params & $n$ \\
 \midrule
-1 & \texttt{T+DB3V3\_10s\_tiered\_agf}      & step    & $\mathbf{13.486 \pm 0.086}$ & 5.07M  & 5 \\
-2 & \texttt{T+Coif2V3\_30s\_bdeq}           & plateau & $13.542 \pm 0.148$          & 15.24M & 10 \\
-3 & \texttt{TWAE\_10s\_ld32\_ag0}           & plateau & $13.546 \pm 0.102$          & 0.48M  & 10 \\
-4 & \texttt{TALG+DB3V3ALG\_10s\_ag0}        & step    & $13.550 \pm 0.096$          & 1.04M  & 10 \\
-5 & \texttt{TWAE\_10s\_ld32\_sym10\_ag0}    & plateau & $13.553 \pm 0.165$          & 0.48M  & 10 \\
+1 & \texttt{T+Coif2V3\_30s\_bdeq}           & plateau & $\mathbf{13.542 \pm 0.148}$ & 15.24M & 10 \\
+2 & \texttt{TWAE\_10s\_ld32\_ag0}           & plateau & $13.546 \pm 0.102$          & 0.48M  & 10 \\
+3 & \texttt{TALG+DB3V3ALG\_10s\_ag0}        & step    & $13.550 \pm 0.096$          & 1.04M  & 10 \\
+4 & \texttt{TWAE\_10s\_ld32\_sym10\_ag0}    & plateau & $13.553 \pm 0.165$          & 0.48M  & 10 \\
+5 & \texttt{T+DB3V3\_10s\_tiered\_agf}      & step    & $13.554 \pm 0.101$          & 5.07M  & 10 \\
 \midrule
 \multicolumn{6}{l}{\textit{Sliding}} \\
 \midrule
@@ -917,10 +917,10 @@ This appendix lists the full top-5 leaderboard for every (period, protocol) cell
 \# & Config & LR & sMAPE $\pm$ std & Params & $n$ \\
 \midrule
 1 & \texttt{NBEATS-IG\_10s\_ag0}            & plateau & $\mathbf{10.313 \pm 0.055}$ & 19.64M & 10 \\
-2 & \texttt{TAE+Sym10V3AE\_10s\_tiered}     & step    & $10.330 \pm 0.056$          & 1.06M  & 4 \\
-3 & \texttt{TAELG+DB3V3AELG\_10s\_tiered}   & step    & $10.342 \pm 0.050$          & 1.06M  & 4 \\
+2 & \texttt{T+Sym10V3\_10s\_tiered\_ag0}    & plateau & $10.325 \pm 0.053$          & 5.11M  & 10 \\
+3 & \texttt{T+DB3V3\_30s\_tiered\_ag0}      & step    & $10.345 \pm 0.065$          & 15.34M & 10 \\
 4 & \texttt{NBEATS-IG\_10s\_agf}            & plateau & $10.354 \pm 0.115$          & 19.64M & 10 \\
-5 & \texttt{T+Sym10V3\_30s\_tiered\_agf}    & plateau & $10.356 \pm 0.065$          & 15.34M & 10 \\
+5 & \texttt{T+DB3V3\_10s\_tiered\_ag0}      & plateau & $10.356 \pm 0.053$          & 5.11M  & 10 \\
 \midrule
 \multicolumn{6}{l}{\textit{Sliding}} \\
 \midrule
@@ -1014,11 +1014,11 @@ This appendix lists the full top-5 leaderboard for every (period, protocol) cell
 \midrule
 \# & Config & LR & sMAPE $\pm$ std & Params & $n$ \\
 \midrule
-1 & \texttt{T+Sym10V3\_10s\_tiered\_ag0}    & plateau & $\mathbf{3.012 \pm 0.031}$ & 5.25M & 10 \\
-2 & \texttt{TAELG+Sym10V3AELG\_10s\_tiered} & plateau & $3.013 \pm 0.023$          & 1.14M & 10 \\
-3 & \texttt{TAE+Sym10V3AE\_10s\_tiered}     & step    & $3.015 \pm 0.046$          & 1.14M & 4 \\
-4 & \texttt{T+DB3V3\_10s\_tiered\_ag0}      & plateau & $3.023 \pm 0.041$          & 5.25M & 10 \\
-5 & \texttt{TAE+DB3V3AE\_30s\_tiered}       & plateau & $3.026 \pm 0.041$          & 3.41M & 10 \\
+1 & \texttt{T+Sym10V3\_10s\_tiered\_ag0}    & plateau & $\mathbf{3.014 \pm 0.035}$ & 5.25M & 10 \\
+2 & \texttt{T+DB3V3\_10s\_tiered\_ag0}      & plateau & $3.023 \pm 0.039$          & 5.25M & 10 \\
+3 & \texttt{T+Sym10V3\_30s\_tiered\_ag0}    & plateau & $3.031 \pm 0.040$          & 15.75M & 10 \\
+4 & \texttt{TAELG+Sym10V3AELG\_30s\_tiered} & plateau & $3.035 \pm 0.033$          & 3.41M & 10 \\
+5 & \texttt{TAELG+Coif2V3ALG\_30s\_ag0}     & step    & $3.036 \pm 0.034$          & 3.73M & 10 \\
 \midrule
 \multicolumn{6}{l}{\textit{Sliding}} \\
 \midrule
