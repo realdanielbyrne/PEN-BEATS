@@ -1,6 +1,6 @@
-# N-BEATS Lightning — Wavelet and Autoencoder Block Extensions
+# PEN-BEATS Parameter Efficient N-BEATS
 
-A [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/) implementation of [N-BEATS](https://arxiv.org/pdf/1905.10437.pdf) (Oreshkin et al., 2019) and an `NHiTSNet` variant, extended with wavelet and autoencoder block families. Published as [`lightningnbeats`](https://pypi.org/project/lightningnbeats/) on PyPI.
+A [PyTorch Lightning](https://lightning.ai/docs/pytorch/stable/) implementation of [N-BEATS](https://arxiv.org/pdf/1905.10437.pdf) (Oreshkin et al., 2019) and `NHiTSNet` variant, extended with wavelet and autoencoder block families. Published as [`lightningnbeats`](https://pypi.org/project/lightningnbeats/) on PyPI.
 
 The companion research paper, *Wavelets and Autoencoders are All You Need*, lives at [NBEATS-Explorations/paper.md](NBEATS-Explorations/paper.md) and is the authoritative source for empirical findings, leaderboards, and ablation evidence. This README documents the library: what blocks exist, how to compose them, and where to find the protocols and reproducibility artifacts.
 
