@@ -121,7 +121,7 @@ The backbone variants described above produce a single shared hidden representat
 
 $$z \xrightarrow{\text{enc}_b} z_b \xrightarrow{\text{dec}_b} \hat{\mathbf{x}}, \qquad z \xrightarrow{\text{enc}_f} z_f \xrightarrow{\text{dec}_f} \hat{\mathbf{y}}$$
 
-This gives the network two independent compression points per block. The trunk bottleneck enforces a shared, task-agnostic representation of the input window; the branch bottlenecks then cleans up that signal independently. The two objectives are structurally separated rather than implicitly traded off through a shared linear head.
+This gives the network two independent compression points per block. The trunk bottleneck enforces a shared representation of the input window; the branch bottlenecks then cleans up each signal independently. The two objectives are separated downstream again to try and impart more diversity into the learned parameters.
 
 The `latent_dim` hyperparameter controls the branch-local bottleneck size in these blocks, while `thetas_dim` remains reserved for explicit coefficient projections such as the `GenericAEBackcast*` forecast head. `AutoEncoderAE` omits `thetas_dim` entirely and lets both branch decoders project directly to the target lengths.
 
@@ -170,3 +170,91 @@ Two additional hyperparameters control how the wavelet basis is oriented relativ
 **Asymmetric wavelet families.** When backcast and forecast lengths differ substantially — as in Traffic-96 ($L=480$, $H=96$, ratio $5\times$) — the optimal wavelet support length differs between paths. The `backcast_wavelet_type` and `forecast_wavelet_type` parameters allow independent wavelet family selection per path. A long-support wavelet (e.g.\ Symlet-20) captures broad low-frequency structure in the long backcast; a short-support wavelet (e.g.\ Daubechies-3, Coiflet-2) provides compact localized bases for the short forecast. When these overrides are omitted, both paths share the same `wavelet_type`.
 
 **Tiered basis offset.** The `basis_offset` parameter shifts the starting row of the basis matrix selected from $V^\top$, cycling through the SVD spectrum in successive stacks. In a depth-$S$ model, stack $\ell$ uses rows $[\ell \cdot \Delta, \ell \cdot \Delta + k)$ of the orthonormal basis, where $\Delta$ is a stride derived from `basis_offset`. This spreads each stack's basis coverage across different frequency bands, encouraging the doubly residual stack to decompose the signal rather than repeatedly fitting the same spectral region. Tiered offsets are most effective on the Daily M4 period, where they appear in 8 of the top-10 configurations (Section~\ref{sec:ablations}).
+
+## Experimental Setup
+
+This section describes the datasets, training protocols, architecture sweep, and ablation studies used to evaluate the proposed blocks. Methodology is presented here; results follow in Section~\ref{sec:results}.
+
+### Datasets
+
+The M4 Competition \citep{makridakis2020m4} dataset is the primary evaluation dataset: six frequencies (Yearly, Quarterly, Monthly, Weekly, Daily, Hourly) over 100,000 series with horizons $H \in \{6, 8, 24, 13, 14, 48\}$. This benchmark requires a single architecture to generalize across regimes that differ in sample size, sampling rate, and seasonality without time-seris specific feature engineering or input scaling. We complement M4 with four out-of-distribution datasets to verify that conclusions transfer beyond M4. These are Tourism (1,311 series, Yearly/Quarterly/Monthly), PeMS Traffic (862 hourly sensors), Weather (21 meteorological channels at 10-min resolution), and the univariate Milk production series.
+
+**Table 4 — Datasets and evaluation parameters**
+
+| Dataset | Frequency | Series | Horizon $H$ | Lookback $L$ | Primary metric |
+| --- | --- | --- | --- | --- | --- |
+| M4 (Y/Q/M/W/D/H) | mixed | 100,000 | $\{6, 8, 24, 13, 14, 48\}$ | $L = 5H$; $L_h = m H$ with $m \in \{1.5, 10\}$ | sMAPE, OWA |
+| Tourism (Y/Q/M) | mixed | 1,311 | $\{4, 8, 24\}$ | $L = 5H$ | sMAPE |
+| Traffic-96 | hourly | 862 | 96 | $5H$ | MSE, MAE |
+| Weather-96 | 10-min | 21 channels | 96 | $5H$ | MSE, MAE |
+| Milk | monthly | 1 | 6 | $5H$ | sMAPE |
+
+The paper-sample protocol additionally enforces the N-BEATS in-sample constraint $L_h$ \citep[Appendix~D]{oreshkin2020nbeats}, restricting valid training windows to the trailing $L_h \cdot H$ timesteps of each series; we use $L_h = 1.5$ for Yearly/Quarterly and $L_h = 10$ for the remaining M4 frequencies.
+
+### Training Protocols
+
+Absolute sMAPE differences in basis-expansion benchmarks are often dominated by sampling and learning-rate artifacts rather than by architectural quality. To control for this we evaluate every architecture under **three complementary protocols**. The protocols share the same backbone, loss, and seed budget, but they differ in how training data is presented to the optimizer and in how the learning rate is decayed. A finding is treated as robust when it survives all three.
+
+**Sliding-Window Protocol** (`comprehensive_sweep_m4.yaml`, the `lightningnbeats` default). Epoch-based budget with batches enumerated by sliding the lookback window over each series. Adam at $10^{-3}$, sMAPE loss, max 75 epochs (min 10), early-stopping patience 20 with $\Delta_{\min} = 10^{-3}$, cosine annealing with 15-epoch linear warmup and $\eta_{\min} = 10^{-6}$.
+
+**N-BEATS Paper-Sampling Protocol, faithful replication** (`comprehensive_m4_paper_sample.yaml`). A direct copy of the original N-BEATS training procedure \citep{oreshkin2020nbeats}: iteration-based budget of $10^5$ gradient steps at batch size 1024, with each step drawing (series, anchor) pairs uniformly at random with replacement from the windows that satisfy the $L_h$ constraint. Adam at $10^{-3}$, sMAPE loss, MultiStepLR with 10 evenly-spaced milestones and $\gamma = 0.5$ (LR halved every 10% of training). This protocol exists to put our proposed blocks on the same training footing as the published baseline numbers.
+
+**N-BEATS Paper-Sampling Protocol, plateau LR variant** (`comprehensive_m4_paper_sample_plateau.yaml`). The sampling, batch size, step budget, and early-stopping configuration are identical to the faithful replication. The MultiStepLR is replaced with a more aggressive `ReduceLROnPlateau` scheduler ($\text{factor}=0.5$, patience 3 val-check units, $\text{cooldown}=1$, $\text{min\_lr}=10^{-6}$, monitored on `val_loss` every 100 steps). The plateau variant is included because validation-driven LR decay can resolve to a finer effective schedule than the fixed-milestone schedule. In our experiments it changes which architectures look competitive on the Quarterly, Monthly, and Daily M4 cells, while the rankings on Yearly and Weekly are essentially unchanged. By reporting both variants we can separate wins that come from structured priors from wins that come from the LR schedule happening to suit a particular architecture.
+
+Both paper-sample variants share the same sub-epoch validation configuration: `val_check_interval=100`, patience 15 in val-check units (so a minimum of $1{,}500$ steps must elapse before stopping can fire), and $\Delta_{\min} = 10^{-3}$. Without sub-epoch validation, early stopping under iteration-based training fires on warmup-corrupted checks and collapses to `best_epoch` $\in \{0, 1\}$. This is a small methodological correction that we found is necessary for reproducible paper-sample evaluation.
+
+**Seeds and statistics.** Every (configuration, period, protocol) cell is evaluated over 10 random seeds. Pairwise comparisons use the Wilcoxon signed-rank test on matched seeds with Bonferroni correction; the full multiple-comparison procedure and the verbatim YAML for each protocol are given in Appendix~\ref{app:protocols}.
+
+### Architecture Sweep
+
+The central hypothesis under evaluation is:
+
+> *Structured priors (orthonormal wavelet bases and autoencoder bottlenecks) enable 60–95% parameter compression relative to paper-faithful Generic stacks while matching or exceeding their forecasting accuracy.*
+
+To test this, we define a single 112-configuration **Comprehensive Sweep** evaluated under the sliding-window protocol. A curated 53-configuration subset is re-run under both paper-sample variants (faithful MultiStepLR and plateau LR). The families dropped from this subset (BottleneckGeneric, pure VAE) are excluded *a priori* on reproducibility grounds. They exhibit run-to-run divergence under iteration-based sampling that adds variance without informing the comparison axis. The full configuration list is given in Appendix~\ref{app:configs}; the five groups are:
+
+1. **Paper baselines (8 configs).** `NBEATS-G` (homogeneous Generic) and `NBEATS-I+G` (Trend + Seasonality + Generic), each at depths $\{10, 30\}$ and `active_g` $\in \{\text{False}, \text{forecast}\}$. Reproduces \citet{oreshkin2020nbeats} and supplies the upper-bound parameter count.
+2. **Homogeneous TrendWavelet stacks (16 configs).** `TrendWavelet` (RootBlock backbone) at depths $\{10, 30\}$, sweeping `wavelet_type` $\in \{\text{haar}, \text{db3}, \text{coif2}, \text{sym10}\}$, `trend_thetas_dim` $\in \{3, 5\}$, and `basis_dim` $\in \{\text{eq\_fcast}, 2 \times \text{eq\_fcast}\}$. Tests whether one composite basis (polynomial trend + orthonormal DWT) suffices without an explicit Seasonality stack.
+3. **Alternating dual-stack architectures (~30 configs).** A *top-quality* pattern alternating `TrendAELG` and `WaveletV3AELG`, and a *stability* pattern alternating `TrendAE` and `WaveletV3AE`. Each is swept across the four wavelets at depths $\{10, 30\}$. The two halves act as separate doubly-residual specialists rather than a single fused block.
+4. **Efficiency bottlenecks (~12 configs).** `TrendWaveletAE` and `TrendWaveletAELG` at depth 10, with `latent_dim` $\in \{8, 16, 32\}$. The direct test of the compression hypothesis: does an AE bottleneck of dimension $d \ll \text{units}/2$ preserve accuracy at a fraction of the dense-MLP parameter count?
+5. **Generic-AE controls and weight-sharing variants (~46 configs).** `GenericAE`, `GenericAELG`, and `TrendWaveletGenericAELG` at varied depths and latent dimensions, plus eight `share_weights=False` variants. Isolates AE compression *without* wavelet structure (groups 2–4 confound the two) and quantifies the cost of removing weight sharing.
+
+### Ablation: `active_g`
+
+The `active_g` parameter is a `lightningnbeats` extension that gates whether the final linear projection of Generic-family blocks passes through the block's nonlinearity (`active_g='forecast'`) or returns a raw linear map (`active_g=False`, the paper-faithful setting). We evaluate `active_g` $\in \{\text{False}, \text{forecast}\}$ across the GenericAELG group at depths $\{10, 30\}$, holding all other hyperparameters fixed and sweeping under both protocols. The aim is to isolate the impact of architectural regularization on Generic stack stability, independent of the wavelet and AE structure introduced elsewhere. The companion `skip_distance` ablation (cross-stack residual injection cadence) and the `learned_gate` magnitude analysis on AELG blocks are deferred to Appendix~\ref{app:ablations}.
+
+### NHiTS Transferability
+
+To confirm that the proposed blocks are not specific to the N-BEATS doubly-residual stack, we re-run a curated subset of the novel families on the NHiTS backbone \citep{challu2023nhits}, which adds multi-rate input pooling and hierarchical forecast interpolation around the same block interface. The benchmark (`run_nhits_benchmark.py`) covers Weather-96 and Traffic at horizons $\{96, 192, 336, 720\}$ with MSE loss, batch size 256, max 100 epochs, patience 10, $L = 5H$, and 8 seeds. The block sweep includes `Generic`, `GenericAELG`, `BottleneckGenericAELG`, alternating `TrendAELG + Sym20V3AELG`, and `TrendWaveletAELG`, paired with their NHiTS-pooled counterparts using horizon-adaptive pooling/interpolation schedules. When block-level effects survive the backbone change, this is evidence that the structured priors are driving them rather than interactions with N-BEATS-specific residual scheduling.
+
+## Appendix A: Paper-Sample Protocol Details \label{app:protocols}
+
+This appendix documents the two paper-sample training protocols in full so that the M4 numbers in Section~\ref{sec:results} can be reproduced from a single YAML file. Both variants share the sampling strategy and step budget of the original N-BEATS training procedure; they differ only in the learning-rate scheduler.
+
+### A.1 Faithful replication (MultiStepLR)
+
+The faithful variant (`comprehensive_m4_paper_sample.yaml`) is intended as a direct copy of the training procedure described in \citet[Section~5.2 and Appendix~D]{oreshkin2020nbeats}, with no deviations except the small validation-cadence correction described below.
+
+**Sampling.** Each gradient step draws a batch of 1024 (series, anchor) pairs uniformly at random *with replacement* from the training pool. A series is eligible at step $t$ if it has at least $L + H$ observations; for a chosen series of length $T$, the anchor index is sampled uniformly from $[T - L_h \cdot H,\ T - H]$, restricting valid windows to the trailing $L_h \cdot H$ timesteps. Per-period $L_h$ is fixed to the values in Table~\ref{tab:datasets}: $L_h = 1.5$ for Yearly and Quarterly, $L_h = 10$ for Monthly, Weekly, Daily, and Hourly. The lookback length is $L = 5H$.
+
+**Optimization.** Adam with $\eta_0 = 10^{-3}$, $\beta_1 = 0.9$, $\beta_2 = 0.999$, no weight decay. sMAPE loss is computed per-step on the 1024-window batch. The gradient budget is $10^5$ total steps, with one Lightning epoch defined as 1,000 steps (≈100 paper-epochs).
+
+**Learning-rate schedule.** MultiStepLR with 10 evenly spaced milestones at $\{10\text{k}, 20\text{k}, \ldots, 100\text{k}\}$ steps, $\gamma = 0.5$. The LR is therefore halved at each 10% boundary of the training budget. This is exactly the schedule used by Oreshkin et al.
+
+**Validation and early stopping.** Validation is run every 100 training steps (`val_check_interval=100`) on the held-out window of each series. Early stopping monitors validation sMAPE with patience 15 (counted in val-check units, so a minimum of $1{,}500$ steps must elapse before stopping can fire) and $\Delta_{\min} = 10^{-3}$. The sub-epoch validation cadence is the only departure from a strict line-by-line copy of \citet{oreshkin2020nbeats}; without it, early stopping fires on the first warmup-corrupted check and collapses to `best_epoch` $\in \{0, 1\}$.
+
+**Other settings.** `n_blocks_per_stack = 1`, `share_weights = true`, ReLU activations throughout, `forecast_multiplier = 5`, default block widths (`g_width = 512`, `s_width = 2048`, `t_width = 256`).
+
+### A.2 Plateau LR variant (ReduceLROnPlateau)
+
+The plateau variant (`comprehensive_m4_paper_sample_plateau.yaml`) is identical to A.1 in every respect except the learning-rate schedule. The motivation is that MultiStepLR commits to a fixed decay schedule independent of how training is actually progressing. A plateau scheduler can react to validation stalls and find a more aggressive effective decay on cells where the loss surface is well-behaved.
+
+**Learning-rate schedule.** `ReduceLROnPlateau` with `factor = 0.5`, `patience = 3` (val-check units, so the LR is reduced after 3 consecutive 100-step val checks without improvement of at least $\Delta_{\min} = 10^{-3}$), `cooldown = 1` (one val-check skipped after each reduction before monitoring resumes), `min_lr = 10^{-6}`, `mode = min`, monitored on `val_loss`. The scheduler is stepped on the same cadence as validation (every 100 training steps) so that its trigger logic operates in the same time units as early stopping.
+
+**Effect.** Empirically the plateau scheduler delivers more LR reductions than MultiStepLR on M4 Quarterly, Monthly, and Daily and fewer on Yearly and Weekly, which matches the observed differences in the per-period leaderboards (Section~\ref{sec:results}).
+
+All other settings (sampling, $L_h$, batch size, step budget, sub-epoch validation, early stopping, optimizer, loss, block widths, weight sharing, seed budget) are inherited unchanged from A.1.
+
+### A.3 Why two paper-sample protocols
+
+The N-BEATS paper reports a single training procedure, so any one-protocol comparison conflates the architectural change with whatever artifacts that specific schedule introduces on the new architecture. By running each architecture under both A.1 (faithful) and A.2 (plateau) we can attribute observed gains to one of three categories. (i) Gains under both protocols are robust evidence for the architectural claim. (ii) Gains under the faithful protocol only constitute a head-to-head replacement for the published baseline. (iii) Gains under the plateau protocol only are a finding contingent on a more responsive LR schedule, which we report as such rather than as a clean architectural win.

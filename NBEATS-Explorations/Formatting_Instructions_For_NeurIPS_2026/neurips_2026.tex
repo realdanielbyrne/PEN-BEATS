@@ -37,9 +37,6 @@
 %  \usepackage[sglblindworkshop, final]{neurips_2026}
 % 6. Workshop with double-blind reviewing
 %  \usepackage[dblblindworkshop, final]{neurips_2026}
-% Note. For the workshop paper template, both \title{} and \workshoptitle{} are required, with the former indicating the paper title shown in the title and the latter indicating the workshop title displayed in the footnote.
-% For workshops (5., 6.), the authors should add the name of the workshop, "\workshoptitle" command is used to set the workshop title.
-% \workshoptitle{WORKSHOP TITLE}
 
 % "preprint" option is used for arXiv or other preprint submissions
  % \usepackage[preprint]{neurips_2026}
@@ -53,401 +50,338 @@
 \usepackage{url}            % simple URL typesetting
 \usepackage{booktabs}       % professional-quality tables
 \usepackage{amsfonts}       % blackboard math symbols
+\usepackage{amsmath}        % display math environments
+\usepackage{amssymb}        % math symbols
 \usepackage{nicefrac}       % compact symbols for 1/2, etc.
 \usepackage{microtype}      % microtypography
 \usepackage{xcolor}         % colors
+\usepackage{graphicx}       % figures
 
-% Note. For the workshop paper template, both \title{} and \workshoptitle{} are required, with the former indicating the paper title shown in the title and the latter indicating the workshop title displayed in the footnote. 
 \title{Wavelets and Autoencoders are All You Need}
 
-
-% The \author macro works with any number of authors. There are two commands
-% used to separate the names and addresses of multiple authors: \And and \AND.
-%
-% Using \And between authors leaves it to LaTeX to determine where to break the
-% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
-% authors names on the first line, and the last on the second line, try using
-% \AND instead of \And before the third author name.
-
-
+% Anonymous submission (double-blind). Replace with author block at camera-ready.
 \author{%
-  Daniel Byrne  
-  6762 Hunters Pkwy \\
-  Frisco, TX 75035 \\
-  \texttt{realdanielbyrne@icloud.com} \\  
+  Anonymous Authors \\
 }
-
 
 \begin{document}
 
-
 \maketitle
 
-
 \begin{abstract}
-  N-BEATS, Oreshkin et al. (2019), broke new ground in univariate time series forecasting by using fixed basis functions neural basis expansion in which the network learns coefficients for a frozen basis function then expanded those coefficients into the desired forecast and backcast lengths through a linear transformation. Their innovation came at an extreme cost though as a typical N-BEATS model can range from 25M-44M parameters. In this paper I extend the idea of solving for coefficients of a frozen basis functions but instead of relying on a global Fourier function, wavelets provide localization in that they can identify and locate components of the global signal which is a key requirement in timeseries analysis algorithms. Wavelets have been used extensively in signal analysis for feature extraction, denoising, and multi-resolution analysis.  Likewise, Autoencoders are useful constructs for identifying key characteristics of a signal while filtering out nonessential transient signals, and are useful in domains such as denoising signals and stock trading.  In this paper I introduce a variety of novel block types that use using a combination of discrete wavelet transforms, DWT, and AutoEncoders. My novel architecture improvements reduce parameter counts by 60–95% over N-BEATS while surpassing or equalling prior published results without ensembiling. In addition I introduce a family of combined TrendWavelet block types which combine the low pass Trend and a high pass Wavelet basis that can be used to produce <1M parameter models that score within 0.5% SMAPE of 19M-43M parameter baseline N-BEATS models representing a 12-80x compression with little to no loss of accuracy. Furthermore, I show that these new block constructs are transferrable to other architectures like NHiTs and Transformers with equally impressive reductions in parameter counts and compettitive accuracies.
+N-BEATS \citep{oreshkin2020nbeats} broke new ground in univariate time series forecasting by using fixed basis functions in a neural basis expansion in which the network learns coefficients for a frozen basis function and then expands those coefficients into the desired forecast and backcast lengths through a linear transformation. Their innovation came at an extreme cost, as a typical N-BEATS model can range from 25M--44M parameters. In this paper we extend the idea of solving for coefficients of a frozen basis function but, instead of relying on a global Fourier function, we use wavelets, which provide localization in that they can identify and locate components of the global signal --- a key requirement in time series analysis algorithms. Wavelets have been used extensively in signal analysis for feature extraction, denoising, and multi-resolution analysis. Likewise, autoencoders are useful constructs for identifying key characteristics of a signal while filtering out non-essential transient components, and are useful in domains such as denoising signals and stock trading. We introduce a variety of novel block types that use a combination of discrete wavelet transforms (DWT) and autoencoders. Our novel architecture improvements reduce parameter counts by 60--95\% over N-BEATS while surpassing or equalling prior published results without ensembling. In addition, we introduce a family of combined TrendWavelet block types that combine a low-pass trend basis with a high-pass wavelet basis to produce \textless1M parameter models that score within 0.5\% sMAPE of 19M--43M parameter baseline N-BEATS models, representing a 12--80$\times$ compression with little to no loss of accuracy. Furthermore, we show that these new block constructs are transferable to other architectures like NHiTS and Transformers with equally impressive reductions in parameter counts and competitive accuracies.
 \end{abstract}
 
 
+\section{Introduction and Prior Work}
+\label{sec:intro}
 
-\section{Submission of papers to NeurIPS 2026}
+\subsection{Introduction}
 
+Time series forecasting and signal analysis are two names for the same thing, even though practitioners in each discipline use their own terminologies: moving average vs.\ finite impulse response (FIR) filter, autoregressive filter vs.\ infinite impulse response (IIR) filter, seasonal decomposition vs.\ band-pass filter of seasonal frequencies. A time series dataset (sales figures, temperature, stock prices) is just a discrete set of sampled data. Likewise, all deep learning problems can be reconsidered as signal analysis problems. For example, image recognition in deep learning is often performed by sampling an image and passing the samples through a convolutional filter, similar in principle to what one might do in Photoshop when applying a sharpen filter. Deep learning, then, can be seen as a type of probabilistic signal analysis. Why, then, don't we use more techniques developed in signal analysis in machine learning?
 
-Please read the instructions below carefully and follow them faithfully.
+Signal analysis tools like the Discrete Fourier Transform and the Discrete Wavelet Transform were developed as techniques used in signal processing, migrated into forecasting, and are trickling into machine learning. N-BEATS was a pioneer of sorts in bringing some traditional signal analysis tools into AI with its use of basis expansion blocks. The N-BEATS Seasonality and Trend blocks are literally signal-decomposition operators applied inside a neural network. The novelty was using the neural network to learn which decomposition coefficients best reconstruct the observed signal.
 
+\subsection{Wavelets}
 
-\subsection{Style}
+Fourier analysis decomposes a signal into a sum of sine and cosine waves of fixed frequency. It is a useful tool for analyzing stationary signals whose frequency content does not change over time. Real-world signals routinely break that mold, however. For example, a stock price may trend smoothly following the normal sales cycle and then spike abruptly because of a news article, a comment made by a prominent person in the news, or when a large hedge fund liquidates a considerable position. Fourier bases represent these transient features poorly and tend to smear localized events across the other frequency components of the signal.
 
+Wavelets address this problem by providing basis functions that are localized in both time and frequency. Where a sine wave oscillates forever, a wavelet is a brief oscillatory burst with exponentially decaying tails and a zero mean. They oscillate in a particular pattern defined by their mother wavelet and then decay to zero.
 
-Papers to be submitted to NeurIPS 2026 must be prepared according to the
-instructions presented here. Papers may only be up to {\bf nine} pages long, including figures. \textbf{Papers that exceed the page limit will not be reviewed (or in any other way considered) for presentation at the conference.}
-Additional pages \emph{containing acknowledgments, references, checklist, and optional technical appendices} do not count as content pages. 
+The mother wavelet $\psi(t)$ is scaled and translated to produce a family of basis functions:
+\begin{equation*}
+\psi_{j,k}(t) = 2^{j/2}\,\psi(2^j t - k)
+\end{equation*}
+where $j$ controls scale (frequency resolution) and $k$ controls translation (time position). Short, high-frequency wavelets have narrow time resolution; long, low-frequency wavelets have narrow frequency resolution. This makes wavelets substantially more effective for real-world time series analysis, where variance and frequency content change over time.
 
+A discrete wavelet transform (DWT) brings the continuous wavelet into the digital domain. DWTs compute the inner product of a signal with a basis family, producing a set of orthonormal coefficients that can then be used to reconstruct the original signal.
 
-The margins in 2026 are the same as those in previous years.
+Wavelets have been used sparsely in machine learning. WaveNet (2022, arXiv:2505.11781) learns a filter-bank specialized to fit non-stationary signals by learning the basis function through decomposing its $n$-th order derivatives and then learning an affine transformation that lets the network suppress and cross-mix frequencies in training.
 
+MultiWave (arXiv:2306.10164) is a model-agnostic preprocessor around any neural network architecture. It takes the concept of machine-learning/signal-processing equivalency to heart by preprocessing input data with a DWT, grouping the outputs by frequency, and then feeding the groups into any neural network (Transformer, FFN, CNN, etc.), feeding different groups into different networks. The networks' outputs are combined and an inverse DWT is applied to obtain the prediction.
 
-Authors are required to use the NeurIPS \LaTeX{} style files obtainable at the NeurIPS website as indicated below. Please make sure you use the current files and not previous versions. Tweaking the style files may be grounds for desk rejection.
+W-Transformers (arXiv:2209.03945v1) uses a similar approach by preprocessing time-series data with a discrete overlapping wavelet transform and then feeding the results into a collection of transformer models to analyze the decomposed signals independently.
 
+\subsection{Autoencoders}
 
-\subsection{Retrieval of style files}
-
-
-The style files for NeurIPS and other conference information are available on the website at
-\begin{center}
-  \url{https://neurips.cc}.
-\end{center}
-% The file \verb+neurips_2026.pdf+ contains these instructions and illustrates the various formatting requirements your NeurIPS paper must satisfy.
-
-
-The only supported style file for NeurIPS 2026 is \verb+neurips_2026.sty+, rewritten for \LaTeXe{}. \textbf{Previous style files for \LaTeX{} 2.09,  Microsoft Word, and RTF are no longer supported.}
-
-
-The \LaTeX{} style file contains three optional arguments: 
-\begin{itemize}
-\item \verb+final+, which creates a camera-ready copy, 
-\item \verb+preprint+, which creates a preprint for submission to, e.g., arXiv, \item \verb+nonatbib+, which will not load the \verb+natbib+ package for you in case of package clash.
-\end{itemize}
-
-
-\paragraph{Preprint option}
-If you wish to post a preprint of your work online, e.g., on arXiv, using the NeurIPS style, please use the \verb+preprint+ option. This will create a nonanonymized version of your work with the text ``Preprint. Work in progress.'' in the footer. This version may be distributed as you see fit, as long as you do not say which conference it was submitted to. Please \textbf{do not} use the \verb+final+ option, which should \textbf{only} be used for papers accepted to NeurIPS.
-
-
-At submission time, please omit the \verb+final+ and \verb+preprint+ options. This will anonymize your submission and add line numbers to aid review. Please do \emph{not} refer to these line numbers in your paper as they will be removed during generation of camera-ready copies.
-
-
-The file \verb+neurips_2026.tex+ may be used as a ``shell'' for writing your paper. All you have to do is replace the author, title, abstract, and text of the paper with your own.
-
-
-The formatting instructions contained in these style files are summarized in Sections \ref{gen_inst}, \ref{headings}, and \ref{others} below.
-
-
-\section{General formatting instructions}
-\label{gen_inst}
-
-
-The text must be confined within a rectangle 5.5~inches (33~picas) wide and
-9~inches (54~picas) long. The left margin is 1.5~inch (9~picas).  Use 10~point
-type with a vertical spacing (leading) of 11~points.  Times New Roman is the
-preferred typeface throughout, and will be selected for you by default.
-Paragraphs are separated by \nicefrac{1}{2}~line space (5.5 points), with no
-indentation.
-
-
-The paper title should be 17~point, initial caps/lower case, bold, centered
-between two horizontal rules. The top rule should be 4~points thick and the
-bottom rule should be 1~point thick. Allow \nicefrac{1}{4}~inch space above and
-below the title to rules. All pages should start at 1~inch (6~picas) from the
-top of the page.
-
-
-For the final version, authors' names are set in boldface, and each name is
-centered above the corresponding address. The lead author's name is to be listed
-first (left-most), and the co-authors' names (if different address) are set to
-follow. If there is only one co-author, list both author and co-author side by
-side.
-
-
-Please pay special attention to the instructions in Section \ref{others}
-regarding figures, tables, acknowledgments, and references.
-
-\section{Headings: first level}
-\label{headings}
-
-
-All headings should be lower case (except for first word and proper nouns),
-flush left, and bold.
-
-
-First-level headings should be in 12-point type.
-
-
-\subsection{Headings: second level}
-
-
-Second-level headings should be in 10-point type.
-
-
-\subsubsection{Headings: third level}
-
-
-Third-level headings should be in 10-point type.
-
-
-\paragraph{Paragraphs}
-
-
-There is also a \verb+\paragraph+ command available, which sets the heading in
-bold, flush left, and inline with the text, with the heading followed by 1\,em
-of space.
-
-
-\section{Citations, figures, tables, references}
-\label{others}
-
-
-These instructions apply to everyone.
-
-
-\subsection{Citations within the text}
-
-
-The \verb+natbib+ package will be loaded for you by default.  Citations may be
-author/year or numeric, as long as you maintain internal consistency.  As to the
-format of the references themselves, any style is acceptable as long as it is
-used consistently.
-
-
-The documentation for \verb+natbib+ may be found at
-\begin{center}
-  \url{http://mirrors.ctan.org/macros/latex/contrib/natbib/natnotes.pdf}
-\end{center}
-Of note is the command \verb+\citet+, which produces citations appropriate for
-use in inline text.  For example,
+An autoencoder is a neural network trained to reproduce its input. It has an encoder that maps an input $x$ into a smaller-dimensional latent code $z$, and a decoder that maps $z$ back into a reconstructed version of the original input $\hat{x}$:
 \begin{verbatim}
-   \citet{hasselmo} investigated\dots
-\end{verbatim}
-produces
-\begin{quote}
-  Hasselmo, et al.\ (1995) investigated\dots
-\end{quote}
-
-
-If you wish to load the \verb+natbib+ package with options, you may add the
-following before loading the \verb+neurips_2026+ package:
-\begin{verbatim}
-   \PassOptionsToPackage{options}{natbib}
+x -> encoder -> z -> decoder -> x_hat
+loss = reconstruction_error(x, x_hat) + optional_regularization
 \end{verbatim}
 
-
-If \verb+natbib+ clashes with another package you load, you can add the optional
-argument \verb+nonatbib+ when loading the style file:
-\begin{verbatim}
-   \usepackage[nonatbib]{neurips_2026}
-\end{verbatim}
+The premise is that the model is constrained by the reduced dimensionality of the latent space. Therefore, since the decoder network does not have access to the original signal, a perfect copy is difficult. Thus the network is pushed to learn how to reconstruct the original signal from the information it can extract from the latent representation. The classic paper of Hinton and Salakhutdinov \citep{hinton2006reducing} showed that autoencoders generalize PCA to non-linear domains. Autoencoders are also used widely for self-supervised pretraining, generative modeling, and image denoising and generation.
 
 
-As submission is double blind, refer to your own published work in the third
-person. That is, use ``In the previous work of Jones et al.\ [4],'' not ``In our
-previous work [4].'' If you cite your other papers that are not widely available
-(e.g., a journal paper under review), use anonymous author names in the
-citation, e.g., an author of the form ``A.\ Anonymous'' and include a copy of the anonymized paper in the supplementary material.
+\section{Model Description}
+\label{sec:method}
 
+N-BEATS \citep{oreshkin2020nbeats} analyzes a time series through a branching stack of parallel blocks, each contributing a backcast $\hat{\mathbf{x}}_{\ell}$ and forecast $\hat{\mathbf{y}}_{\ell}$ via a learned linear mapping from a shared 4-layer fully connected backbone:
+\begin{equation*}
+\mathbf{h}_{\ell} = f_{\text{bb}}(\mathbf{x}_{\ell}^{\text{in}}), \quad \hat{\mathbf{x}}_{\ell} = g_b(\boldsymbol{\theta}^b), \quad \hat{\mathbf{y}}_{\ell} = g_f(\boldsymbol{\theta}^f)
+\end{equation*}
+where $\mathbf{x}_{\ell}^{\text{in}} = \mathbf{x} - \sum_{k < \ell}\hat{\mathbf{x}}_k$ is the residual backcast input to block $\ell$, and $g_b, g_f$ are basis expansion generators (defined explicitly in Section~\ref{sec:wavelet}).
 
-\subsection{Footnotes}
+All N-BEATS blocks accept a residual backcast (or input if first block) $\mathbf{x} \in \mathbb{R}^L$ and return $(\hat{\mathbf{x}}, \hat{\mathbf{y}}) \in \mathbb{R}^L \times \mathbb{R}^H$.
 
+\subsection{Backbone Blocks}
 
-Footnotes should be used sparingly.  If you do require a footnote, indicate
-footnotes with a number\footnote{Sample of the first footnote.} in the
-text. Place the footnotes at the bottom of the page on which they appear.
-Precede the footnote with a horizontal rule of 2~inches (12~picas).
+\subsubsection{RootBlock}
 
+The legacy RootBlock is a 4-layer, uniform-width FFN with ReLU activation $\sigma$:
+\begin{equation*}
+\mathbf{h} = \sigma\!\left(\mathbf{W}_4\,\sigma\!\left(\mathbf{W}_3\,\sigma\!\left(\mathbf{W}_2\,\sigma(\mathbf{W}_1\mathbf{x}+\mathbf{b}_1)+\mathbf{b}_2\right)+\mathbf{b}_3\right)+\mathbf{b}_4\right), \quad \mathbf{W}_i \in \mathbb{R}^{U\times U}
+\end{equation*}
+No bottleneck is imposed; all layers share trunk width $U$.
 
-Note that footnotes are properly typeset \emph{after} punctuation
-marks.\footnote{As in this example.}
+\subsubsection{AERootBlock}
 
+The AERootBlock is a drop-in replacement for the legacy RootBlock backbone. It introduces an hourglass-shaped autoencoder that routes all information through a low-dimensional latent bottleneck $z \in \mathbb{R}^{d}$:
+\begin{equation*}
+\mathbf{h} = f_{\mathrm{dec}}(f_{\mathrm{enc}}(\mathbf{x})), \quad f_{\mathrm{enc}}: \mathbb{R}^L \!\to\! \mathbb{R}^{U/2} \!\to\! \mathbb{R}^{d}, \quad f_{\mathrm{dec}}: \mathbb{R}^{d} \!\to\! \mathbb{R}^{U/2} \!\to\! \mathbb{R}^U
+\end{equation*}
+The bottleneck acts as a signal denoiser, regularizer, and feature extractor. The decoder must reconstruct both output paths from $z$, forcing the backbone to discard irrelevant information and retain the most informative features.
 
-\subsection{Figures}
+The parameter count of the backbone reduces to $O(UL/2 + Ud/2 + Ud/2 + U^2/2)$. At $U = 512$, $L = 480$, $d = 16$, this is approximately 147K --- a 5.5$\times$ reduction relative to RootBlock at equivalent $U$. The interface to any downstream projection head remains identical: both backbones produce $h \in \mathbb{R}^U$.
 
+\subsubsection{AERootBlockLG}
 
-\begin{figure}
-  \centering
-  \fbox{\rule[-.5cm]{0cm}{4cm} \rule[-.5cm]{4cm}{0cm}}
-  \caption{Sample figure caption. Explain what the figure shows and add a key take-away message to the caption.}
-\end{figure}
-
-
-All artwork must be neat, clean, and legible. Lines should be dark enough for
- reproduction purposes. The figure number and caption always appear after the
-figure. Place one line space before the figure caption and one line space after
-the figure. The figure caption should be lower case (except for the first word and proper nouns); figures are numbered consecutively.
-
-
-You may use color figures.  However, it is best for the figure captions and the
-paper body to be legible if the paper is printed in either black/white or in
-color.
-
-
-\subsection{Tables}
-
-
-All tables must be centered, neat, clean, and legible.  The table number and
-title always appear before the table.  See Table~\ref{sample-table}.
-
-
-Place one line space before the table title, one line space after the
-table title, and one line space after the table. The table title must
-be lower case (except for the first word and proper nouns); tables are
-numbered consecutively.
-
-
-Note that publication-quality tables \emph{do not contain vertical rules}. We
-strongly suggest the use of the \verb+booktabs+ package, which allows for
-typesetting high-quality, professional tables:
-\begin{center}
-  \url{https://www.ctan.org/pkg/booktabs}
-\end{center}
-This package was used to typeset Table~\ref{sample-table}.
-
+The LG variant RootBlock introduces a learnable sigmoid vector and scales the interior latent representation element-wise:
+\begin{equation*}
+z_{\text{gated}} = \sigma(\gamma) \odot z
+\end{equation*}
+Because $\sigma(\gamma_i)$ at its limits approaches zero, the network can shut off unnecessary latent dimensions, effectively performing a soft band-pass filter. This is particularly useful when the optimal bottleneck size is unknown: one can select a lower latent dimension because the network only uses the dimensions it needs. In testing, this manifests as networks using AERootBlocks needing a latent dimension $d = 32$ for the M4 dataset, but AELG-based networks needing only $d = 16$. For example, a 10-stack TrendWavelet block with AELG root and a latent dimension of 32 using a Daubechies-3 wavelet (\texttt{TWAELG\_10s\_ld32\_db3}) uses only 0.48M total parameters while remaining competitive with 15M+ RootBlock models.
 
 \begin{table}
-  \caption{Sample table caption. Explain what the table shows and add a key take-away message to the caption.}
-  \label{sample-table}
+  \caption{Backbone architecture comparison.}
+  \label{tab:backbones}
   \centering
-  \begin{tabular}{lll}
+  \begin{tabular}{llll}
     \toprule
-    \multicolumn{2}{c}{Part}                   \\
-    \cmidrule(r){1-2}
-    Name     & Description     & Size ($\mu$m) \\
+    Backbone & Layer topology & Latent operation & Extra params \\
     \midrule
-    Dendrite & Input terminal  & $\approx$100     \\
-    Axon     & Output terminal & $\approx$10      \\
-    Soma     & Cell body       & up to $10^6$  \\
+    RootBlock     & input $\to$ $U \to U \to U \to U$                     & None                                    & Baseline \\
+    AERootBlock   & input $\to U/2 \to d \to U/2 \to U$                   & Deterministic pass-through              & Negligible \\
+    AERootBlockLG & Same as AE                                            & $z \cdot \sigma(\gamma)$                & $d$ (gate vector) \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\subsection{Math}
-Note that display math in bare TeX commands will not create correct line numbers for submission. Please use LaTeX (or AMSTeX) commands for unnumbered display math. (You really shouldn't be using \$\$ anyway; see \url{https://tex.stackexchange.com/questions/503/why-is-preferable-to} and \url{https://tex.stackexchange.com/questions/40492/what-are-the-differences-between-align-equation-and-displaymath} for more information.)
+\subsubsection{Parameter efficiency}
 
-\subsection{Final instructions}
+The standard width parameters (\texttt{g\_width}=512, \texttt{s\_width}=2048, \texttt{t\_width}=256, \texttt{ae\_width}=512) govern the main trunk width $U$ for each block family. The \texttt{latent\_dim} $d$ is an additional hyperparameter that controls only the AE bottleneck and does not change the output dimension $\mathbf{h} \in \mathbb{R}^U$ seen by downstream projection heads.
 
-Do not change any aspects of the formatting parameters in the style files.  In
-particular, do not modify the width or length of the rectangle the text should
-fit into, and do not change font sizes. Please note that pages should be
-numbered.
-
-
-\section{Preparing PDF files}
-
-
-Please prepare submission files with paper size ``US Letter,'' and not, for
-example, ``A4.''
-
-
-Fonts were the main cause of problems in the past years. Your PDF file must only
-contain Type 1 or Embedded TrueType fonts. Here are a few instructions to
-achieve this.
-
-
+The backbone parameter count formula for each family is:
 \begin{itemize}
-
-
-\item You should directly generate PDF files using \verb+pdflatex+.
-
-
-\item You can check which fonts a PDF files uses.  In Acrobat Reader, select the
-  menu Files$>$Document Properties$>$Fonts and select Show All Fonts. You can
-  also use the program \verb+pdffonts+ which comes with \verb+xpdf+ and is
-  available out-of-the-box on most Linux machines.
-
-
-\item \verb+xfig+ ``patterned'' shapes are implemented with bitmap fonts.  Use
-  "solid" shapes instead.
-
-
-\item The \verb+\bbold+ package almost always uses bitmap fonts.  You should use
-  the equivalent AMS Fonts:
-\begin{verbatim}
-   \usepackage{amsfonts}
-\end{verbatim}
-followed by, e.g., \verb+\mathbb{R}+, \verb+\mathbb{N}+, or \verb+\mathbb{C}+
-for $\mathbb{R}$, $\mathbb{N}$ or $\mathbb{C}$.  You can also use the following
-workaround for reals, natural and complex:
-\begin{verbatim}
-   \newcommand{\RR}{I\!\!R} %real numbers
-   \newcommand{\Nat}{I\!\!N} %natural numbers
-   \newcommand{\CC}{I\!\!\!\!C} %complex numbers
-\end{verbatim}
-Note that \verb+amsfonts+ is automatically loaded by the \verb+amssymb+ package.
-
-
+\item \textbf{RootBlock}: $UL + 3U^2$ --- four uniform-width layers, no bottleneck.
+\item \textbf{AERootBlock}: $UL/2 + Ud + U^2/2$ --- parameters scale roughly as $O(U \cdot d)$ at the bottleneck, which is minor compared to the main width cost.
+\item \textbf{AERootBlockLG}: same as AERootBlock plus $d$ gate parameters --- negligible overhead; practical benefit is that $d$ can be halved relative to AERootBlock without accuracy loss.
 \end{itemize}
 
+Because \texttt{latent\_dim} is typically 5--32, AE variants achieve comparable forecast accuracy with dramatically fewer total backbone parameters than their RootBlock counterparts when \texttt{latent\_dim} is small and width is constrained. Table~\ref{tab:param-counts} gives concrete counts at default widths and a representative backcast length of $L = 480$.
 
-If your file contains type 3 fonts or non embedded TrueType fonts, we will ask
-you to fix it.
+\begin{table}
+  \caption{Backbone parameter counts at default widths ($L = 480$).}
+  \label{tab:param-counts}
+  \centering
+  \begin{tabular}{lrrrl}
+    \toprule
+    Backbone & Width $U$ & Latent $d$ & Backbone params & vs.\ RootBlock \\
+    \midrule
+    RootBlock (Generic)     & 512 & ---  & $\sim$810K          & 1.0$\times$ \\
+    AERootBlock (Generic)   & 512 & 32   & $\sim$163K          & 5.0$\times$ fewer \\
+    AERootBlock (Generic)   & 512 & 16   & $\sim$147K          & 5.5$\times$ fewer \\
+    AERootBlockLG (Generic) & 512 & 16   & $\sim$147K + 16     & $\approx$5.5$\times$ fewer \\
+    RootBlock (Trend)       & 256 & ---  & $\sim$319K          & 1.0$\times$ (Trend) \\
+    AERootBlock (Trend)     & 256 & 16   & $\sim$46K           & 6.9$\times$ fewer \\
+    AERootBlockLG (Trend)   & 256 & 16   & $\sim$46K + 16      & $\approx$6.9$\times$ fewer \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The compression ratio grows with width: wider trunks benefit more from the hourglass bottleneck because the three large $U \times U$ layers in RootBlock scale quadratically while the AE bottleneck scales linearly in $d$. At Generic/Wavelet width ($U = 512$, $d = 16$) the ratio reaches 5.5$\times$; at Trend width ($U = 256$, $d = 16$) it reaches 6.9$\times$. This makes AE backbones attractive for TrendWavelet and TrendWaveletGeneric configurations, where the Trend trunk width is narrow by design and every saved parameter can be reinvested in stack depth or wavelet family selection, which improves expressivity of the model.
+
+\subsection{Branch-specific encoder-decoder designs}
+
+The backbone variants described above produce a single shared hidden representation $\mathbf{h}$ that is then split by separate linear heads into backcast and forecast coefficient vectors. A complementary design gives each output branch its own dedicated encoder-decoder sub-network. The \texttt{AutoEncoderAE} and \texttt{GenericAEBackcastAE} blocks follow this pattern: after the shared AE trunk compresses the input into a trunk latent code $z$, two independent hourglass sub-branches --- one for the backcast path and one for the forecast path --- each re-encode $z$ through their own bottleneck before projecting to the output length.
+\begin{equation*}
+z \xrightarrow{\text{enc}_b} z_b \xrightarrow{\text{dec}_b} \hat{\mathbf{x}}, \qquad z \xrightarrow{\text{enc}_f} z_f \xrightarrow{\text{dec}_f} \hat{\mathbf{y}}
+\end{equation*}
+This gives the network two independent compression points per block. The trunk bottleneck enforces a shared representation of the input window; the branch bottlenecks then clean up each signal independently. The two objectives are separated downstream again to impart more diversity into the learned parameters.
+
+The \texttt{latent\_dim} hyperparameter controls the branch-local bottleneck size in these blocks, while \texttt{thetas\_dim} remains reserved for explicit coefficient projections such as the \texttt{GenericAEBackcast*} forecast head. \texttt{AutoEncoderAE} omits \texttt{thetas\_dim} entirely and lets both branch decoders project directly to the target lengths.
+
+\begin{table}
+  \caption{Single-trunk vs.\ branch-specific AE designs.}
+  \label{tab:branch-ae}
+  \centering
+  \begin{tabular}{lllll}
+    \toprule
+    Block & Shared trunk & Backcast branch & Forecast branch & \texttt{thetas\_dim} role \\
+    \midrule
+    \texttt{GenericAE}            & AERootBlock & shared $\mathbf{h} \to$ linear            & shared $\mathbf{h} \to$ linear                            & unused \\
+    \texttt{AutoEncoderAE}        & AERootBlock & $z \to$ enc-dec $\to$ output              & $z \to$ enc-dec $\to$ output                              & unused \\
+    \texttt{GenericAEBackcastAE}  & AERootBlock & $z \to$ enc-dec $\to$ output              & $z \to$ enc-dec $\to \boldsymbol{\theta}^f \to$ basis     & coefficient projection \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The branch-specific design adds approximately $4 \cdot U_b \cdot d_b$ parameters per branch, where $U_b$ is the branch width and $d_b$ the branch latent size. For typical settings ($U_b = U/2$, $d_b = d$), this doubles the AE parameter budget relative to a shared-head block, but keeps the total well below the RootBlock baseline since both the trunk and the branches remain in the hourglass regime.
+
+\subsection{Wavelet Family Blocks}
+\label{sec:wavelet}
+
+The legacy N-BEATS basis-expansion blocks predict coefficient vectors and expand them through a frozen basis into backcast and forecast outputs matching the target lengths. The original interpretable version uses polynomial trend and Fourier seasonality bases. The wavelet blocks replace the Fourier seasonality basis with a fixed, orthonormal discrete wavelet basis. Each block first maps the input window through a RootBlock variant, producing a hidden representation $\mathbf{h}$. Separate trainable linear heads then produce backcast and forecast coefficient vectors,
+\begin{equation*}
+\boldsymbol{\theta}^b = \mathbf{W}_b\mathbf{h},\qquad \boldsymbol{\theta}^f = \mathbf{W}_f\mathbf{h}
+\end{equation*}
+For each target length $T \in \{L, H\}$, a wavelet synthesis matrix is constructed at model initialization by applying inverse DWT reconstruction to unit impulses in each wavelet coefficient band. This raw synthesis matrix is then orthogonalized via SVD, and the rows of $V^\top$ form the fixed orthonormal bases $\boldsymbol{\Psi}_b \in \mathbb{R}^{k \times L}$ and $\boldsymbol{\Psi}_f \in \mathbb{R}^{k \times H}$ (one per path). The basis expansion generators therefore evaluate to
+\begin{equation*}
+g_b(\boldsymbol{\theta}^b) = \boldsymbol{\theta}^b\,\boldsymbol{\Psi}_b = \hat{\mathbf{x}}, \qquad g_f(\boldsymbol{\theta}^f) = \boldsymbol{\theta}^f\,\boldsymbol{\Psi}_f = \hat{\mathbf{y}}
+\end{equation*}
+Because $\boldsymbol{\Psi}_b$ and $\boldsymbol{\Psi}_f$ are frozen at initialization and stored as non-trainable buffers, inference requires only a single matrix multiply per path, which GPUs excel at. A full DWT is never computed at training or inference time. Implementation details are given in Appendix~\ref{app:hyperparams}.
+
+\subsubsection{Composition blocks: TrendWavelet and TrendWaveletGeneric}
+
+The strongest single-block family in our benchmarks combines a frozen polynomial trend basis with a frozen orthonormal wavelet basis in a single additive decomposition. The \texttt{TrendWavelet} block produces the coefficient vector $\boldsymbol{\theta} \in \mathbb{R}^{p + k}$ from the shared hidden representation $\mathbf{h}$, then partitions and expands it:
+\begin{equation*}
+\hat{\mathbf{y}} = \underbrace{\boldsymbol{\theta}^f_{1:p}\,\mathbf{T}_f}_{\text{trend}} + \underbrace{\boldsymbol{\theta}^f_{p+1:p+k}\,\boldsymbol{\Psi}_f}_{\text{wavelet}}
+\end{equation*}
+where $\mathbf{T}_f \in \mathbb{R}^{p \times H}$, $\mathbf{T}_b \in \mathbb{R}^{p \times L}$ is the Vandermonde polynomial basis of order $p$ (\texttt{trend\_thetas\_dim}), $\boldsymbol{\Psi}_f \in \mathbb{R}^{k \times H}$, $\boldsymbol{\Psi}_b \in \mathbb{R}^{k \times L}$ is the orthonormal wavelet basis of rank $k$ (\texttt{basis\_dim}), and the same additive structure holds for the backcast path. The two bases are complementary by construction: the polynomial captures smooth low-frequency trend while the wavelet captures localized oscillatory residuals.
+
+\texttt{TrendWaveletGeneric} extends this to a three-way decomposition by appending a third learned (data-driven) branch of rank $r$ (\texttt{generic\_dim}):
+\begin{equation*}
+\hat{\mathbf{y}} = \boldsymbol{\theta}^f_{1:p}\,\mathbf{T}_f + \boldsymbol{\theta}^f_{p+1:p+k}\,\boldsymbol{\Psi}_f + \boldsymbol{\theta}^f_{p+k+1:p+k+r}\,\mathbf{G}_f
+\end{equation*}
+where $\mathbf{G}_f \in \mathbb{R}^{r \times H}$ is a trainable rank-$r$ basis matrix. The two structured bases remain frozen; only coefficients and the generic basis are learned. This gives the block a fall-back data-driven capacity for signal components that neither polynomial nor wavelet bases can represent compactly.
+
+Both block families are fully composable with both AE backbone variants (AERootBlock, AERootBlockLG), yielding the \texttt{TrendWaveletAE}, \texttt{TrendWaveletAELG}, \texttt{TrendWaveletGenericAE}, and \texttt{TrendWaveletGenericAELG} configurations benchmarked in Section~\ref{sec:results}.
+
+\subsubsection{Asymmetric and tiered wavelet bases}
+
+Two additional hyperparameters control how the wavelet basis is oriented relative to the backcast and forecast windows.
+
+\paragraph{Asymmetric wavelet families.} When backcast and forecast lengths differ substantially --- as in Traffic-96 ($L=480$, $H=96$, ratio 5$\times$) --- the optimal wavelet support length differs between paths. The \texttt{backcast\_wavelet\_type} and \texttt{forecast\_wavelet\_type} parameters allow independent wavelet family selection per path. A long-support wavelet (e.g.\ Symlet-20) captures broad low-frequency structure in the long backcast; a short-support wavelet (e.g.\ Daubechies-3, Coiflet-2) provides compact localized bases for the short forecast. When these overrides are omitted, both paths share the same \texttt{wavelet\_type}.
+
+\paragraph{Tiered basis offset.} The \texttt{basis\_offset} parameter shifts the starting row of the basis matrix selected from $V^\top$, cycling through the SVD spectrum in successive stacks. In a depth-$S$ model, stack $\ell$ uses rows $[\ell \cdot \Delta, \ell \cdot \Delta + k)$ of the orthonormal basis, where $\Delta$ is a stride derived from \texttt{basis\_offset}. This spreads each stack's basis coverage across different frequency bands, encouraging the doubly residual stack to decompose the signal rather than repeatedly fitting the same spectral region. Tiered offsets are most effective on the Daily M4 period, where they appear in 8 of the top-10 configurations (Section~\ref{sec:ablations}).
 
 
-\subsection{Margins in \LaTeX{}}
+\section{Experimental Setup}
+\label{sec:experimental_setup}
+
+This section describes the datasets, training protocols, architecture sweep, and ablation studies used to evaluate the proposed blocks. Methodology is presented here; results follow in Section~\ref{sec:results}.
+
+\subsection{Datasets}
+
+The M4 Competition \citep{makridakis2020m4} dataset is the primary evaluation dataset: six frequencies (Yearly, Quarterly, Monthly, Weekly, Daily, Hourly) over 100{,}000 series with horizons $H \in \{6, 8, 24, 13, 14, 48\}$. This benchmark requires a single architecture to generalize across regimes that differ in sample size, sampling rate, and seasonality without time-series-specific feature engineering or input scaling. We complement M4 with four out-of-distribution datasets to verify that conclusions transfer beyond M4. These are Tourism (1{,}311 series, Yearly/Quarterly/Monthly), PeMS Traffic (862 hourly sensors), Weather (21 meteorological channels at 10-min resolution), and the univariate Milk production series.
+
+\begin{table}
+  \caption{Datasets and evaluation parameters.}
+  \label{tab:datasets}
+  \centering
+  \begin{tabular}{llrlll}
+    \toprule
+    Dataset & Frequency & Series & Horizon $H$ & Lookback $L$ & Primary metric \\
+    \midrule
+    M4 (Y/Q/M/W/D/H) & mixed   & 100{,}000 & $\{6, 8, 24, 13, 14, 48\}$ & $L = 5H$; $L_h = m H$, $m \in \{1.5, 10\}$ & sMAPE, OWA \\
+    Tourism (Y/Q/M)  & mixed   & 1{,}311   & $\{4, 8, 24\}$             & $L = 5H$        & sMAPE \\
+    Traffic-96       & hourly  & 862       & 96                         & $5H$            & MSE, MAE \\
+    Weather-96       & 10-min  & 21 ch.\   & 96                         & $5H$            & MSE, MAE \\
+    Milk             & monthly & 1         & 6                          & $5H$            & sMAPE \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The paper-sample protocol additionally enforces the N-BEATS in-sample constraint $L_h$ \citep[Appendix~D]{oreshkin2020nbeats}, restricting valid training windows to the trailing $L_h \cdot H$ time steps of each series; we use $L_h = 1.5$ for Yearly/Quarterly and $L_h = 10$ for the remaining M4 frequencies.
+
+\subsection{Training Protocols}
+
+Absolute sMAPE differences in basis-expansion benchmarks are often dominated by sampling and learning-rate artifacts rather than by architectural quality. To control for this we evaluate every architecture under \textbf{three complementary protocols}. The protocols share the same backbone, loss, and seed budget, but they differ in how training data is presented to the optimizer and in how the learning rate is decayed. A finding is treated as robust when it survives all three.
+
+\paragraph{Sliding-Window Protocol} (\texttt{comprehensive\_sweep\_m4.yaml}, the \texttt{lightningnbeats} default). Epoch-based budget with batches enumerated by sliding the lookback window over each series. Adam at $10^{-3}$, sMAPE loss, max 75 epochs (min 10), early-stopping patience 20 with $\Delta_{\min} = 10^{-3}$, cosine annealing with 15-epoch linear warmup and $\eta_{\min} = 10^{-6}$.
+
+\paragraph{N-BEATS Paper-Sampling Protocol, faithful replication} (\texttt{comprehensive\_m4\_paper\_sample.yaml}). A direct copy of the original N-BEATS training procedure \citep{oreshkin2020nbeats}: iteration-based budget of $10^5$ gradient steps at batch size 1024, with each step drawing (series, anchor) pairs uniformly at random with replacement from the windows that satisfy the $L_h$ constraint. Adam at $10^{-3}$, sMAPE loss, MultiStepLR with 10 evenly-spaced milestones and $\gamma = 0.5$ (LR halved every 10\% of training). This protocol exists to put our proposed blocks on the same training footing as the published baseline numbers.
+
+\paragraph{N-BEATS Paper-Sampling Protocol, plateau LR variant} (\texttt{comprehensive\_m4\_paper\_sample\_plateau.yaml}). The sampling, batch size, step budget, and early-stopping configuration are identical to the faithful replication. The MultiStepLR is replaced with a more aggressive \texttt{ReduceLROnPlateau} scheduler ($\text{factor}=0.5$, patience 3 val-check units, $\text{cooldown}=1$, $\text{min\_lr}=10^{-6}$, monitored on \texttt{val\_loss} every 100 steps). The plateau variant is included because validation-driven LR decay can resolve to a finer effective schedule than the fixed-milestone schedule. In our experiments it changes which architectures look competitive on the Quarterly, Monthly, and Daily M4 cells, while the rankings on Yearly and Weekly are essentially unchanged. By reporting both variants we can separate wins that come from structured priors from wins that come from the LR schedule happening to suit a particular architecture.
+
+Both paper-sample variants share the same sub-epoch validation configuration: \texttt{val\_check\_interval=100}, patience 15 in val-check units (so a minimum of 1{,}500 steps must elapse before stopping can fire), and $\Delta_{\min} = 10^{-3}$. Without sub-epoch validation, early stopping under iteration-based training fires on warmup-corrupted checks and collapses to \texttt{best\_epoch} $\in \{0, 1\}$. This is a small methodological correction that we found is necessary for reproducible paper-sample evaluation.
+
+\paragraph{Seeds and statistics.} Every (configuration, period, protocol) cell is evaluated over 10 random seeds. Pairwise comparisons use the Wilcoxon signed-rank test on matched seeds with Bonferroni correction; the full multiple-comparison procedure and the verbatim YAML for each protocol are given in Appendix~\ref{app:protocols}.
+
+\subsection{Architecture Sweep}
+
+The central hypothesis under evaluation is:
+\begin{quote}
+\emph{Structured priors (orthonormal wavelet bases and autoencoder bottlenecks) enable 60--95\% parameter compression relative to paper-faithful Generic stacks while matching or exceeding their forecasting accuracy.}
+\end{quote}
+
+To test this, we define a single 112-configuration \textbf{Comprehensive Sweep} evaluated under the sliding-window protocol. A curated 53-configuration subset is re-run under both paper-sample variants (faithful MultiStepLR and plateau LR). The families dropped from this subset (BottleneckGeneric, pure VAE) are excluded \emph{a priori} on reproducibility grounds. They exhibit run-to-run divergence under iteration-based sampling that adds variance without informing the comparison axis. The full configuration list is given in Appendix~\ref{app:configs}; the five groups are:
+
+\begin{enumerate}
+\item \textbf{Paper baselines (8 configs).} \texttt{NBEATS-G} (homogeneous Generic) and \texttt{NBEATS-I+G} (Trend + Seasonality + Generic), each at depths $\{10, 30\}$ and \texttt{active\_g} $\in \{\text{False}, \text{forecast}\}$. Reproduces \citet{oreshkin2020nbeats} and supplies the upper-bound parameter count.
+\item \textbf{Homogeneous TrendWavelet stacks (16 configs).} \texttt{TrendWavelet} (RootBlock backbone) at depths $\{10, 30\}$, sweeping \texttt{wavelet\_type} $\in \{\text{haar}, \text{db3}, \text{coif2}, \text{sym10}\}$, \texttt{trend\_thetas\_dim} $\in \{3, 5\}$, and \texttt{basis\_dim} $\in \{\text{eq\_fcast}, 2 \times \text{eq\_fcast}\}$. Tests whether one composite basis (polynomial trend + orthonormal DWT) suffices without an explicit Seasonality stack.
+\item \textbf{Alternating dual-stack architectures ($\sim$30 configs).} A \emph{top-quality} pattern alternating \texttt{TrendAELG} and \texttt{WaveletV3AELG}, and a \emph{stability} pattern alternating \texttt{TrendAE} and \texttt{WaveletV3AE}. Each is swept across the four wavelets at depths $\{10, 30\}$. The two halves act as separate doubly-residual specialists rather than a single fused block.
+\item \textbf{Efficiency bottlenecks ($\sim$12 configs).} \texttt{TrendWaveletAE} and \texttt{TrendWaveletAELG} at depth 10, with \texttt{latent\_dim} $\in \{8, 16, 32\}$. The direct test of the compression hypothesis: does an AE bottleneck of dimension $d \ll \texttt{units}/2$ preserve accuracy at a fraction of the dense-MLP parameter count?
+\item \textbf{Generic-AE controls and weight-sharing variants ($\sim$46 configs).} \texttt{GenericAE}, \texttt{GenericAELG}, and \texttt{TrendWaveletGenericAELG} at varied depths and latent dimensions, plus eight \texttt{share\_weights=False} variants. Isolates AE compression \emph{without} wavelet structure (groups 2--4 confound the two) and quantifies the cost of removing weight sharing.
+\end{enumerate}
+
+\subsection{Ablation: \texttt{active\_g}}
+
+The \texttt{active\_g} parameter is a \texttt{lightningnbeats} extension that gates whether the final linear projection of Generic-family blocks passes through the block's nonlinearity (\texttt{active\_g='forecast'}) or returns a raw linear map (\texttt{active\_g=False}, the paper-faithful setting). We evaluate \texttt{active\_g} $\in \{\text{False}, \text{forecast}\}$ across the GenericAELG group at depths $\{10, 30\}$, holding all other hyperparameters fixed and sweeping under both protocols. The aim is to isolate the impact of architectural regularization on Generic stack stability, independent of the wavelet and AE structure introduced elsewhere. The companion \texttt{skip\_distance} ablation (cross-stack residual injection cadence) and the \texttt{learned\_gate} magnitude analysis on AELG blocks are deferred to Appendix~\ref{app:ablations}.
+
+\subsection{NHiTS Transferability}
+
+To confirm that the proposed blocks are not specific to the N-BEATS doubly-residual stack, we re-run a curated subset of the novel families on the NHiTS backbone \citep{challu2023nhits}, which adds multi-rate input pooling and hierarchical forecast interpolation around the same block interface. The benchmark (\texttt{run\_nhits\_benchmark.py}) covers Weather-96 and Traffic at horizons $\{96, 192, 336, 720\}$ with MSE loss, batch size 256, max 100 epochs, patience 10, $L = 5H$, and 8 seeds. The block sweep includes \texttt{Generic}, \texttt{GenericAELG}, \texttt{BottleneckGenericAELG}, alternating \texttt{TrendAELG + Sym20V3AELG}, and \texttt{TrendWaveletAELG}, paired with their NHiTS-pooled counterparts using horizon-adaptive pooling/interpolation schedules. When block-level effects survive the backbone change, this is evidence that the structured priors are driving them rather than interactions with N-BEATS-specific residual scheduling.
 
 
-Most of the margin problems come from figures positioned by hand using
-\verb+\special+ or other commands. We suggest using the command
-\verb+\includegraphics+ from the \verb+graphicx+ package. Always specify the
-figure width as a multiple of the line width as in the example below:
-\begin{verbatim}
-   \usepackage[pdftex]{graphicx} ...
-   \includegraphics[width=0.8\linewidth]{myfile.pdf}
-\end{verbatim}
-See Section 4.4 in the graphics bundle documentation
-(\url{http://mirrors.ctan.org/macros/latex/required/graphics/grfguide.pdf})
+\section{Results}
+\label{sec:results}
+
+Per-period leaderboards, parameter-efficiency frontiers, and ablations are reported here. Detailed tables are deferred to Appendix~\ref{app:m4_tables}.
 
 
-A number of width problems arise when \LaTeX{} cannot properly hyphenate a
-line. Please give LaTeX hyphenation hints using the \verb+\-+ command when
-necessary.
+\section{Limitations}
+\label{sec:limitations}
+
+The architectural sweep is centered on the M4 benchmark; while we include Tourism, Traffic, Weather, and Milk as out-of-distribution checks, the breadth of structured-prior conclusions outside M4 is bounded by the size of those auxiliary sweeps. The compute budget supported 10 seeds per cell on a single-author setup; some 1--2 sigma effects therefore retain residual seed sensitivity. Pure VAE-family blocks were observed to diverge under iteration-based paper sampling and are excluded \emph{a priori}; we do not claim VAE backbones are unworkable in general, only that they were not stabilized within this study. Finally, all reported gains assume a single architecture is trained per dataset/period; ensembling, common in published M4 results, is intentionally outside scope to keep the parameter-count comparison clean.
+
 
 \begin{ack}
-Use unnumbered first level headings for the acknowledgments. All acknowledgments
-go at the end of the paper before the list of references. Moreover, you are required to declare
-funding (financial activities supporting the submitted work) and competing interests (related financial activities outside the submitted work).
-More information about this disclosure can be found at: \url{https://neurips.cc/Conferences/2026/PaperInformation/FundingDisclosure}.
-
-
-Do {\bf not} include this section in the anonymized submission, only in the final paper. You can use the \texttt{ack} environment provided in the style file to automatically hide this section in the anonymized submission.
+% Acknowledgments and funding disclosure go here. This section is hidden under the
+% anonymous (default) submission option and only appears in the camera-ready (final) version.
 \end{ack}
+
 
 \section*{References}
 
-
-References follow the acknowledgments in the camera-ready paper. Use unnumbered first-level heading for
-the references. Any choice of citation style is acceptable as long as you are
-consistent. It is permissible to reduce the font size to \verb+small+ (9 point)
-when listing the references.
-Note that the Reference section does not count towards the page limit.
 \medskip
-
 
 {
 \small
 
+\begin{thebibliography}{9}
 
-[1] Alexander, J.A.\ \& Mozer, M.C.\ (1995) Template-based algorithms for
-connectionist rule extraction. In G.\ Tesauro, D.S.\ Touretzky and T.K.\ Leen
-(eds.), {\it Advances in Neural Information Processing Systems 7},
-pp.\ 609--616. Cambridge, MA: MIT Press.
+\bibitem[Challu et al.(2023)]{challu2023nhits}
+Challu, C., Olivares, K.G., Oreshkin, B.N., Ramirez, F.G., Canseco, M.M., \& Dubrawski, A.\ (2023)
+NHiTS: Neural Hierarchical Interpolation for Time Series Forecasting.
+\textit{Proceedings of the AAAI Conference on Artificial Intelligence}, 37(6):6989--6997.
 
+\bibitem[Hinton \& Salakhutdinov(2006)]{hinton2006reducing}
+Hinton, G.E.\ \& Salakhutdinov, R.R.\ (2006)
+Reducing the dimensionality of data with neural networks.
+\textit{Science}, 313(5786):504--507.
 
-[2] Bower, J.M.\ \& Beeman, D.\ (1995) {\it The Book of GENESIS: Exploring
-  Realistic Neural Models with the GEneral NEural SImulation System.}  New York:
-TELOS/Springer--Verlag.
+\bibitem[Makridakis et al.(2020)]{makridakis2020m4}
+Makridakis, S., Spiliotis, E., \& Assimakopoulos, V.\ (2020)
+The M4 Competition: 100{,}000 time series and 61 forecasting methods.
+\textit{International Journal of Forecasting}, 36(1):54--74.
 
+\bibitem[Oreshkin et al.(2020)]{oreshkin2020nbeats}
+Oreshkin, B.N., Carpov, D., Chapados, N., \& Bengio, Y.\ (2020)
+N-BEATS: Neural Basis Expansion Analysis for Interpretable Time Series Forecasting.
+\textit{International Conference on Learning Representations (ICLR)}.
 
-[3] Hasselmo, M.E., Schnell, E.\ \& Barkai, E.\ (1995) Dynamics of learning and
-recall at excitatory recurrent synapses and cholinergic modulation in rat
-hippocampal region CA3. {\it Journal of Neuroscience} {\bf 15}(7):5249-5262.
+\end{thebibliography}
 }
 
 
@@ -455,10 +389,51 @@ hippocampal region CA3. {\it Journal of Neuroscience} {\bf 15}(7):5249-5262.
 
 \appendix
 
-\section{Technical appendices and supplementary material}
-Technical appendices with additional results, figures, graphs, and proofs may be submitted with the paper submission before the full submission deadline (see above). You can upload a ZIP file for videos or code, but do not upload a separate PDF file for the appendix. There is no page limit for the technical appendices. 
+\section{Paper-Sample Protocol Details}
+\label{app:protocols}
 
-Note: Think of the appendix as ``optional reading'' for reviewers. The paper must be able to stand alone without the appendix; for example, adding critical experiments that support the main claims to an appendix is inappropriate. 
+This appendix documents the two paper-sample training protocols in full so that the M4 numbers in Section~\ref{sec:results} can be reproduced from a single YAML file. Both variants share the sampling strategy and step budget of the original N-BEATS training procedure; they differ only in the learning-rate scheduler.
+
+\subsection{Faithful replication (MultiStepLR)}
+
+The faithful variant (\texttt{comprehensive\_m4\_paper\_sample.yaml}) is intended as a direct copy of the training procedure described in \citet[Section~5.2 and Appendix~D]{oreshkin2020nbeats}, with no deviations except the small validation-cadence correction described below.
+
+\paragraph{Sampling.} Each gradient step draws a batch of 1024 (series, anchor) pairs uniformly at random \emph{with replacement} from the training pool. A series is eligible at step $t$ if it has at least $L + H$ observations; for a chosen series of length $T$, the anchor index is sampled uniformly from $[T - L_h \cdot H,\ T - H]$, restricting valid windows to the trailing $L_h \cdot H$ time steps. Per-period $L_h$ is fixed to the values in Table~\ref{tab:datasets}: $L_h = 1.5$ for Yearly and Quarterly, $L_h = 10$ for Monthly, Weekly, Daily, and Hourly. The lookback length is $L = 5H$.
+
+\paragraph{Optimization.} Adam with $\eta_0 = 10^{-3}$, $\beta_1 = 0.9$, $\beta_2 = 0.999$, no weight decay. sMAPE loss is computed per-step on the 1024-window batch. The gradient budget is $10^5$ total steps, with one Lightning epoch defined as 1{,}000 steps ($\approx$100 paper-epochs).
+
+\paragraph{Learning-rate schedule.} MultiStepLR with 10 evenly spaced milestones at $\{10\text{k}, 20\text{k}, \ldots, 100\text{k}\}$ steps, $\gamma = 0.5$. The LR is therefore halved at each 10\% boundary of the training budget. This is exactly the schedule used by Oreshkin et al.
+
+\paragraph{Validation and early stopping.} Validation is run every 100 training steps (\texttt{val\_check\_interval=100}) on the held-out window of each series. Early stopping monitors validation sMAPE with patience 15 (counted in val-check units, so a minimum of 1{,}500 steps must elapse before stopping can fire) and $\Delta_{\min} = 10^{-3}$. The sub-epoch validation cadence is the only departure from a strict line-by-line copy of \citet{oreshkin2020nbeats}; without it, early stopping fires on the first warmup-corrupted check and collapses to \texttt{best\_epoch} $\in \{0, 1\}$.
+
+\paragraph{Other settings.} \texttt{n\_blocks\_per\_stack = 1}, \texttt{share\_weights = true}, ReLU activations throughout, \texttt{forecast\_multiplier = 5}, default block widths (\texttt{g\_width = 512}, \texttt{s\_width = 2048}, \texttt{t\_width = 256}).
+
+\subsection{Plateau LR variant (ReduceLROnPlateau)}
+
+The plateau variant (\texttt{comprehensive\_m4\_paper\_sample\_plateau.yaml}) is identical to A.1 in every respect except the learning-rate schedule. The motivation is that MultiStepLR commits to a fixed decay schedule independent of how training is actually progressing. A plateau scheduler can react to validation stalls and find a more aggressive effective decay on cells where the loss surface is well-behaved.
+
+\paragraph{Learning-rate schedule.} \texttt{ReduceLROnPlateau} with \texttt{factor = 0.5}, \texttt{patience = 3} (val-check units, so the LR is reduced after 3 consecutive 100-step val checks without improvement of at least $\Delta_{\min} = 10^{-3}$), \texttt{cooldown = 1} (one val-check skipped after each reduction before monitoring resumes), \texttt{min\_lr = $10^{-6}$}, \texttt{mode = min}, monitored on \texttt{val\_loss}. The scheduler is stepped on the same cadence as validation (every 100 training steps) so that its trigger logic operates in the same time units as early stopping.
+
+\paragraph{Effect.} Empirically the plateau scheduler delivers more LR reductions than MultiStepLR on M4 Quarterly, Monthly, and Daily, and fewer on Yearly and Weekly, which matches the observed differences in the per-period leaderboards (Section~\ref{sec:results}).
+
+All other settings (sampling, $L_h$, batch size, step budget, sub-epoch validation, early stopping, optimizer, loss, block widths, weight sharing, seed budget) are inherited unchanged from A.1.
+
+\subsection{Why two paper-sample protocols}
+
+The N-BEATS paper reports a single training procedure, so any one-protocol comparison conflates the architectural change with whatever artifacts that specific schedule introduces on the new architecture. By running each architecture under both A.1 (faithful) and A.2 (plateau) we can attribute observed gains to one of three categories. (i) Gains under both protocols are robust evidence for the architectural claim. (ii) Gains under the faithful protocol only constitute a head-to-head replacement for the published baseline. (iii) Gains under the plateau protocol only are a finding contingent on a more responsive LR schedule, which we report as such rather than as a clean architectural win.
+
+
+\section{Hyperparameter grids}
+\label{app:hyperparams}
+
+\section{Configuration list}
+\label{app:configs}
+
+\section{Additional ablations}
+\label{app:ablations}
+
+\section{M4 full per-period tables}
+\label{app:m4_tables}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
