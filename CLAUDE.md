@@ -8,6 +8,8 @@ preambles, and recaps of my question. No phrases like
 
 Drop articles and filler words wherever the meaning stays clear. Prefer short declarative sentences. If a tool call is needed, run it first and show only the result. Do not narrate your steps.
 
+Do not proactively suggest follow-up actions, next steps, testing recommendations, code improvements, alternative approaches, or future work after completing a task or answering a question. Only provide such suggestions when explicitly requested.
+
 ## Project Overview
 
 PyTorch Lightning implementation of the N-BEATS (Neural Basis Expansion Analysis for Time Series) forecasting algorithm, published as the `lightningnbeats` PyPI package. Extends the original paper with wavelet basis expansion blocks, autoencoder variants, bottleneck generic blocks, and fully customizable stack compositions.
